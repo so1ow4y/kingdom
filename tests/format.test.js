@@ -1,0 +1,137 @@
+// Формат данных: образцы и схемы, сборка базы приложением, gzip, миграции (docs/DATA_FORMAT.md §8.4).
+
+import { test, assert } from './runner.js';
+import { validate } from './jsonschema-lite.js';
+import { makeCtx } from './helpers.js';
+import { buildDb, buildManifest, checkDb, extrasOf } from '../src/data/envelope.js';
+import { gzipJson, gunzipJson } from '../src/data/serialize.js';
+import { validateDb } from '../src/data/validate.js';
+import { migrateDb } from '../src/data/migrations/index.js';
+import { parseDbBytes } from '../src/sync/protocol.js';
+import { newTask, newList, newDevice, defaultLists, defaultSettings, tombstone, touch } from '../src/core/model.js';
+import { canonicalJson } from '../src/core/canonical.js';
+import { SCHEMA_VERSION } from '../src/version.js';
+
+const load = async (p) => (await fetch(new URL(p, import.meta.url))).json();
+const dbSchema = await load('../schemas/v1/db.schema.json');
+const manifestSchema = await load('../schemas/v1/manifest.schema.json');
+const sampleDb = await load('../samples/v1/db.json');
+const sampleManifest = await load('../samples/v1/manifest.json');
+
+function assertValid(schema, data, what) {
+  const errs = validate(schema, data);
+  assert.ok(errs.length === 0, `${what} не проходит схему:\n${errs.slice(0, 10).join('\n')}`);
+}
+
+test('samples/v1/db.json проходит schemas/v1/db.schema.json', () => assertValid(dbSchema, sampleDb, 'образец базы'));
+test('samples/v1/manifest.json проходит schemas/v1/manifest.schema.json', () => assertValid(manifestSchema, sampleManifest, 'образец манифеста'));
+
+test('схема ловит ошибки (проверка самого валидатора)', () => {
+  const bad = structuredClone(sampleDb);
+  bad.data.tasks[1].priority = 7;
+  bad.data.tasks[1].scheduledDate = '2026-13-01';
+  delete bad.data.lists[0].name;
+  const errs = validate(dbSchema, bad);
+  assert.ok(errs.some((e) => e.includes('priority')), 'priority');
+  assert.ok(errs.some((e) => e.includes('scheduledDate')), 'scheduledDate');
+  assert.ok(errs.some((e) => e.includes('name')), 'name');
+});
+
+function appData() {
+  const c = makeCtx();
+  const deviceId = c.deviceId;
+  const l = newList({ name: 'Спорт', color: '#43A047', emoji: '💪', order: 'a5' }, c);
+  const t1 = newTask({ title: 'Бег', listId: l.id, scheduledDate: '2026-10-03', scheduledTime: '07:30', priority: 2, order: 'a0' }, c);
+  const t2 = touch(newTask({ title: 'Главная', order: 'Zz' }, c), { focusDate: '2026-10-02', focusOrder: 'a0', status: 'done', completedAt: new Date(c.now).toISOString() }, c);
+  const t3 = tombstone(newTask({ title: 'Удалить' }, c), c);
+  return {
+    deviceId,
+    data: {
+      settings: [defaultSettings('Europe/Moscow')],
+      lists: [...defaultLists(), l],
+      tasks: [t1, t2, t3],
+      media: [],
+      devices: [newDevice({ id: deviceId, name: 'Комп', platform: 'windows-chrome', appVersion: '0.1.0' }, c)],
+    },
+  };
+}
+
+test('база, которую пишет приложение, проходит схему', () => {
+  const { data, deviceId } = appData();
+  assertValid(dbSchema, buildDb(data, { deviceId }), 'база приложения');
+});
+
+test('манифест, который пишет приложение, проходит схему', () => {
+  const layout = { rootId: 'r', dbId: 'd', mediaFolderId: 'm', backupsFolderId: 'b', manifestId: 'x' };
+  assertValid(manifestSchema, JSON.parse(buildManifest({ layout, deviceId: 'dev' })), 'манифест');
+  assertValid(manifestSchema, JSON.parse(buildManifest({ layout, deviceId: 'dev', lastPush: { at: new Date().toISOString(), deviceId: 'dev', dbRevisionId: 'rev' } })), 'манифест после пуша');
+});
+
+test('gzip: туда и обратно без потерь, сжатие заметное', async () => {
+  const { data, deviceId } = appData();
+  const db = buildDb(data, { deviceId });
+  const bytes = await gzipJson(db);
+  assert.equal(bytes[0], 0x1f, 'сигнатура gzip');
+  assert.equal(bytes[1], 0x8b, 'сигнатура gzip');
+  assert.ok(bytes.length < JSON.stringify(db).length / 2, `сжато до ${bytes.length} байт`);
+  assert.equal(canonicalJson(await gunzipJson(bytes)), canonicalJson(db));
+});
+
+test('образец v1 → gzip → чтение: неизвестные поля конверта, коллекции и сущности на месте', async () => {
+  const { db } = await parseDbBytes(await gzipJson(sampleDb));
+  const { extraEnvelope, extraCollections } = extrasOf(db);
+  assert.equal(extraEnvelope.x_futureEnvelope, sampleDb.x_futureEnvelope);
+  assert.deepEqual(extraCollections.x_futureCollection, sampleDb.data.x_futureCollection);
+  const rebuilt = buildDb(db.data, { createdAt: db.createdAt, deviceId: 'dev', extraEnvelope, extraCollections });
+  assert.deepEqual(rebuilt.data, sampleDb.data, 'data совпадает полностью');
+  assert.equal(rebuilt.x_futureEnvelope, sampleDb.x_futureEnvelope);
+  assert.equal(rebuilt.createdAt, sampleDb.createdAt, 'createdAt файла не меняется');
+});
+
+test('повреждённые данные → E-DB-CORRUPT', async () => {
+  const codes = [];
+  for (const bytes of [new Uint8Array([1, 2, 3]), await gzipJson({ format: 'другое' }), await gzipJson({ format: 'lifetasks-db', schemaVersion: 1, data: { tasks: [{ title: 'без id' }] } })]) {
+    try {
+      await parseDbBytes(bytes);
+      codes.push('ok');
+    } catch (e) {
+      codes.push(e.code);
+    }
+  }
+  assert.deepEqual(codes, ['E-DB-CORRUPT', 'E-DB-CORRUPT', 'E-DB-CORRUPT']);
+});
+
+test('validateDb дополняет пустыми вложенными коллекциями (задача от бота без subtasks)', () => {
+  const db = { format: 'lifetasks-db', schemaVersion: 1, data: { tasks: [{ id: 't', fieldTimes: {}, title: 'x' }] } };
+  validateDb(checkDb(db));
+  assert.deepEqual(db.data.tasks[0].subtasks, []);
+  assert.deepEqual(db.data.lists, []);
+});
+
+test('миграции: текущая версия проходит как есть, новее — E-READONLY, нет шага — E-MIGRATION', () => {
+  const db = { schemaVersion: SCHEMA_VERSION, data: {} };
+  assert.equal(migrateDb(db), db);
+  let code = null;
+  try {
+    migrateDb({ schemaVersion: SCHEMA_VERSION + 1, data: {} });
+  } catch (e) {
+    code = e.code;
+  }
+  assert.equal(code, 'E-READONLY');
+  try {
+    migrateDb({ schemaVersion: 1, data: {} }, [], 3);
+  } catch (e) {
+    code = e.code;
+  }
+  assert.equal(code, 'E-MIGRATION');
+});
+
+test('миграции: цепочка применяется по порядку и ставит schemaVersion', () => {
+  const steps = [
+    { from: 1, to: 2, migrate: (d) => ({ ...d, data: { ...d.data, log: [...(d.data.log || []), '1→2'] } }) },
+    { from: 2, to: 3, migrate: (d) => ({ ...d, data: { ...d.data, log: [...d.data.log, '2→3'] } }) },
+  ];
+  const r = migrateDb({ schemaVersion: 1, data: {} }, steps, 3);
+  assert.equal(r.schemaVersion, 3);
+  assert.deepEqual(r.data.log, ['1→2', '2→3']);
+});

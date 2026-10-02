@@ -1,0 +1,28 @@
+{
+  "name": "LifeTasks",
+  "short_name": "LifeTasks",
+  "description": "Личный планировщик: главное на сегодня, списки, входящие. Данные на твоём Google Диске.",
+  "lang": "ru",
+  "dir": "ltr",
+  "id": "./",
+  "start_url": "./#/today",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f6f7fb",
+  "theme_color": "#3949AB",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "shortcuts": [
+    {
+      "name": "Быстрая задача",
+      "short_name": "Задача",
+      "description": "Добавить задачу во «Входящие»",
+      "url": "./#/quick",
+      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png" }]
+    }
+  ]
+}

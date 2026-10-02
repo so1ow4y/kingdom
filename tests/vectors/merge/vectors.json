@@ -1,0 +1,86 @@
+{
+  "about": "Тест-векторы слияния (docs/DATA_FORMAT.md §6). Для каждого: mergeEntity(a, b) и mergeEntity(b, a) должны дать expected (сравнение по каноническому JSON). Используются и приложением, и ботом.",
+  "vectors": [
+    {
+      "name": "разные поля на двух устройствах — оба изменения сохраняются",
+      "a": { "id": "t1", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 20, "note": 10, "deletedAt": 10 }, "title": "Билеты 1–7", "note": "старое" },
+      "b": { "id": "t1", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 10, "note": 30, "deletedAt": 10 }, "title": "Билеты", "note": "новое" },
+      "expected": { "id": "t1", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+                    "fieldTimes": { "title": 20, "note": 30, "deletedAt": 10 }, "title": "Билеты 1–7", "note": "новое" }
+    },
+    {
+      "name": "надгробие побеждает правку, сделанную до удаления",
+      "a": { "id": "t2", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T12:00:00.000Z", "updatedBy": "devA",
+             "deletedAt": "2026-10-02T12:00:00.000Z", "fieldTimes": { "deletedAt": 50 } },
+      "b": { "id": "t2", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 40, "deletedAt": 10 }, "title": "Правка до удаления" },
+      "expected": { "id": "t2", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T12:00:00.000Z", "updatedBy": "devA",
+                    "deletedAt": "2026-10-02T12:00:00.000Z", "fieldTimes": { "deletedAt": 50 } }
+    },
+    {
+      "name": "правка после удаления воскрешает сущность",
+      "a": { "id": "t3", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T12:00:00.000Z", "updatedBy": "devA",
+             "deletedAt": "2026-10-02T12:00:00.000Z", "fieldTimes": { "deletedAt": 50 } },
+      "b": { "id": "t3", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T13:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 60, "deletedAt": 10 }, "title": "Правка после удаления" },
+      "expected": { "id": "t3", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T13:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+                    "fieldTimes": { "title": 60, "deletedAt": 10 }, "title": "Правка после удаления" }
+    },
+    {
+      "name": "равные метки: значение — больший канонический JSON, updatedBy — меньший id устройства",
+      "a": { "id": "t4", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 5 }, "title": "A" },
+      "b": { "id": "t4", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 5 }, "title": "B" },
+      "expected": { "id": "t4", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+                    "fieldTimes": { "title": 5 }, "title": "B" }
+    },
+    {
+      "name": "экземпляры повтора сливаются по ключу даты (больший t)",
+      "a": { "id": "t5", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-08T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Полить цветы",
+             "occurrences": {
+               "2026-10-05": { "state": "done", "doneAt": "2026-10-05T10:00:00.000Z", "date": null, "time": null, "t": 10, "by": "devA" },
+               "2026-10-08": { "state": "done", "doneAt": "2026-10-08T10:00:00.000Z", "date": null, "time": null, "t": 13, "by": "devA" } } },
+      "b": { "id": "t5", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-05T12:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Полить цветы",
+             "occurrences": {
+               "2026-10-05": { "state": "skipped", "doneAt": "2026-10-05T12:00:00.000Z", "date": null, "time": null, "t": 12, "by": "devB" } } },
+      "expected": { "id": "t5", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-08T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+                    "fieldTimes": { "title": 1 }, "title": "Полить цветы",
+                    "occurrences": {
+                      "2026-10-05": { "state": "skipped", "doneAt": "2026-10-05T12:00:00.000Z", "date": null, "time": null, "t": 12, "by": "devB" },
+                      "2026-10-08": { "state": "done", "doneAt": "2026-10-08T10:00:00.000Z", "date": null, "time": null, "t": 13, "by": "devA" } } }
+    },
+    {
+      "name": "поле есть только с одной стороны (неизвестное старому клиенту) — сохраняется",
+      "a": { "id": "t6", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 5 }, "title": "X", "x_future": { "k": 1 } },
+      "b": { "id": "t6", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T09:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 3 }, "title": "старое" },
+      "expected": { "id": "t6", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+                    "fieldTimes": { "title": 5 }, "title": "X", "x_future": { "k": 1 } }
+    },
+    {
+      "name": "подзадачи: добавленные на разных устройствах и правки разных полей одной подзадачи",
+      "a": { "id": "t7", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Видео",
+             "subtasks": [
+               { "id": "s1", "createdAt": "2026-10-01T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 1, "done": 10 }, "title": "Сценарий", "done": true },
+               { "id": "s2", "createdAt": "2026-10-02T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 11, "done": 11 }, "title": "Войсовер", "done": false } ] },
+      "b": { "id": "t7", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Видео",
+             "subtasks": [
+               { "id": "s1", "createdAt": "2026-10-01T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 15, "done": 1 }, "title": "Сценарий v2", "done": false },
+               { "id": "s3", "createdAt": "2026-10-02T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 12, "done": 12 }, "title": "Монтаж", "done": false } ] },
+      "expected": { "id": "t7", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+                    "fieldTimes": { "title": 1 }, "title": "Видео",
+                    "subtasks": [
+                      { "id": "s1", "createdAt": "2026-10-01T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 15, "done": 10 }, "title": "Сценарий v2", "done": true },
+                      { "id": "s2", "createdAt": "2026-10-02T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 11, "done": 11 }, "title": "Войсовер", "done": false },
+                      { "id": "s3", "createdAt": "2026-10-02T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 12, "done": 12 }, "title": "Монтаж", "done": false } ] }
+    }
+  ]
+}

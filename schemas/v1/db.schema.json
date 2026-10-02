@@ -1,0 +1,978 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lifetasks.local/schemas/v1/db.schema.json",
+  "title": "LifeTasks database v1",
+  "type": "object",
+  "required": [
+    "format",
+    "schemaVersion",
+    "createdAt",
+    "updatedAt",
+    "writer",
+    "data"
+  ],
+  "properties": {
+    "format": {
+      "const": "lifetasks-db"
+    },
+    "schemaVersion": {
+      "const": 1
+    },
+    "createdAt": {
+      "$ref": "#/$defs/isoTime"
+    },
+    "updatedAt": {
+      "$ref": "#/$defs/isoTime"
+    },
+    "writer": {
+      "$ref": "#/$defs/writer"
+    },
+    "data": {
+      "type": "object",
+      "required": [
+        "settings",
+        "lists",
+        "tasks",
+        "media",
+        "devices"
+      ],
+      "properties": {
+        "settings": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/settings"
+          },
+          "minItems": 1,
+          "maxItems": 1
+        },
+        "lists": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/list"
+          }
+        },
+        "tasks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/task"
+          }
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/media"
+          }
+        },
+        "devices": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/device"
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "isoTime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "isoTimeOrNull": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/isoTime"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "date": {
+      "type": "string",
+      "pattern": "^\\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\\d|3[01])$"
+    },
+    "dateOrNull": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/date"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "time": {
+      "type": "string",
+      "pattern": "^([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "timeOrNull": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "localDateTime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T([01]\\d|2[0-3]):[0-5]\\d$"
+    },
+    "uuid": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+    },
+    "uuidOrNull": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/uuid"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "sha256": {
+      "type": "string",
+      "pattern": "^[0-9a-f]{64}$"
+    },
+    "order": {
+      "type": "string",
+      "pattern": "^[0-9A-Za-z]+$",
+      "maxLength": 64
+    },
+    "fieldTimes": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "integer",
+        "minimum": 0
+      }
+    },
+    "writer": {
+      "type": "object",
+      "required": [
+        "app",
+        "appVersion",
+        "deviceId"
+      ],
+      "properties": {
+        "app": {
+          "type": "string"
+        },
+        "appVersion": {
+          "type": "string"
+        },
+        "deviceId": {
+          "type": "string"
+        }
+      }
+    },
+    "topBase": {
+      "type": "object",
+      "required": [
+        "id",
+        "createdAt",
+        "updatedAt",
+        "updatedBy",
+        "deletedAt",
+        "fieldTimes"
+      ],
+      "properties": {
+        "createdAt": {
+          "$ref": "#/$defs/isoTime"
+        },
+        "updatedAt": {
+          "$ref": "#/$defs/isoTime"
+        },
+        "updatedBy": {
+          "type": "string"
+        },
+        "deletedAt": {
+          "$ref": "#/$defs/isoTimeOrNull"
+        },
+        "fieldTimes": {
+          "$ref": "#/$defs/fieldTimes"
+        }
+      }
+    },
+    "nestedBase": {
+      "type": "object",
+      "required": [
+        "id",
+        "createdAt",
+        "deletedAt",
+        "fieldTimes"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/uuid"
+        },
+        "createdAt": {
+          "$ref": "#/$defs/isoTime"
+        },
+        "deletedAt": {
+          "$ref": "#/$defs/isoTimeOrNull"
+        },
+        "fieldTimes": {
+          "$ref": "#/$defs/fieldTimes"
+        }
+      }
+    },
+    "isLive": {
+      "properties": {
+        "deletedAt": {
+          "type": "null"
+        }
+      }
+    },
+    "settings": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/topBase"
+        },
+        {
+          "properties": {
+            "id": {
+              "const": "00000000-0000-7000-8000-000000000001"
+            }
+          }
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "timeZone",
+              "choresListId",
+              "photoMaxSide",
+              "photoQuality",
+              "photoFormat",
+              "voiceBitrate",
+              "trashRetentionDays",
+              "orphanMediaRetentionDays",
+              "writeReadableCopy"
+            ],
+            "properties": {
+              "timeZone": {
+                "type": "string",
+                "minLength": 1
+              },
+              "choresListId": {
+                "$ref": "#/$defs/uuidOrNull"
+              },
+              "photoMaxSide": {
+                "type": "integer",
+                "minimum": 640,
+                "maximum": 4096
+              },
+              "photoQuality": {
+                "type": "number",
+                "minimum": 0.4,
+                "maximum": 0.95
+              },
+              "photoFormat": {
+                "enum": [
+                  "webp",
+                  "jpeg"
+                ]
+              },
+              "voiceBitrate": {
+                "enum": [
+                  16000,
+                  24000,
+                  32000
+                ]
+              },
+              "trashRetentionDays": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 365
+              },
+              "orphanMediaRetentionDays": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 365
+              },
+              "writeReadableCopy": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "list": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/topBase"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "name",
+              "color",
+              "emoji",
+              "order",
+              "archived"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 40
+              },
+              "color": {
+                "type": "string",
+                "pattern": "^#[0-9A-Fa-f]{6}$"
+              },
+              "emoji": {
+                "oneOf": [
+                  {
+                    "type": "string",
+                    "maxLength": 16
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "order": {
+                "$ref": "#/$defs/order"
+              },
+              "archived": {
+                "type": "boolean"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "subtask": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nestedBase"
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "title",
+              "done",
+              "order"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 300
+              },
+              "done": {
+                "type": "boolean"
+              },
+              "order": {
+                "$ref": "#/$defs/order"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "attachment": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nestedBase"
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "mediaId",
+              "name",
+              "order"
+            ],
+            "properties": {
+              "mediaId": {
+                "$ref": "#/$defs/sha256"
+              },
+              "name": {
+                "type": "string",
+                "maxLength": 255
+              },
+              "order": {
+                "$ref": "#/$defs/order"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "reminder": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nestedBase"
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "kind"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "absolute",
+                  "relative",
+                  "timeOfDay"
+                ]
+              },
+              "at": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/localDateTime"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "offsetMinutes": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0,
+                    "maximum": 10080
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "anchor": {
+                "enum": [
+                  "scheduled",
+                  "deadline",
+                  null
+                ]
+              },
+              "time": {
+                "$ref": "#/$defs/timeOrNull"
+              }
+            },
+            "allOf": [
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "absolute"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "at"
+                  ],
+                  "properties": {
+                    "at": {
+                      "$ref": "#/$defs/localDateTime"
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "relative"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "offsetMinutes",
+                    "anchor"
+                  ],
+                  "properties": {
+                    "offsetMinutes": {
+                      "type": "integer"
+                    },
+                    "anchor": {
+                      "enum": [
+                        "scheduled",
+                        "deadline"
+                      ]
+                    }
+                  }
+                }
+              },
+              {
+                "if": {
+                  "properties": {
+                    "kind": {
+                      "const": "timeOfDay"
+                    }
+                  }
+                },
+                "then": {
+                  "required": [
+                    "time"
+                  ],
+                  "properties": {
+                    "time": {
+                      "$ref": "#/$defs/time"
+                    }
+                  }
+                }
+              }
+            ]
+          }
+        }
+      ]
+    },
+    "repeat": {
+      "type": "object",
+      "required": [
+        "freq",
+        "interval",
+        "byWeekday",
+        "byMonthDay",
+        "mode",
+        "startDate",
+        "until",
+        "resetSubtasks"
+      ],
+      "properties": {
+        "freq": {
+          "enum": [
+            "daily",
+            "weekly",
+            "monthly"
+          ]
+        },
+        "interval": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 365
+        },
+        "byWeekday": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 7
+              },
+              "minItems": 1,
+              "maxItems": 7,
+              "uniqueItems": true
+            }
+          ]
+        },
+        "byMonthDay": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 31
+            }
+          ]
+        },
+        "mode": {
+          "enum": [
+            "schedule",
+            "afterCompletion"
+          ]
+        },
+        "startDate": {
+          "$ref": "#/$defs/date"
+        },
+        "until": {
+          "$ref": "#/$defs/dateOrNull"
+        },
+        "resetSubtasks": {
+          "type": "boolean"
+        }
+      }
+    },
+    "occurrence": {
+      "type": "object",
+      "required": [
+        "state",
+        "doneAt",
+        "date",
+        "time",
+        "t",
+        "by"
+      ],
+      "properties": {
+        "state": {
+          "enum": [
+            "open",
+            "done",
+            "skipped"
+          ]
+        },
+        "doneAt": {
+          "$ref": "#/$defs/isoTimeOrNull"
+        },
+        "date": {
+          "$ref": "#/$defs/dateOrNull"
+        },
+        "time": {
+          "$ref": "#/$defs/timeOrNull"
+        },
+        "t": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "by": {
+          "type": "string"
+        }
+      }
+    },
+    "task": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/topBase"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "title",
+              "note",
+              "listId",
+              "priority",
+              "status",
+              "completedAt",
+              "trashedAt",
+              "scheduledDate",
+              "scheduledTime",
+              "deadlineDate",
+              "deadlineTime",
+              "focusDate",
+              "focusOrder",
+              "order",
+              "repeat",
+              "nag",
+              "createdVia",
+              "subtasks",
+              "attachments",
+              "reminders",
+              "occurrences"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "note": {
+                "type": "string",
+                "maxLength": 20000
+              },
+              "listId": {
+                "$ref": "#/$defs/uuidOrNull"
+              },
+              "priority": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3
+              },
+              "status": {
+                "enum": [
+                  "active",
+                  "done"
+                ]
+              },
+              "completedAt": {
+                "$ref": "#/$defs/isoTimeOrNull"
+              },
+              "trashedAt": {
+                "$ref": "#/$defs/isoTimeOrNull"
+              },
+              "scheduledDate": {
+                "$ref": "#/$defs/dateOrNull"
+              },
+              "scheduledTime": {
+                "$ref": "#/$defs/timeOrNull"
+              },
+              "deadlineDate": {
+                "$ref": "#/$defs/dateOrNull"
+              },
+              "deadlineTime": {
+                "$ref": "#/$defs/timeOrNull"
+              },
+              "focusDate": {
+                "$ref": "#/$defs/dateOrNull"
+              },
+              "focusOrder": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/order"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "order": {
+                "$ref": "#/$defs/order"
+              },
+              "repeat": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/repeat"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "nag": {
+                "type": "object",
+                "required": [
+                  "enabled",
+                  "intervalMinutes"
+                ],
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "intervalMinutes": {
+                    "type": "integer",
+                    "minimum": 5,
+                    "maximum": 1440
+                  }
+                }
+              },
+              "createdVia": {
+                "enum": [
+                  "app",
+                  "bot",
+                  "import"
+                ]
+              },
+              "subtasks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/subtask"
+                }
+              },
+              "attachments": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/attachment"
+                }
+              },
+              "reminders": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/reminder"
+                }
+              },
+              "occurrences": {
+                "type": "object",
+                "propertyNames": {
+                  "$ref": "#/$defs/date"
+                },
+                "additionalProperties": {
+                  "$ref": "#/$defs/occurrence"
+                }
+              }
+            }
+          }
+        }
+      ]
+    },
+    "media": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/topBase"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/sha256"
+            }
+          }
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "kind",
+              "mime",
+              "ext",
+              "codec",
+              "size",
+              "width",
+              "height",
+              "durationMs",
+              "original",
+              "driveFileId",
+              "orphanedAt"
+            ],
+            "properties": {
+              "kind": {
+                "enum": [
+                  "image",
+                  "audio",
+                  "file"
+                ]
+              },
+              "mime": {
+                "type": "string",
+                "minLength": 3
+              },
+              "ext": {
+                "type": "string",
+                "pattern": "^[a-z0-9]{1,8}$"
+              },
+              "codec": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "size": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "width": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "height": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "durationMs": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "original": {
+                "type": "boolean"
+              },
+              "driveFileId": {
+                "oneOf": [
+                  {
+                    "type": "string"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "orphanedAt": {
+                "$ref": "#/$defs/isoTimeOrNull"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "device": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/topBase"
+        },
+        {
+          "properties": {
+            "id": {
+              "$ref": "#/$defs/uuid"
+            }
+          }
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "name",
+              "platform",
+              "appVersion",
+              "lastPushAt"
+            ],
+            "properties": {
+              "name": {
+                "type": "string",
+                "maxLength": 40
+              },
+              "platform": {
+                "type": "string"
+              },
+              "appVersion": {
+                "type": "string"
+              },
+              "lastPushAt": {
+                "$ref": "#/$defs/isoTimeOrNull"
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

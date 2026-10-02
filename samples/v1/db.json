@@ -1,0 +1,222 @@
+{
+  "format": "lifetasks-db",
+  "schemaVersion": 1,
+  "createdAt": "2026-09-01T10:00:00.000Z",
+  "updatedAt": "2026-10-02T07:15:30.123Z",
+  "writer": { "app": "lifetasks-web", "appVersion": "1.0.0", "deviceId": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b" },
+  "x_futureEnvelope": "неизвестное поле конверта — должно сохраниться",
+  "data": {
+    "x_futureCollection": [{ "anything": true }],
+    "settings": [
+      {
+        "id": "00000000-0000-7000-8000-000000000001",
+        "createdAt": "2026-01-01T00:00:00.000Z",
+        "updatedAt": "2026-09-01T10:00:00.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b",
+        "deletedAt": null,
+        "fieldTimes": {
+          "timeZone": 1756720800000, "choresListId": 1, "photoMaxSide": 1, "photoQuality": 1, "photoFormat": 1,
+          "voiceBitrate": 1, "trashRetentionDays": 1, "orphanMediaRetentionDays": 1, "writeReadableCopy": 1, "deletedAt": 1
+        },
+        "timeZone": "Europe/Moscow",
+        "choresListId": "00000000-0000-7000-8000-000000000105",
+        "photoMaxSide": 1600,
+        "photoQuality": 0.7,
+        "photoFormat": "webp",
+        "voiceBitrate": 24000,
+        "trashRetentionDays": 30,
+        "orphanMediaRetentionDays": 30,
+        "writeReadableCopy": true
+      }
+    ],
+    "lists": [
+      {
+        "id": "00000000-0000-7000-8000-000000000101",
+        "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z",
+        "updatedBy": "00000000-0000-7000-8000-000000000000", "deletedAt": null,
+        "fieldTimes": { "name": 1, "color": 1, "emoji": 1, "order": 1, "archived": 1, "deletedAt": 1 },
+        "name": "Пересдача", "color": "#E53935", "emoji": "📚", "order": "a0", "archived": false
+      },
+      {
+        "id": "00000000-0000-7000-8000-000000000102",
+        "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-01-01T00:00:00.000Z",
+        "updatedBy": "00000000-0000-7000-8000-000000000000", "deletedAt": null,
+        "fieldTimes": { "name": 1, "color": 1, "emoji": 1, "order": 1, "archived": 1, "deletedAt": 1 },
+        "name": "Универ", "color": "#1E88E5", "emoji": "🎓", "order": "a1", "archived": false
+      },
+      {
+        "id": "00000000-0000-7000-8000-000000000105",
+        "createdAt": "2026-01-01T00:00:00.000Z", "updatedAt": "2026-09-15T08:00:00.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b", "deletedAt": null,
+        "fieldTimes": { "name": 1757923200000, "color": 1, "emoji": 1, "order": 1, "archived": 1, "deletedAt": 1 },
+        "name": "Быт и дом", "color": "#43A047", "emoji": "🏠", "order": "a4", "archived": false
+      },
+      {
+        "id": "01926f50-0000-7000-8000-000000000001",
+        "createdAt": "2026-09-10T12:00:00.000Z", "updatedAt": "2026-09-20T12:00:00.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b", "deletedAt": null,
+        "fieldTimes": { "name": 1757505600000, "color": 1757505600000, "emoji": 1757505600000, "order": 1757505600000, "archived": 1758369600000, "deletedAt": 1757505600000 },
+        "name": "Старый проект", "color": "#757575", "emoji": null, "order": "a5", "archived": true,
+        "x_future": "неизвестное поле сущности"
+      },
+      {
+        "id": "01926f50-0000-7000-8000-000000000002",
+        "createdAt": "2026-09-10T12:00:00.000Z", "updatedAt": "2026-09-25T12:00:00.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b",
+        "deletedAt": "2026-09-25T12:00:00.000Z",
+        "fieldTimes": { "deletedAt": 1758801600000 }
+      }
+    ],
+    "tasks": [
+      {
+        "id": "01926f40-1a2b-7c3d-8e4f-5a6b7c8d9e0f",
+        "createdAt": "2026-09-20T08:00:00.000Z",
+        "updatedAt": "2026-10-02T06:30:12.410Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b",
+        "deletedAt": null,
+        "fieldTimes": {
+          "title": 1758355200000, "note": 1758355200000, "listId": 1758355200000, "priority": 1759386612410,
+          "status": 1758355200000, "completedAt": 1758355200000, "trashedAt": 1758355200000,
+          "scheduledDate": 1758355200000, "scheduledTime": 1758355200000, "deadlineDate": 1758355200000,
+          "deadlineTime": 1758355200000, "focusDate": 1759386000000, "focusOrder": 1759386000000,
+          "order": 1758355200000, "repeat": 1758355200000, "nag": 1758355200000, "createdVia": 1758355200000,
+          "deletedAt": 1758355200000
+        },
+        "title": "Повторить формулы по матану",
+        "note": "Лекции 3–5, особенно интегрирование по частям",
+        "listId": "00000000-0000-7000-8000-000000000101",
+        "priority": 3,
+        "status": "active",
+        "completedAt": null,
+        "trashedAt": null,
+        "scheduledDate": null,
+        "scheduledTime": "19:00",
+        "deadlineDate": null,
+        "deadlineTime": null,
+        "focusDate": "2026-10-02",
+        "focusOrder": "a0",
+        "order": "a3",
+        "repeat": {
+          "freq": "weekly", "interval": 1, "byWeekday": [2, 4, 6], "byMonthDay": null,
+          "mode": "schedule", "startDate": "2026-09-21", "until": "2026-10-20", "resetSubtasks": true
+        },
+        "nag": { "enabled": true, "intervalMinutes": 15 },
+        "createdVia": "app",
+        "subtasks": [
+          {
+            "id": "01926f40-2000-7000-8000-000000000001", "createdAt": "2026-09-20T08:00:00.000Z", "deletedAt": null,
+            "fieldTimes": { "title": 1758355200000, "done": 1759300000000, "order": 1758355200000, "deletedAt": 1758355200000 },
+            "title": "Лекция 3", "done": false, "order": "a0"
+          },
+          {
+            "id": "01926f40-2000-7000-8000-000000000002", "createdAt": "2026-09-20T08:00:00.000Z",
+            "deletedAt": "2026-09-22T08:00:00.000Z",
+            "fieldTimes": { "deletedAt": 1758528000000 }
+          }
+        ],
+        "attachments": [
+          {
+            "id": "01926f40-3000-7000-8000-000000000001", "createdAt": "2026-09-20T08:05:00.000Z", "deletedAt": null,
+            "fieldTimes": { "mediaId": 1758355500000, "name": 1758355500000, "order": 1758355500000, "deletedAt": 1758355500000 },
+            "mediaId": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+            "name": "Фото 2026-09-20 11-05.webp", "order": "a0"
+          }
+        ],
+        "reminders": [
+          {
+            "id": "01926f40-4000-7000-8000-000000000001", "createdAt": "2026-09-20T08:00:00.000Z", "deletedAt": null,
+            "fieldTimes": { "kind": 1758355200000, "offsetMinutes": 1758355200000, "anchor": 1758355200000, "at": 1758355200000, "time": 1758355200000, "deletedAt": 1758355200000 },
+            "kind": "relative", "offsetMinutes": 30, "anchor": "scheduled", "at": null, "time": null
+          },
+          {
+            "id": "01926f40-4000-7000-8000-000000000002", "createdAt": "2026-09-20T08:00:00.000Z", "deletedAt": null,
+            "fieldTimes": { "kind": 1758355200000, "time": 1758355200000, "deletedAt": 1758355200000 },
+            "kind": "timeOfDay", "time": "09:00"
+          }
+        ],
+        "occurrences": {
+          "2026-09-29": { "state": "done", "doneAt": "2026-09-29T16:40:00.000Z", "date": null, "time": null, "t": 1759164000000, "by": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b" },
+          "2026-10-01": { "state": "skipped", "doneAt": "2026-10-01T18:00:00.000Z", "date": null, "time": null, "t": 1759341600000, "by": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b" }
+        },
+        "x_future": { "comment": "неизвестное поле — должно пережить чтение, правку, слияние и запись" }
+      },
+      {
+        "id": "01926f60-0000-7000-8000-000000000001",
+        "createdAt": "2026-10-01T09:00:00.000Z", "updatedAt": "2026-10-01T09:00:00.000Z",
+        "updatedBy": "00000000-0000-7000-8000-0000000000b0", "deletedAt": null,
+        "fieldTimes": {
+          "title": 1759309200000, "note": 1759309200000, "listId": 1759309200000, "priority": 1759309200000,
+          "status": 1759309200000, "completedAt": 1759309200000, "trashedAt": 1759309200000,
+          "scheduledDate": 1759309200000, "scheduledTime": 1759309200000, "deadlineDate": 1759309200000,
+          "deadlineTime": 1759309200000, "focusDate": 1759309200000, "focusOrder": 1759309200000,
+          "order": 1759309200000, "repeat": 1759309200000, "nag": 1759309200000, "createdVia": 1759309200000,
+          "deletedAt": 1759309200000
+        },
+        "title": "Купить батарейки", "note": "", "listId": null, "priority": 0, "status": "active",
+        "completedAt": null, "trashedAt": null, "scheduledDate": null, "scheduledTime": null,
+        "deadlineDate": "2026-10-05", "deadlineTime": "18:00", "focusDate": null, "focusOrder": null, "order": "Zz",
+        "repeat": null, "nag": { "enabled": false, "intervalMinutes": 15 }, "createdVia": "bot",
+        "subtasks": [], "attachments": [], "reminders": [
+          {
+            "id": "01926f60-4000-7000-8000-000000000001", "createdAt": "2026-10-01T09:00:00.000Z", "deletedAt": null,
+            "fieldTimes": { "kind": 1759309200000, "at": 1759309200000, "deletedAt": 1759309200000 },
+            "kind": "absolute", "at": "2026-10-05T17:00"
+          }
+        ], "occurrences": {}
+      },
+      {
+        "id": "01926f60-0000-7000-8000-000000000002",
+        "createdAt": "2026-09-28T09:00:00.000Z", "updatedAt": "2026-09-30T15:00:00.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b", "deletedAt": null,
+        "fieldTimes": {
+          "title": 1759050000000, "note": 1759050000000, "listId": 1759050000000, "priority": 1759050000000,
+          "status": 1759244400000, "completedAt": 1759244400000, "trashedAt": 1759050000000,
+          "scheduledDate": 1759050000000, "scheduledTime": 1759050000000, "deadlineDate": 1759050000000,
+          "deadlineTime": 1759050000000, "focusDate": 1759050000000, "focusOrder": 1759050000000,
+          "order": 1759050000000, "repeat": 1759050000000, "nag": 1759050000000, "createdVia": 1759050000000,
+          "deletedAt": 1759050000000
+        },
+        "title": "Записать войсовер", "note": "", "listId": "00000000-0000-7000-8000-000000000102", "priority": 2,
+        "status": "done", "completedAt": "2026-09-30T15:00:00.000Z", "trashedAt": null,
+        "scheduledDate": "2026-09-30", "scheduledTime": null, "deadlineDate": null, "deadlineTime": null,
+        "focusDate": null, "focusOrder": null, "order": "a1", "repeat": null,
+        "nag": { "enabled": false, "intervalMinutes": 15 }, "createdVia": "app",
+        "subtasks": [], "attachments": [], "reminders": [], "occurrences": {}
+      },
+      {
+        "id": "01926f60-0000-7000-8000-000000000003",
+        "createdAt": "2026-09-28T09:00:00.000Z", "updatedAt": "2026-10-01T10:00:00.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b",
+        "deletedAt": "2026-10-01T10:00:00.000Z",
+        "fieldTimes": { "deletedAt": 1759312800000 }
+      }
+    ],
+    "media": [
+      {
+        "id": "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08",
+        "createdAt": "2026-09-20T08:05:00.000Z", "updatedAt": "2026-09-20T09:00:00.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b", "deletedAt": null,
+        "fieldTimes": { "kind": 1758355500000, "mime": 1758355500000, "ext": 1758355500000, "codec": 1758355500000, "size": 1758355500000, "width": 1758355500000, "height": 1758355500000, "durationMs": 1758355500000, "original": 1758355500000, "driveFileId": 1758358800000, "orphanedAt": 1758355500000, "deletedAt": 1758355500000 },
+        "kind": "image", "mime": "image/webp", "ext": "webp", "codec": "webp", "size": 183245,
+        "width": 1600, "height": 1200, "durationMs": null, "original": false,
+        "driveFileId": "1AbCdEfGhIjKlMnOpQrStUvWxYz", "orphanedAt": null
+      }
+    ],
+    "devices": [
+      {
+        "id": "00000000-0000-7000-8000-0000000000b0",
+        "createdAt": "2026-09-15T10:00:00.000Z", "updatedAt": "2026-10-01T09:00:00.000Z",
+        "updatedBy": "00000000-0000-7000-8000-0000000000b0", "deletedAt": null,
+        "fieldTimes": { "name": 1757930400000, "platform": 1757930400000, "appVersion": 1757930400000, "lastPushAt": 1759309200000, "deletedAt": 1757930400000 },
+        "name": "Telegram-бот", "platform": "bot", "appVersion": "0.1.0", "lastPushAt": "2026-10-01T09:00:00.000Z"
+      },
+      {
+        "id": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b",
+        "createdAt": "2026-09-01T10:00:00.000Z", "updatedAt": "2026-10-02T07:15:30.000Z",
+        "updatedBy": "01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b", "deletedAt": null,
+        "fieldTimes": { "name": 1756720800000, "platform": 1756720800000, "appVersion": 1759389000000, "lastPushAt": 1759389330000, "deletedAt": 1756720800000 },
+        "name": "Телефон", "platform": "android-chrome", "appVersion": "1.0.0", "lastPushAt": "2026-10-02T07:15:30.000Z"
+      }
+    ]
+  }
+}

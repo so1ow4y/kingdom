@@ -1,0 +1,13 @@
+body { font: 15px/1.45 system-ui, sans-serif; max-width: 900px; margin: 24px auto; padding: 0 16px; background: #f6f7fb; color: #1b1d27; }
+h1 { font-size: 22px; }
+.help { color: #676b7e; font-size: 13px; }
+#summary { font-weight: 700; font-size: 17px; }
+#summary.ok { color: #2e7d32; }
+#summary.fail { color: #c62828; }
+.file { margin: 16px 0 6px; font-weight: 700; color: #3949ab; }
+.t { padding: 2px 0 2px 22px; position: relative; }
+.t::before { position: absolute; left: 0; }
+.t.ok::before { content: "✓"; color: #2e7d32; }
+.t.fail::before { content: "✗"; color: #c62828; }
+.t.fail { color: #c62828; }
+pre { background: #fff; border: 1px solid #f3c1c1; padding: 8px; overflow-x: auto; font-size: 12.5px; color: #1b1d27; }
