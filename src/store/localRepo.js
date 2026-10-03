@@ -4,20 +4,26 @@
 import { openDb, req, txDone, deleteDb } from './idb.js';
 import { DB_NAME } from '../config.js';
 
-const IDB_VERSION = 1;
-export const ENTITY_STORES = ['settings', 'lists', 'tasks', 'media', 'devices'];
+const IDB_VERSION = 2;
+const V1_STORES = ['settings', 'lists', 'tasks', 'media', 'devices'];
+const V2_STORES = ['priorities', 'coinEvents', 'rewards']; // формат данных v2 (обновление 0.3)
+export const ENTITY_STORES = [...V1_STORES, ...V2_STORES];
 
-function upgrade(db, oldVersion) {
-  if (oldVersion < 1) {
-    for (const s of ENTITY_STORES) db.createObjectStore(s, { keyPath: 'id' });
-    db.createObjectStore('dirty', { keyPath: 'key' });
-    db.createObjectStore('base', { keyPath: 'key' });
-    db.createObjectStore('meta', { keyPath: 'key' });
-    db.createObjectStore('snapshots', { keyPath: 'key' });
-    db.createObjectStore('conflicts', { keyPath: 'id', autoIncrement: true }).createIndex('at', 'at');
-    db.createObjectStore('errors', { keyPath: 'id', autoIncrement: true });
-    db.createObjectStore('blobs', { keyPath: 'id' }).createIndex('lastAccess', 'lastAccess');
-  }
+/** Создаёт все недостающие сторы — независимо от старой версии (переживает и «пустую» базу без сторов). */
+function upgrade(db) {
+  const make = (name, opts, index = null) => {
+    if (db.objectStoreNames.contains(name)) return;
+    const s = db.createObjectStore(name, opts);
+    if (index) s.createIndex(index, index);
+  };
+  for (const s of ENTITY_STORES) make(s, { keyPath: 'id' });
+  make('dirty', { keyPath: 'key' });
+  make('base', { keyPath: 'key' });
+  make('meta', { keyPath: 'key' });
+  make('snapshots', { keyPath: 'key' });
+  make('conflicts', { keyPath: 'id', autoIncrement: true }, 'at');
+  make('errors', { keyPath: 'id', autoIncrement: true });
+  make('blobs', { keyPath: 'id' }, 'lastAccess');
 }
 
 let current = null;

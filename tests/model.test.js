@@ -3,6 +3,7 @@ import { makeCtx, DEVICE } from './helpers.js';
 import {
   newTask, touch, revert, tombstone, completeTask, reopenTask, trashTask, restoreTask, normalizeTitle,
   normalizeListName, firstGrapheme, defaultLists, defaultSettings, TASK_FIELDS, newList, duplicateTask,
+  taskListIds, liveNotes, setListMembership, addNote, touchNested, removeNested,
 } from '../src/core/model.js';
 import { DEFAULT_LISTS, SETTINGS_ID } from '../src/config.js';
 import { UUID_RE } from '../src/core/ids.js';
@@ -13,13 +14,15 @@ test('newTask: все поля по DATA_FORMAT §5.3, у всех изменя�
   assert.ok(UUID_RE.test(t.id));
   assert.equal(t.title, 'Смонтировать 0:00–3:00');
   assert.equal(t.status, 'active');
-  assert.equal(t.listId, null);
+  assert.deepEqual(t.lists, {});
+  assert.equal(t.parentId, null);
+  assert.equal(t.priorityId, '00000000-0000-7000-8000-000000000200');
   assert.equal(t.deletedAt, null);
   assert.equal(t.updatedBy, DEVICE);
   assert.deepEqual(Object.keys(t.fieldTimes).sort(), [...TASK_FIELDS].sort());
   const stamps = new Set(Object.values(t.fieldTimes));
   assert.equal(stamps.size, 1);
-  assert.deepEqual([t.subtasks, t.attachments, t.reminders, t.occurrences], [[], [], [], {}]);
+  assert.deepEqual([t.notes, t.attachments, t.reminders, t.occurrences], [[], [], [], {}]);
 });
 
 test('newTask: пустое название — исключение; время без даты не сохраняется', () => {
@@ -34,10 +37,10 @@ test('touch: метка только у изменённых полей; без 
   const t = newTask({ title: 'A', order: 'a0' }, c);
   const before = { ...t.fieldTimes };
   c.now += 1000;
-  const t2 = touch(t, { title: 'B', note: '' }, c);
+  const t2 = touch(t, { title: 'B', scheduledDate: null }, c);
   assert.equal(t2.title, 'B');
   assert.ok(t2.fieldTimes.title > before.title);
-  assert.equal(t2.fieldTimes.note, before.note, 'note не менялась');
+  assert.equal(t2.fieldTimes.scheduledDate, before.scheduledDate, 'scheduledDate не менялась');
   assert.equal(t2.updatedAt, new Date(c.now).toISOString());
   assert.equal(touch(t2, { title: 'B' }, c), t2);
 });
@@ -84,7 +87,7 @@ test('revert: возвращает значения с НОВЫМИ меткам
 
 test('tombstone: только id, даты и метка deletedAt', () => {
   const c = makeCtx();
-  const t = tombstone({ ...newTask({ title: 'A', note: 'секрет' }, c), x_future: 1 }, c);
+  const t = tombstone({ ...newTask({ title: 'A', notes: ['секрет'] }, c), x_future: 1 }, c);
   assert.deepEqual(Object.keys(t).sort(), ['createdAt', 'deletedAt', 'fieldTimes', 'id', 'updatedAt', 'updatedBy']);
   assert.deepEqual(Object.keys(t.fieldTimes), ['deletedAt']);
 });
@@ -112,11 +115,52 @@ test('newList и duplicateTask', () => {
   const c = makeCtx();
   const l = newList({ name: 'Спорт', color: '#43A047', emoji: '💪', order: 'a5' }, c);
   assert.equal(l.archived, false);
-  const t = newTask({ title: 'Бег', listId: l.id, priority: 2, note: 'утром' }, c);
+  const t = newTask({ title: 'Бег', listIds: [l.id], priorityId: '00000000-0000-7000-8000-000000000202', notes: ['утром'] }, c);
   const d = duplicateTask(t, 'a1', c);
   assert.ok(d.id !== t.id);
   assert.equal(d.title, 'Бег (копия)');
-  assert.equal(d.listId, l.id);
-  assert.equal(d.priority, 2);
-  assert.equal(d.note, 'утром');
+  assert.deepEqual(taskListIds(d), [l.id]);
+  assert.equal(d.priorityId, '00000000-0000-7000-8000-000000000202');
+  assert.deepEqual(liveNotes(d).map((n) => n.text), ['утром']);
+});
+
+test('v2: членство в списках — словарь с меткой на каждый список; снятие оставляет запись in=false', () => {
+  const c = makeCtx();
+  let t = newTask({ title: 'A', listIds: ['L1'] }, c);
+  assert.deepEqual(taskListIds(t), ['L1']);
+  const t1 = t.lists.L1.t;
+  t = setListMembership(t, 'L2', true, c);
+  assert.deepEqual(taskListIds(t).sort(), ['L1', 'L2']);
+  assert.equal(t.lists.L1.t, t1, 'метка L1 не изменилась');
+  t = setListMembership(t, 'L1', false, c);
+  assert.deepEqual(taskListIds(t), ['L2']);
+  assert.equal(t.lists.L1.in, false);
+  assert.equal(setListMembership(t, 'L1', false, c), t, 'без изменений — тот же объект');
+});
+
+test('v2: заметки — отдельные элементы со своими id и метками; удаление — надгробие элемента', () => {
+  const c = makeCtx();
+  let t = newTask({ title: 'A', notes: ['первая', '', 'вторая'] }, c);
+  assert.deepEqual(liveNotes(t).map((n) => n.text), ['первая', 'вторая'], 'пустые заметки не создаются');
+  const [n1, n2] = liveNotes(t);
+  assert.ok(n1.id !== n2.id && n1.updatedAt && n1.createdAt);
+  t = addNote(t, 'третья', 'a9', c);
+  const before = liveNotes(t).find((n) => n.id === n1.id).fieldTimes.text;
+  t = touchNested(t, 'notes', n2.id, { text: 'вторая, правка' }, c);
+  assert.equal(liveNotes(t).find((n) => n.id === n1.id).fieldTimes.text, before, 'другие заметки не тронуты');
+  t = removeNested(t, 'notes', n1.id, c);
+  assert.deepEqual(liveNotes(t).map((n) => n.text), ['вторая, правка', 'третья']);
+  assert.ok(t.notes.find((n) => n.id === n1.id).deletedAt);
+});
+
+test('v2: revert возвращает членство в списках и заметки новыми метками', () => {
+  const c = makeCtx();
+  const t0 = newTask({ title: 'A', listIds: ['L1'], notes: ['x'] }, c);
+  let t1 = setListMembership(setListMembership(t0, 'L1', false, c), 'L2', true, c);
+  t1 = touchNested(t1, 'notes', liveNotes(t0)[0].id, { text: 'y' }, c);
+  const r = revert(t1, t0, c);
+  assert.deepEqual(taskListIds(r), ['L1']);
+  assert.equal(r.lists.L2.in, false);
+  assert.ok(r.lists.L1.t > t1.lists.L1.t, 'новая метка');
+  assert.deepEqual(liveNotes(r).map((n) => n.text), ['x']);
 });

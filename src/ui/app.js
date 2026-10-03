@@ -1,9 +1,9 @@
-// Каркас приложения: раскладка (нижняя навигация / боковая панель), роутинг, баннеры, оверлеи, клавиши.
+// Каркас приложения: раскладка (док-панель, карточка задачи справа или на весь экран), роутинг, баннеры, оверлеи, клавиши.
 
 import { html, useEffect, useRef, useMemo } from './html.js';
 import { Icon } from './icons.js';
 import { useStore, useRoute, useMedia, readLocal, writeLocal } from './hooks.js';
-import { Link, navigate, goBack } from './router.js';
+import { Link, navigate, goBack, setBasePath, closeTask, currentTaskId } from './router.js';
 import { SheetHost } from './components/Sheets.js';
 import { QuickAddHost } from './components/QuickAdd.js';
 import { DialogHost, Snackbar, Banner } from './components/Overlays.js';
@@ -14,7 +14,12 @@ import { TaskScreen } from './screens/Task.js';
 import { ArchiveScreen, TrashScreen } from './screens/ArchiveTrash.js';
 import { SettingsScreen, MoreScreen } from './screens/Settings.js';
 import { JournalScreen } from './screens/Journal.js';
-import { SyncIndicator, PushButton, StartScreen, RedirectingScreen } from './components/Sync.js';
+import { AnalyticsScreen } from './screens/Analytics.js';
+import { ShopScreen } from './screens/Shop.js';
+import { StartScreen, RedirectingScreen } from './components/Sync.js';
+import { Dock } from './components/Dock.js';
+import { dockPosition } from './prefs.js';
+import { clearMissed } from './notifier.js';
 import { pull } from '../sync/syncEngine.js';
 import {
   store, openSheet, closeSheet, closeDialog, openQuickAdd, closeQuickAdd, setUi, setSync, flushAll,
@@ -38,6 +43,8 @@ function titleFor(route) {
     case 'settings': return 'Настройки';
     case 'more': return 'Ещё';
     case 'journal': return 'Журнал';
+    case 'analytics': return 'Аналитика';
+    case 'shop': return 'Магазин';
     default: return 'LifeTasks';
   }
 }
@@ -53,6 +60,8 @@ function Screen({ route }) {
     case 'settings': return html`<${SettingsScreen} query=${route.query}/>`;
     case 'more': return html`<${MoreScreen}/>`;
     case 'journal': return html`<${JournalScreen}/>`;
+    case 'analytics': return html`<${AnalyticsScreen}/>`;
+    case 'shop': return html`<${ShopScreen}/>`;
     default: return html`<${TodayScreen}/>`;
   }
 }
@@ -67,52 +76,7 @@ function TopBar({ route }) {
       ${route.name === 'list' && S.liveList(store.data, route.param) && !store.ui.readOnly ? html`
         <button class="icon-btn" onClick=${() => openSheet('listEditor', { listId: route.param })} aria-label="Изменить список" title="Изменить список">
           <${Icon} name="edit" size=${20}/></button>` : null}
-      <${SyncIndicator}/>
-      <${PushButton}/>
     </header>`;
-}
-
-function NavItem({ to, icon, label, active, count, color, emoji }) {
-  return html`
-    <${Link} to=${to} className=${'nav-item' + (active ? ' active' : '')}>
-      ${color ? html`<i class="dot" style=${{ background: color }}></i>` : html`<${Icon} name=${icon} size=${20}/>`}
-      <span class="nav-label">${emoji ? emoji + ' ' : ''}${label}</span>
-      ${count ? html`<span class="nav-count">${count}</span>` : null}
-    <//>`;
-}
-
-function Sidebar({ route, counts, onAdd }) {
-  const lists = S.sortedLists(store.data);
-  const trash = S.trashView(store.data).length;
-  const is = (name, param = null) => route.name === name && (param == null || route.param === param);
-  return html`
-    <aside class="sidebar">
-      <div class="brand"><img src="icons/favicon-32.png" alt="" width="24" height="24"/> LifeTasks</div>
-      <button class="btn primary wide" onClick=${onAdd} disabled=${!!store.ui.readOnly}><${Icon} name="plus" size=${18}/> Новая задача <kbd>N</kbd></button>
-      <nav>
-        <${NavItem} to="/today" icon="sun" label="Сегодня" active=${is('today')}/>
-        <${NavItem} to="/inbox" icon="inbox" label="Входящие" active=${is('inbox')} count=${counts.get('inbox')}/>
-        <div class="nav-group">
-          <${Link} to="/lists" className=${'nav-group-title' + (is('lists') ? ' active' : '')}>Списки<//>
-          ${lists.map((l) => html`<${NavItem} key=${l.id} to=${'/list/' + l.id} label=${l.name} emoji=${l.emoji}
-            color=${l.color} active=${is('list', l.id)} count=${counts.get(l.id)}/>`)}
-        </div>
-        <${NavItem} to="/archive" icon="archive" label="Архив" active=${is('archive')}/>
-        <${NavItem} to="/trash" icon="trash" label="Корзина" active=${is('trash')} count=${trash}/>
-        <${NavItem} to="/settings" icon="settings" label="Настройки" active=${is('settings')}/>
-      </nav>
-    </aside>`;
-}
-
-function BottomNav({ route, counts }) {
-  const more = ['more', 'archive', 'trash', 'settings'].includes(route.name);
-  return html`
-    <nav class="bottom-nav">
-      <${NavItem} to="/today" icon="sun" label="Сегодня" active=${route.name === 'today'}/>
-      <${NavItem} to="/inbox" icon="inbox" label="Входящие" active=${route.name === 'inbox'} count=${counts.get('inbox')}/>
-      <${NavItem} to="/lists" icon="lists" label="Списки" active=${route.name === 'lists' || route.name === 'list'}/>
-      <${NavItem} to="/more" icon="more" label="Ещё" active=${more}/>
-    </nav>`;
 }
 
 function Banners() {
@@ -142,6 +106,11 @@ function Banners() {
         <button class="btn small primary" onClick=${() => navigate('/journal')}>Посмотреть</button>`}>
         Конфликты при слиянии: ${store.ui.conflictsNew}. Проигравшие значения сохранены в журнале.
       <//>` : null}
+    ${store.ui.missedCount ? html`
+      <${Banner} tone="info" onClose=${clearMissed} actions=${html`
+        <button class="btn small primary" onClick=${() => openSheet('missed')}>Показать</button>`}>
+        🔔 Пропущенные напоминания: ${store.ui.missedCount}. Пока приложение было закрыто, уведомления не приходили.
+      <//>` : null}
     ${store.sync.remoteNewer && !store.sync.phase ? html`
       <${Banner} tone="info" actions=${html`<button class="btn small primary" onClick=${() => pull()}>Обновить</button>`}>
         На Диске есть версия новее.
@@ -160,6 +129,8 @@ export function App() {
   const wide = useMedia('(min-width: 1200px)');
   const lastBase = useRef({ name: 'today', param: null, query: {}, path: '/today' });
   if (route.name !== 'task' && route.name !== 'quick') lastBase.current = route;
+  setBasePath(lastBase.current.path + (Object.keys(lastBase.current.query || {}).length
+    ? '?' + new URLSearchParams(lastBase.current.query) : ''));
 
   const panel = wide && route.name === 'task';
   const base = panel ? lastBase.current : route;
@@ -193,7 +164,7 @@ export function App() {
         if (store.ui.dialog) closeDialog(null);
         else if (store.ui.sheet) closeSheet();
         else if (store.ui.quickAdd) closeQuickAdd();
-        else if (location.hash.startsWith('#/task/') && !editing) goBack(lastBase.current.path);
+        else if (currentTaskId()) closeTask(); // отложенный ввод сохранится при размонтировании карточки
         else return;
         e.preventDefault();
         return;
@@ -227,11 +198,9 @@ export function App() {
     };
   }, []);
 
-  const showFab = !desktop && !['task', 'settings'].includes(route.name) && !store.ui.readOnly;
-
   return html`
-    <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile')}>
-      ${desktop ? html`<${Sidebar} route=${base} counts=${counts} onAdd=${add}/>` : null}
+    <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + dockPosition(!desktop)}>
+      <${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
       <div class="main-col">
         ${base.name !== 'task' ? html`<${TopBar} route=${base}/>` : null}
         <${Banners}/>
@@ -239,10 +208,8 @@ export function App() {
       </div>
       ${panel ? html`
         <aside class="task-panel">
-          <${TaskScreen} key=${route.param} taskId=${route.param} panel onClose=${() => goBack(lastBase.current.path)}/>
+          <${TaskScreen} key=${route.param} taskId=${route.param} panel onClose=${closeTask}/>
         </aside>` : null}
-      ${!desktop ? html`<${BottomNav} route=${base} counts=${counts}/>` : null}
-      ${showFab ? html`<button class="fab" onClick=${add} aria-label="Новая задача" title="Новая задача"><${Icon} name="plus" size=${28}/></button>` : null}
       <${QuickAddHost}/>
       <${SheetHost}/>
       <${StartScreen}/>

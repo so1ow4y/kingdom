@@ -5,7 +5,10 @@ import { todayIn, nowTimeIn } from '../core/dates.js';
 import { TIMINGS } from '../config.js';
 
 export const store = {
-  data: { settings: null, lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map() },
+  data: {
+    settings: null, lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map(),
+    priorities: new Map(), coinEvents: new Map(), rewards: new Map(), // формат v2
+  },
   version: 0, // растёт при каждом изменении data — по нему мемоизируются выборки
   now: { today: '', time: '', ms: 0 },
   deviceId: null,

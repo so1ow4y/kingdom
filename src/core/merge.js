@@ -7,10 +7,12 @@
 import { canonicalJson, sameValue } from './canonical.js';
 
 const SERVICE = new Set(['id', 'createdAt', 'updatedAt', 'updatedBy', 'fieldTimes']);
-const NESTED_ARRAYS = ['subtasks', 'attachments', 'reminders'];
-const OCC = 'occurrences';
-const STRUCTURAL = new Set([...SERVICE, ...NESTED_ARRAYS, OCC]);
-export const MERGE_COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices'];
+// Вложенные коллекции: массивы элементов с id, сливаются поэлементно (subtasks — только формат v1).
+export const NESTED_ARRAYS = ['subtasks', 'notes', 'attachments', 'reminders'];
+// Словари «ключ → значение с меткой t», сливаются по ключу: экземпляры повторов и членство в списках (v2).
+export const KEYED_MAPS = ['occurrences', 'lists'];
+const STRUCTURAL = new Set([...SERVICE, ...NESTED_ARRAYS, ...KEYED_MAPS]);
+export const MERGE_COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards'];
 
 const isTomb = (e) => !!e.deletedAt;
 const ft = (e, k) => {
@@ -34,8 +36,9 @@ export function maxStamp(e, skipDeleted = false) {
       if (s > m) m = s;
     }
   }
-  if (e[OCC] && typeof e[OCC] === 'object') {
-    for (const o of Object.values(e[OCC])) if (o && Number.isInteger(o.t) && o.t > m) m = o.t;
+  for (const k of KEYED_MAPS) {
+    if (!e[k] || typeof e[k] !== 'object' || Array.isArray(e[k])) continue;
+    for (const o of Object.values(e[k])) if (o && Number.isInteger(o.t) && o.t > m) m = o.t;
   }
   return m;
 }
@@ -50,9 +53,10 @@ function mergeNested(a, b) {
   return [...m.values()].sort(byId);
 }
 
-function mergeOccurrences(a, b) {
+function mergeKeyed(a, b) {
   if (a === undefined) return b;
   if (b === undefined) return a;
+  if (!a || !b || typeof a !== 'object' || typeof b !== 'object' || Array.isArray(a) || Array.isArray(b)) return larger(a, b);
   const out = {};
   for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) {
     const x = a[k];
@@ -104,8 +108,10 @@ export function mergeEntity(a, b) {
     const v = mergeNested(a[n], b[n]);
     if (v !== undefined) fields[n] = v;
   }
-  const occ = mergeOccurrences(a[OCC], b[OCC]);
-  if (occ !== undefined) fields[OCC] = occ;
+  for (const k of KEYED_MAPS) {
+    const v = mergeKeyed(a[k], b[k]);
+    if (v !== undefined) fields[k] = v;
+  }
 
   const r = { id: a.id };
   if (a.createdAt !== undefined || b.createdAt !== undefined) {
@@ -138,7 +144,7 @@ export function mergeData(A, B, collections = MERGE_COLLECTIONS) {
 // ---------- Журнал конфликтов (DATA_FORMAT §6.5) ----------
 
 const IGNORED_FIELDS = new Set(['order', 'focusOrder', 'driveFileId', 'orphanedAt', 'deletedAt', 'appVersion', 'lastPushAt']);
-const CONFLICT_COLLECTIONS = ['tasks', 'lists', 'settings'];
+const CONFLICT_COLLECTIONS = ['tasks', 'lists', 'settings', 'priorities', 'rewards'];
 
 const titleOf = (e) => e.title || e.name || e.id;
 

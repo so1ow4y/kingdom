@@ -1,26 +1,19 @@
-// Карточка задачи (docs/TZ.md §6.6). Сохранение автоматическое: текст — через 400 мс после ввода
-// и при потере фокуса, остальное — сразу.
+// Карточка задачи (docs/TZ.md §6.6; обновление 0.3: заметки 2.2, списки 2.4, подзадачи 2.8, приоритет 2.9).
+// Сохранение автоматическое: название — через 400 мс после ввода и при потере фокуса, остальное — сразу.
 
-import { html, useState, useRef, useEffect, useLayoutEffect } from '../html.js';
+import { html, useState, useRef, useEffect, useLayoutEffect, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { Banner } from '../components/Overlays.js';
-import { PRIORITY_LABEL } from '../components/TaskRow.js';
-import { goBack, navigate } from '../router.js';
+import { NotesEditor, SubtasksEditor } from '../components/ItemLists.js';
+import { RemindersEditor } from '../components/Reminders.js';
+import { closeTask, navigate, openTask } from '../router.js';
 import { store, openSheet, showSnackbar, registerFlusher } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
-import { liveList, hasMissingList } from '../../core/selectors.js';
-import { normalizeTitle, normalizeNote } from '../../core/model.js';
+import * as S from '../../core/selectors.js';
+import { normalizeTitle } from '../../core/model.js';
 import { humanDate, formatMoment } from '../../core/dates.js';
+import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { LIMITS, TIMINGS } from '../../config.js';
-
-const URL_RE = /(https?:\/\/[^\s<>"]+[^\s<>".,;:!?)\]'])/g;
-
-function Linkified({ text }) {
-  const parts = text.split(URL_RE);
-  return parts.map((p, i) => (i % 2 === 1
-    ? html`<a href=${p} target="_blank" rel="noopener noreferrer" onClick=${(e) => e.stopPropagation()}>${p}</a>`
-    : p));
-}
 
 function autosize(el) {
   if (!el) return;
@@ -28,42 +21,31 @@ function autosize(el) {
   el.style.height = el.scrollHeight + 2 + 'px';
 }
 
-function Chip({ icon, label, onClick, active = false, disabled = false, tone = '', title }) {
+function Chip({ icon, label, onClick, active = false, disabled = false, tone = '', title, style = null }) {
   return html`<button class=${'chip' + (active ? ' active' : '') + (tone ? ' ' + tone : '')} onClick=${onClick}
-    disabled=${disabled} title=${title || label}>${icon}<span>${label}</span></button>`;
+    disabled=${disabled} title=${title || label} style=${style}>${icon}<span>${label}</span></button>`;
 }
+
+const anchorOf = (e) => e.currentTarget.getBoundingClientRect();
 
 export function TaskScreen({ taskId, panel = false, onClose }) {
   const t = A.getTask(taskId);
   const [title, setTitle] = useState(t?.title ?? '');
-  const [note, setNote] = useState(t?.note ?? '');
-  const [editingNote, setEditingNote] = useState(false);
-  const pending = useRef({});
+  const pending = useRef(null);
   const timer = useRef(null);
-  const focused = useRef({ title: false, note: false });
+  const focused = useRef(false);
   const titleEl = useRef(null);
-  const noteEl = useRef(null);
+  const index = useMemo(() => S.childrenIndex(store.data), [store.version]);
 
   const flush = async () => {
     clearTimeout(timer.current);
     timer.current = null;
-    const p = pending.current;
-    pending.current = {};
+    const v = pending.current;
+    pending.current = null;
     const cur = A.getTask(taskId);
-    if (!cur || cur.deletedAt) return;
-    const changes = {};
-    if ('title' in p) {
-      const nt = normalizeTitle(p.title);
-      if (nt) changes.title = nt;
-    }
-    if ('note' in p) changes.note = normalizeNote(p.note);
-    if (Object.keys(changes).length) await A.updateTask(taskId, changes);
-  };
-
-  const scheduleSave = (field, value) => {
-    pending.current[field] = value;
-    clearTimeout(timer.current);
-    timer.current = setTimeout(flush, TIMINGS.textSaveDebounceMs);
+    if (v == null || !cur || cur.deletedAt) return;
+    const nt = normalizeTitle(v);
+    if (nt) await A.updateTask(taskId, { title: nt });
   };
 
   useEffect(() => {
@@ -76,21 +58,16 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
 
   // Изменение пришло извне (другая вкладка, отмена) — обновить поле, если его сейчас не редактируют.
   useEffect(() => {
-    if (t && !focused.current.title && !('title' in pending.current)) setTitle(t.title);
+    if (t && !focused.current && pending.current == null) setTitle(t.title);
   }, [t?.title]);
-  useEffect(() => {
-    if (t && !focused.current.note && !('note' in pending.current)) setNote(t.note);
-  }, [t?.note]);
-
   useLayoutEffect(() => autosize(titleEl.current), [title]);
-  useLayoutEffect(() => autosize(noteEl.current), [note, editingNote]);
 
-  const close = () => (onClose ? onClose() : goBack('/today'));
+  const close = () => (onClose ? onClose() : closeTask());
 
   if (!t || t.deletedAt) {
     return html`
       <div class="screen task-screen">
-        <${TaskHeader} panel=${panel} onClose=${close}/>
+        <${TaskHeader} onClose=${close}/>
         <div class="empty-state">
           <p>Задача не найдена — возможно, удалена на другом устройстве.</p>
           <button class="btn" onClick=${() => navigate('/today')}>К «Сегодня»</button>
@@ -103,49 +80,38 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
   const trashed = !!t.trashedAt;
   const done = t.status === 'done';
   const locked = trashed || !!store.ui.readOnly;
-  const list = liveList(store.data, t.listId);
+  const lists = S.taskLists(store.data, t);
+  const prio = S.priorityOf(store.data, t);
+  const parent = S.parentOf(store.data, t);
   const focusedToday = t.focusDate === today;
+  const progress = S.progressOf(store.data, taskId, index);
   const device = (id) => store.data.devices.get(id)?.name;
 
   const onTitleInput = (e) => {
     const v = e.target.value.replace(/[\r\n]+/g, ' ');
     setTitle(v);
-    if (normalizeTitle(v)) scheduleSave('title', v);
-    else delete pending.current.title;
+    if (normalizeTitle(v)) {
+      pending.current = v;
+      clearTimeout(timer.current);
+      timer.current = setTimeout(flush, TIMINGS.textSaveDebounceMs);
+    } else pending.current = null;
   };
   const onTitleBlur = () => {
-    focused.current.title = false;
+    focused.current = false;
     if (!normalizeTitle(title)) {
       setTitle(t.title);
-      delete pending.current.title;
+      pending.current = null;
       showSnackbar('Название не может быть пустым');
-    } else {
-      flush();
-    }
-  };
-  const onTitleKey = (e) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      setEditingNote(true);
-      setTimeout(() => noteEl.current?.focus(), 0);
-    }
-  };
-  const onNoteInput = (e) => {
-    const v = e.target.value.slice(0, LIMITS.noteMax);
-    setNote(v);
-    scheduleSave('note', v);
-  };
-  const onNoteBlur = () => {
-    focused.current.note = false;
-    setEditingNote(false);
-    flush();
+    } else flush();
   };
 
-  const showNoteEditor = editingNote || !note || locked;
+  const listLabel = lists.length
+    ? (lists.length > 2 ? `${lists[0].name}, ${lists[1].name} +${lists.length - 2}` : lists.map((l) => (l.emoji ? l.emoji + ' ' : '') + l.name).join(', '))
+    : S.hasMissingList(store.data, t) ? 'Список удалён' : 'Входящие';
 
   return html`
     <div class="screen task-screen">
-      <${TaskHeader} panel=${panel} onClose=${close} taskId=${taskId}/>
+      <${TaskHeader} onClose=${close} taskId=${taskId}/>
 
       ${trashed ? html`
         <${Banner} tone="warn" actions=${html`
@@ -158,21 +124,23 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
           Выполнена ${t.completedAt ? formatMoment(t.completedAt, tz) : ''}
         <//>` : null}
 
+      ${parent ? html`<button class="parent-link" onClick=${() => openTask(parent.id)}>↳ подзадача «${parent.title}»</button>` : null}
+
       <div class="task-title-row">
         <button class=${'check big' + (done ? ' checked' : '')} disabled=${locked}
           onClick=${() => A.toggleComplete(taskId)} aria-label=${done ? 'Вернуть в работу' : 'Выполнить'}>
           ${done ? html`<${Icon} name="check" size=${18}/>` : null}
         </button>
         <textarea ref=${titleEl} class=${'title-input' + (done ? ' done' : '')} rows="1" value=${title}
-          maxLength=${LIMITS.titleMax} disabled=${locked} aria-label="Название" enterkeyhint="next"
+          maxLength=${LIMITS.titleMax} disabled=${locked} aria-label="Название" enterkeyhint="done"
           placeholder="Конкретное действие: «смонтировать 0:00–3:00»"
-          onInput=${onTitleInput} onFocus=${() => { focused.current.title = true; }} onBlur=${onTitleBlur} onKeyDown=${onTitleKey}></textarea>
+          onInput=${onTitleInput} onFocus=${() => { focused.current = true; }} onBlur=${onTitleBlur}
+          onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}></textarea>
       </div>
 
       <div class="chip-row wrap task-chips">
-        <${Chip} icon=${html`<${Icon} name=${list ? 'lists' : 'inbox'} size=${16}/>`}
-          label=${list ? (list.emoji ? list.emoji + ' ' : '') + list.name : hasMissingList(store.data, t) ? 'Список удалён' : 'Входящие'}
-          onClick=${() => openSheet('listPicker', { taskId })} disabled=${locked}/>
+        <${Chip} icon=${html`<${Icon} name=${lists.length ? 'lists' : 'inbox'} size=${16}/>`} label=${listLabel} active=${lists.length > 0}
+          onClick=${(e) => openSheet('listPicker', { taskId, anchor: anchorOf(e) })} disabled=${locked}/>
         <${Chip} icon=${html`<${Icon} name="calendar" size=${16}/>`} active=${!!t.scheduledDate}
           tone=${!done && t.scheduledDate && t.scheduledDate < today ? 'late' : ''}
           label=${t.scheduledDate ? humanDate(t.scheduledDate, today) + (t.scheduledTime ? ' ' + t.scheduledTime : '') : 'Когда'}
@@ -180,9 +148,9 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
         <${Chip} icon=${html`<${Icon} name="flag" size=${16}/>`} active=${!!t.deadlineDate}
           label=${t.deadlineDate ? 'Дедлайн ' + humanDate(t.deadlineDate, today) + (t.deadlineTime ? ' ' + t.deadlineTime : '') : 'Дедлайн'}
           onClick=${() => openSheet('when', { taskId, mode: 'deadline' })} disabled=${locked}/>
-        <${Chip} icon=${html`<span class=${'meta-prio ' + ['', 'prio-low', 'prio-mid', 'prio-high'][t.priority || 0]}><${Icon} name="flag" size=${16}/></span>`}
-          active=${t.priority > 0} label=${t.priority ? PRIORITY_LABEL[t.priority] : 'Приоритет'}
-          onClick=${() => openSheet('priority', { taskId })} disabled=${locked}/>
+        <${Chip} icon=${html`<i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i>`}
+          active=${prio && prio.id !== PRIORITY_NONE_ID} label=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : 'Приоритет'}
+          onClick=${(e) => openSheet('priority', { taskId, anchor: anchorOf(e) })} disabled=${locked}/>
         ${!done ? html`<${Chip} icon=${html`<${Icon} name="star" filled=${focusedToday} size=${16}/>`} active=${focusedToday}
           tone=${focusedToday ? 'star-on' : ''} label=${focusedToday ? 'Главное' : 'В главное'}
           onClick=${() => A.toggleFocus(taskId)} disabled=${locked}/>` : null}
@@ -190,19 +158,21 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
       ${t.deadlineDate && t.scheduledDate && t.deadlineDate < t.scheduledDate
         ? html`<p class="hint warn">Дедлайн раньше даты выполнения</p>` : null}
 
-      <div class="note-block">
-        <div class="field-label">Заметка</div>
-        ${showNoteEditor ? html`
-          <textarea ref=${noteEl} class="note-input" value=${note} rows="3" disabled=${locked}
-            placeholder="Подробности, ссылки, мысли…" aria-label="Заметка"
-            onInput=${onNoteInput} onFocus=${() => { focused.current.note = true; }} onBlur=${onNoteBlur}></textarea>` : html`
-          <div class="note-view" role="button" tabIndex="0" title="Нажми, чтобы редактировать"
-            onClick=${() => { setEditingNote(true); setTimeout(() => noteEl.current?.focus(), 0); }}
-            onKeyDown=${(e) => { if (e.key === 'Enter') { setEditingNote(true); setTimeout(() => noteEl.current?.focus(), 0); } }}>
-            <${Linkified} text=${note}/>
-          </div>`}
-        ${note.length >= LIMITS.noteCounterFrom ? html`<div class="counter">${note.length} / ${LIMITS.noteMax}</div>` : null}
-      </div>
+      <section class="card-section">
+        <div class="field-label">Подзадачи${progress.total ? ` · ${progress.done}/${progress.total}` : ''}</div>
+        ${progress.total ? html`<div class="progress"><i style=${{ width: (progress.done / progress.total) * 100 + '%' }}></i></div>` : null}
+        <${SubtasksEditor} taskId=${taskId} locked=${locked}/>
+      </section>
+
+      <section class="card-section">
+        <div class="field-label">Напоминания</div>
+        <${RemindersEditor} taskId=${taskId} locked=${locked || done}/>
+      </section>
+
+      <section class="card-section">
+        <div class="field-label">Заметки</div>
+        <${NotesEditor} taskId=${taskId} locked=${locked}/>
+      </section>
 
       <p class="task-footer muted">
         ${`Создана ${formatMoment(t.createdAt, tz)}${t.createdVia === 'bot' ? ' ботом' : ''} · `
@@ -211,11 +181,11 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
     </div>`;
 }
 
-function TaskHeader({ panel, onClose, taskId = null }) {
+function TaskHeader({ onClose, taskId = null }) {
   return html`
     <div class="task-header">
-      <button class="icon-btn" onClick=${onClose} aria-label=${panel ? 'Закрыть' : 'Назад'} title=${panel ? 'Закрыть' : 'Назад'}>
-        <${Icon} name=${panel ? 'close' : 'back'}/>
+      <button class="icon-btn" onClick=${onClose} aria-label="Закрыть" title="Закрыть (Esc)">
+        <${Icon} name="close"/>
       </button>
       <span class="task-header-title">Задача</span>
       ${taskId ? html`<button class="icon-btn" onClick=${() => openSheet('taskMenu', { taskId })} aria-label="Действия" title="Действия">

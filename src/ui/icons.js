@@ -36,6 +36,10 @@ const PATHS = {
   download: 'M12 5v11M7 11l5 5 5-5M5 19h14',
   logout: 'M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10',
   user: 'M12 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8zM4 21a8 8 0 0 1 16 0',
+  chart: 'M4 20V10M10 20V4M16 20v-7M22 20H2',
+  shop: 'M4 8h16l-1.5 11h-13zM8 8V6a4 4 0 0 1 8 0v2',
+  coin: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7v10M9 9.5c0-1 1.3-1.5 3-1.5s3 .7 3 1.7-1 1.3-3 1.8-3 .8-3 1.8 1.3 1.7 3 1.7 3-.5 3-1.5',
+  bell: 'M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0',
 };
 
 export function Icon({ name, size = 22, filled = false, className = '' }) {

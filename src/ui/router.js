@@ -5,7 +5,7 @@
 import { html } from './html.js';
 
 const ROUTES = {
-  today: 0, inbox: 0, lists: 0, list: 1, task: 1, archive: 0, trash: 0, settings: 0, more: 0, quick: 0, journal: 0,
+  today: 0, inbox: 0, lists: 0, list: 1, task: 1, archive: 0, trash: 0, settings: 0, more: 0, quick: 0, journal: 0, analytics: 0, shop: 0,
 };
 
 export function parseHash(hash = location.hash) {
@@ -35,6 +35,37 @@ export function navigate(path, { replace = false } = {}) {
 export function goBack(fallback = '/today') {
   if ((history.state?.ltDepth || 0) > 0) history.back();
   else navigate(fallback, { replace: true });
+}
+
+// ---------- Карточка задачи (TZ §6.6, обновление 0.3 п. 2.1) ----------
+// Карточка — это маршрут #/task/<id> поверх «базового» экрана. На широком экране она открыта панелью справа,
+// на узком — на весь экран. Состояние в адресе, поэтому «Назад» в браузере закрывает карточку.
+
+let basePath = '/today';
+
+/** Экран под карточкой (обновляет app.js при каждой смене маршрута). */
+export function setBasePath(path) {
+  basePath = path;
+}
+
+export function currentTaskId() {
+  const m = location.hash.match(/^#\/task\/([^?]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Закрыть карточку: шаг назад по истории (или на базовый экран, если пришли по прямой ссылке). */
+export function closeTask() {
+  if (currentTaskId()) goBack(basePath);
+}
+
+/**
+ * Клик по задаче: та же задача уже открыта — закрыть; другая — переключить без новой записи в истории
+ * (чтобы одно «Назад» закрывало панель); ничего не открыто — открыть.
+ */
+export function openTask(id) {
+  const cur = currentTaskId();
+  if (cur === id) closeTask();
+  else navigate('/task/' + encodeURIComponent(id), { replace: !!cur });
 }
 
 /** Ссылка внутри приложения. */

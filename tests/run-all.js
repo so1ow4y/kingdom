@@ -13,4 +13,8 @@ await run([
   './format.test.js',
   './sync.test.js',
   './status.test.js',
+  './migration.test.js',
+  './game.test.js',
+  './reminders.test.js',
+  './analytics.test.js',
 ]);

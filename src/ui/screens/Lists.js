@@ -2,7 +2,7 @@
 
 import { html, useMemo, useState } from '../html.js';
 import { Section, Empty } from '../components/Section.js';
-import { TaskRow, TaskList } from '../components/TaskRow.js';
+import { TaskList, TaskTree } from '../components/TaskRow.js';
 import { SortableList, DragHandle } from '../components/Sortable.js';
 import { Icon } from '../icons.js';
 import { Link, navigate } from '../router.js';
@@ -49,6 +49,8 @@ export function ListsScreen() {
         <span class="list-emoji">📥</span><span class="list-name">Входящие</span>
         <span class="list-count">${counts.get('inbox') || ''}</span>
       <//>
+      <button class="new-list-card" onClick=${() => openSheet('listEditor', { listId: null })} disabled=${readOnly}>
+        <${Icon} name="plus" size=${20}/> Создать список</button>
       ${lists.length ? html`
         <${SortableList} items=${lists} onMove=${move} disabled=${!reorder}
           render=${(l, handle) => {
@@ -78,17 +80,15 @@ export function ListScreen({ listId }) {
       ${empty ? html`<${Empty}>В списке нет активных задач. Нажми «+», чтобы добавить.<//>` : null}
       ${v.scheduled.length ? html`
         <${Section} title="Запланировано" count=${v.scheduled.length}>
-          <${TaskList} tasks=${v.scheduled} showList=${false}/>
+          <${TaskTree} roots=${v.scheduled} listId=${listId} showList=${false} sortable=${false}/>
         <//>` : null}
       ${v.noDate.length ? html`
         <${Section} title="Без даты" count=${v.noDate.length}>
-          <${SortableList} items=${v.noDate} disabled=${readOnly}
-            onMove=${(id, index) => A.reorderTask(id, v.noDate, index)}
-            render=${(t, handle) => html`<${TaskRow} task=${t} showList=${false} handle=${handle}/>`}/>
+          <${TaskTree} roots=${v.noDate} listId=${listId} showList=${false} sortable=${!readOnly}/>
         <//>` : null}
       ${v.repeating.length ? html`
         <${Section} title="Повторяющиеся" count=${v.repeating.length}>
-          <${TaskList} tasks=${v.repeating} showList=${false}/>
+          <${TaskTree} roots=${v.repeating} listId=${listId} showList=${false} sortable=${false}/>
         <//>` : null}
       ${v.doneCount ? html`
         <${Section} title="Выполнено" count=${v.doneCount} collapsible defaultOpen=${false} storageKey=${'list.done.' + listId}>

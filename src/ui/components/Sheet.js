@@ -1,8 +1,28 @@
 import { html } from '../html.js';
 import { Icon } from '../icons.js';
 
-/** Нижняя панель на телефоне, диалог по центру на компьютере. */
-export function Sheet({ title, onClose, children, className = '' }) {
+/**
+ * Нижняя панель на телефоне, диалог по центру на компьютере.
+ * anchor (DOMRect кнопки) — на компьютере вместо диалога выпадающий список под кнопкой.
+ */
+export function Sheet({ title, onClose, children, className = '', anchor = null }) {
+  if (anchor && matchMedia('(min-width: 900px)').matches) {
+    const width = 320;
+    const left = Math.max(8, Math.min(anchor.left, innerWidth - width - 8));
+    const below = innerHeight - anchor.bottom;
+    const up = below < 320 && anchor.top > below;
+    const style = up
+      ? { left: left + 'px', bottom: innerHeight - anchor.top + 6 + 'px', maxHeight: anchor.top - 16 + 'px' }
+      : { left: left + 'px', top: anchor.bottom + 6 + 'px', maxHeight: below - 16 + 'px' };
+    return html`
+      <div class="popover-layer" onClick=${onClose}>
+        <div class=${'popover ' + className} style=${style} role="dialog" aria-label=${title}
+          onClick=${(e) => e.stopPropagation()}>
+          <div class="popover-title">${title}</div>
+          ${children}
+        </div>
+      </div>`;
+  }
   return html`
     <div class="overlay" onClick=${onClose}>
       <div class=${'sheet ' + className} role="dialog" aria-modal="true" aria-label=${title}

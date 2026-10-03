@@ -8,7 +8,7 @@ import { restoreConflict } from '../../store/actions.js';
 import { formatMoment } from '../../core/dates.js';
 
 const FIELD_LABELS = {
-  title: 'Название', note: 'Заметка', listId: 'Список', priority: 'Приоритет', status: 'Статус',
+  title: 'Название', note: 'Заметка', listId: 'Список', priority: 'Приоритет', priorityId: 'Приоритет', parentId: 'Родитель', coins: 'Монеты', status: 'Статус',
   completedAt: 'Выполнена', trashedAt: 'Корзина', scheduledDate: 'Дата', scheduledTime: 'Время',
   deadlineDate: 'Дедлайн', deadlineTime: 'Время дедлайна', focusDate: 'Главное', name: 'Название',
   color: 'Цвет', emoji: 'Значок', archived: 'Архив', timeZone: 'Часовой пояс', choresListId: 'Список «Быт»',
@@ -17,6 +17,8 @@ const FIELD_LABELS = {
 function show(field, v) {
   if (v === null || v === undefined || v === '') return 'пусто';
   if (field === 'listId' || field === 'choresListId') return store.data.lists.get(v)?.name || 'удалённый список';
+  if (field === 'priorityId') return store.data.priorities.get(v)?.name || 'удалённый приоритет';
+  if (field === 'parentId') return store.data.tasks.get(v)?.title || 'верхний уровень';
   if (typeof v === 'string') return v.length > 160 ? `«${v.slice(0, 160)}…»` : `«${v}»`;
   return JSON.stringify(v).slice(0, 160);
 }

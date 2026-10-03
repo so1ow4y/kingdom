@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lifetasks.local/schemas/v2/export.schema.json",
+  "title": "LifeTasks export v2",
+  "type": "object",
+  "required": [
+    "format",
+    "schemaVersion",
+    "createdAt",
+    "updatedAt",
+    "writer",
+    "counts",
+    "mediaIncluded",
+    "mediaMissing"
+  ],
+  "properties": {
+    "format": {
+      "const": "lifetasks-export"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "createdAt": {
+      "type": "string"
+    },
+    "updatedAt": {
+      "type": "string"
+    },
+    "writer": {
+      "type": "object"
+    },
+    "counts": {
+      "type": "object",
+      "required": [
+        "lists",
+        "tasks",
+        "media"
+      ],
+      "properties": {
+        "lists": {
+          "type": "integer"
+        },
+        "tasks": {
+          "type": "integer"
+        },
+        "media": {
+          "type": "integer"
+        }
+      }
+    },
+    "mediaIncluded": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    },
+    "mediaMissing": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[0-9a-f]{64}$"
+      }
+    }
+  }
+}

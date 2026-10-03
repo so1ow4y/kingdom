@@ -65,6 +65,22 @@ export function localDateOf(iso, tz) {
   return todayIn(tz, new Date(iso));
 }
 
+/**
+ * Локальные дата 'YYYY-MM-DD' и время 'HH:MM' в поясе tz → момент (мс).
+ * Несуществующее время (переход на летнее) сдвигается вперёд, повторяющееся — берётся первое.
+ */
+export function zonedToEpoch(date, time, tz) {
+  const want = Date.UTC(+date.slice(0, 4), +date.slice(5, 7) - 1, +date.slice(8, 10), +time.slice(0, 2), +time.slice(3, 5));
+  let t = want;
+  for (let i = 0; i < 3; i++) {
+    const p = partsIn(tz, new Date(t));
+    const seen = Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+    if (seen === want) break;
+    t += want - seen;
+  }
+  return t;
+}
+
 /** ISO-момент → 'DD.MM.YYYY HH:MM' в поясе tz. */
 export function formatMoment(iso, tz) {
   const p = partsIn(tz, new Date(iso));

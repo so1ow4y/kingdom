@@ -81,6 +81,48 @@
                       { "id": "s1", "createdAt": "2026-10-01T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 15, "done": 10 }, "title": "Сценарий v2", "done": true },
                       { "id": "s2", "createdAt": "2026-10-02T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 11, "done": 11 }, "title": "Войсовер", "done": false },
                       { "id": "s3", "createdAt": "2026-10-02T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "title": 12, "done": 12 }, "title": "Монтаж", "done": false } ] }
+    },
+    {
+      "name": "v2: членство в списках — добавления в разные списки на двух устройствах сохраняются оба, удаление по метке",
+      "a": { "id": "t8", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Купить тетради",
+             "lists": { "L1": { "in": true, "t": 5, "by": "devA" }, "L2": { "in": true, "t": 20, "by": "devA" }, "L3": { "in": false, "t": 30, "by": "devA" } } },
+      "b": { "id": "t8", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Купить тетради",
+             "lists": { "L1": { "in": true, "t": 5, "by": "devA" }, "L3": { "in": true, "t": 25, "by": "devB" }, "L4": { "in": true, "t": 21, "by": "devB" } } },
+      "expected": { "id": "t8", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+                    "fieldTimes": { "title": 1 }, "title": "Купить тетради",
+                    "lists": { "L1": { "in": true, "t": 5, "by": "devA" }, "L2": { "in": true, "t": 20, "by": "devA" }, "L3": { "in": false, "t": 30, "by": "devA" }, "L4": { "in": true, "t": 21, "by": "devB" } } }
+    },
+    {
+      "name": "v2: заметки — правки разных заметок на двух устройствах не затирают друг друга",
+      "a": { "id": "t9", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Пересдача",
+             "notes": [
+               { "id": "n1", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "deletedAt": null, "fieldTimes": { "text": 20, "order": 1, "deletedAt": 1 }, "text": "Билеты 1–10 (телефон)", "order": "a0" },
+               { "id": "n2", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-01T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "text": 1, "order": 1, "deletedAt": 1 }, "text": "Формулы", "order": "a1" } ] },
+      "b": { "id": "t9", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 1 }, "title": "Пересдача",
+             "notes": [
+               { "id": "n1", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-01T00:00:00.000Z", "deletedAt": null, "fieldTimes": { "text": 1, "order": 1, "deletedAt": 1 }, "text": "Билеты", "order": "a0" },
+               { "id": "n2", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "deletedAt": null, "fieldTimes": { "text": 25, "order": 1, "deletedAt": 1 }, "text": "Формулы (комп)", "order": "a1" } ] },
+      "expected": { "id": "t9", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "updatedBy": "devB", "deletedAt": null,
+                    "fieldTimes": { "title": 1 }, "title": "Пересдача",
+                    "notes": [
+                      { "id": "n1", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "deletedAt": null, "fieldTimes": { "text": 20, "order": 1, "deletedAt": 1 }, "text": "Билеты 1–10 (телефон)", "order": "a0" },
+                      { "id": "n2", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-02T11:00:00.000Z", "deletedAt": null, "fieldTimes": { "text": 25, "order": 1, "deletedAt": 1 }, "text": "Формулы (комп)", "order": "a1" } ] }
+    },
+    {
+      "name": "v2: событие монет с одним id (начисление за одну задачу) — одна запись; снятие отметки новее — active=false",
+      "a": { "id": "a:t10", "createdAt": "2026-10-02T10:00:00.000Z", "updatedAt": "2026-10-02T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "type": 10, "amount": 10, "active": 10, "title": 10, "at": 10 },
+             "type": "award", "amount": 10, "active": true, "taskId": "t10", "occKey": null, "title": "A", "at": "2026-10-02T10:00:00.000Z" },
+      "b": { "id": "a:t10", "createdAt": "2026-10-02T10:01:00.000Z", "updatedAt": "2026-10-02T10:05:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "type": 11, "amount": 11, "active": 15, "title": 11, "at": 15 },
+             "type": "award", "amount": 10, "active": false, "taskId": "t10", "occKey": null, "title": "A", "at": "2026-10-02T10:05:00.000Z" },
+      "expected": { "id": "a:t10", "createdAt": "2026-10-02T10:00:00.000Z", "updatedAt": "2026-10-02T10:05:00.000Z", "updatedBy": "devB", "deletedAt": null,
+                    "fieldTimes": { "type": 11, "amount": 11, "active": 15, "title": 11, "at": 15 },
+                    "type": "award", "amount": 10, "active": false, "taskId": "t10", "occKey": null, "title": "A", "at": "2026-10-02T10:05:00.000Z" }
     }
   ]
 }

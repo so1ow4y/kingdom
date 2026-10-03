@@ -22,10 +22,9 @@ export function validateDb(db) {
   // Живые задачи от других клиентов могут прийти без вложенных коллекций — дополняем пустыми.
   for (const t of db.data.tasks) {
     if (t.deletedAt) continue;
-    if (!Array.isArray(t.subtasks)) t.subtasks = [];
-    if (!Array.isArray(t.attachments)) t.attachments = [];
-    if (!Array.isArray(t.reminders)) t.reminders = [];
-    if (!t.occurrences || typeof t.occurrences !== 'object') t.occurrences = {};
+    for (const k of ['notes', 'attachments', 'reminders']) if (!Array.isArray(t[k])) t[k] = [];
+    for (const k of ['occurrences', 'lists']) if (!t[k] || typeof t[k] !== 'object' || Array.isArray(t[k])) t[k] = {};
+    if (t.parentId === undefined) t.parentId = null;
   }
   if (db.data.settings.length > 1) {
     throw new SyncError('E-DB-CORRUPT', 'В базе больше одной записи настроек');

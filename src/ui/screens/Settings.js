@@ -12,6 +12,11 @@ import { countLabel } from '../../core/plural.js';
 import { APP_VERSION, SCHEMA_VERSION } from '../../version.js';
 import { checkForUpdate } from '../../pwa/swClient.js';
 import { getTheme, setTheme } from '../theme.js';
+import { PrioritiesSection } from '../components/PrioritiesEditor.js';
+import { AppearanceSection } from '../components/Appearance.js';
+import { NotificationsSection } from '../components/Reminders.js';
+import { GameSettingsSection } from './Shop.js';
+import { useMedia } from '../hooks.js';
 import { tokenValid, startLogin, logout, expireToken } from '../../google/auth.js';
 import { push, pull, revisionSpike } from '../../sync/syncEngine.js';
 
@@ -20,6 +25,8 @@ export function MoreScreen() {
   return html`
     <div class="screen">
       <nav class="menu-list">
+        <${Link} to="/analytics" className="menu-item"><span class="mi-icon"><${Icon} name="chart"/></span><span class="mi-label">Аналитика</span><//>
+        <${Link} to="/shop" className="menu-item"><span class="mi-icon"><${Icon} name="shop"/></span><span class="mi-label">Магазин</span><//>
         <${Link} to="/archive" className="menu-item"><span class="mi-icon"><${Icon} name="archive"/></span><span class="mi-label">Архив</span><//>
         <${Link} to="/trash" className="menu-item"><span class="mi-icon"><${Icon} name="trash"/></span>
           <span class="mi-label">Корзина</span><span class="mi-count">${trash || ''}</span><//>
@@ -166,6 +173,7 @@ export function SettingsScreen({ query = {} }) {
     return z.includes(s.timeZone) ? z : [s.timeZone, ...z];
   }, [s.timeZone]);
   const [theme, setThemeState] = useState(getTheme());
+  const phone = !useMedia('(min-width: 900px)');
   const deviceTz = deviceTimeZone();
 
   const changeTheme = (v) => {
@@ -200,6 +208,12 @@ export function SettingsScreen({ query = {} }) {
       <${AccountSection}/>
       <${SyncSection}/>
 
+      <${NotificationsSection} focus=${query.section === 'notifications'}/>
+
+      <${GameSettingsSection}/>
+
+      <${PrioritiesSection} focus=${query.section === 'priorities'}/>
+
       <section class="set-section">
         <h2>Задачи</h2>
         <${Row} label="Блок «Быт» на «Сегодня»" hint="Задачи этого списка не конкурируют с главными">
@@ -222,16 +236,8 @@ export function SettingsScreen({ query = {} }) {
         <//>
       </section>
 
-      <section class="set-section">
-        <h2>Оформление</h2>
-        <${Row} label="Тема">
-          <select value=${theme} onChange=${(e) => changeTheme(e.target.value)}>
-            <option value="system">Как в системе</option>
-            <option value="light">Светлая</option>
-            <option value="dark">Тёмная</option>
-          </select>
-        <//>
-      </section>
+      <${AppearanceSection} theme=${theme} onTheme=${changeTheme} phone=${phone}/>
+
 
       <section class="set-section">
         <h2>О приложении</h2>

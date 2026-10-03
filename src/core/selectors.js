@@ -1,9 +1,12 @@
-// Выборки для экранов. Чистые функции над данными в памяти.
-// data = { tasks: Map<id, Task>, lists: Map<id, List>, settings: Settings }
+// Выборки для экранов. Чистые функции над данными в памяти. Формат v2 (обновление 0.3):
+// задача состоит в нескольких списках (task.lists), может быть подзадачей другой задачи (task.parentId).
+// data = { tasks: Map<id, Task>, lists: Map<id, List>, settings: Settings, priorities, … }
 
 import { byOrder } from './order.js';
 import { daysBetween, localDateOf } from './dates.js';
 import { SOON_DEADLINE_DAYS, LIMITS } from '../config.js';
+
+export const MAX_DEPTH = 4; // уровней вложенности: задача → подзадача → … (4 уровня всего)
 
 export const isAlive = (t) => !!t && !t.deletedAt;
 export const isInTrash = (t) => isAlive(t) && !!t.trashedAt;
@@ -16,20 +19,128 @@ export function liveList(data, id) {
   return l && !l.deletedAt ? l : null;
 }
 
-/** Задача из архивного списка не показывается в «Сегодня». */
+/** Списки задачи, которые существуют (живые), в порядке «Списков». */
+export function taskLists(data, t) {
+  const out = [];
+  for (const [id, v] of Object.entries(t.lists || {})) {
+    const l = v && v.in ? liveList(data, id) : null;
+    if (l) out.push(l);
+  }
+  return out.sort(byOrder);
+}
+
+export const inList = (t, listId) => !!t.lists?.[listId]?.in;
+
+/** Все живые списки задачи — архивные: такая задача не показывается в «Сегодня». */
 export function inArchivedList(data, t) {
-  const l = liveList(data, t.listId);
-  return !!l && l.archived;
+  const ls = taskLists(data, t);
+  return ls.length > 0 && ls.every((l) => l.archived);
 }
 
-/** Список задачи удалён или не существует → задача показывается во «Входящих» (TZ X13). */
+/** Задача числится в списках, но ни одного из них уже нет → она во «Входящих» (TZ X13). */
 export function hasMissingList(data, t) {
-  return t.listId != null && !liveList(data, t.listId);
+  return Object.values(t.lists || {}).some((v) => v && v.in) && taskLists(data, t).length === 0;
 }
 
+/** «Быт»: задача состоит в списке «Дом» (choresListId), даже если она и в других списках. */
 export function isChore(data, t) {
-  return t.listId != null && t.listId === data.settings.choresListId;
+  const id = data.settings.choresListId;
+  return !!id && inList(t, id) && !!liveList(data, id);
 }
+
+// ---------- Дерево подзадач ----------
+
+/**
+ * Родитель, если он жив и не замыкает цикл. Цикл возможен только после слияния правок с двух устройств
+ * (на одном A вложили в B, на другом B в A): тогда обе задачи показываются на верхнем уровне и ничего не теряется.
+ */
+export function parentOf(data, t) {
+  const p = t.parentId ? data.tasks.get(t.parentId) : null;
+  if (!p || !isAlive(p)) return null;
+  let x = p;
+  for (let i = 0; i < 64 && x?.parentId; i++) {
+    if (x.parentId === t.id) return null;
+    x = data.tasks.get(x.parentId);
+  }
+  return p;
+}
+
+/** Корень дерева: нет родителя, родитель удалён навсегда или задача в цикле. */
+export const isRoot = (data, t) => !parentOf(data, t);
+
+/** Индекс детей: Map<parentId, Task[]> (живые, не в корзине; сортировка по order). Строить раз на отрисовку. */
+export function childrenIndex(data, { includeTrash = false } = {}) {
+  const m = new Map();
+  for (const t of data.tasks.values()) {
+    if (!isAlive(t) || !parentOf(data, t) || (!includeTrash && t.trashedAt)) continue;
+    if (!m.has(t.parentId)) m.set(t.parentId, []);
+    m.get(t.parentId).push(t);
+  }
+  for (const list of m.values()) list.sort(byOrder);
+  return m;
+}
+
+export function childrenOf(data, id, index = null) {
+  return (index || childrenIndex(data)).get(id) || [];
+}
+
+/** Все потомки (в глубину), живые; includeTrash — вместе с теми, что в корзине. */
+export function descendants(data, id, { includeTrash = false } = {}) {
+  const idx = childrenIndex(data, { includeTrash });
+  const out = [];
+  const walk = (pid) => {
+    for (const c of idx.get(pid) || []) {
+      out.push(c);
+      walk(c.id);
+    }
+  };
+  walk(id);
+  return out;
+}
+
+export function ancestors(data, t) {
+  const out = [];
+  const seen = new Set([t.id]);
+  let p = parentOf(data, t);
+  while (p && !seen.has(p.id)) {
+    out.push(p);
+    seen.add(p.id);
+    p = parentOf(data, p);
+  }
+  return out;
+}
+
+/** Уровень задачи: 1 — корень. */
+export const depthOf = (data, t) => ancestors(data, t).length + 1;
+
+/** Высота поддерева: 1 — без детей. */
+export function subtreeHeight(data, id, index = null) {
+  const idx = index || childrenIndex(data);
+  const kids = idx.get(id) || [];
+  return 1 + (kids.length ? Math.max(...kids.map((k) => subtreeHeight(data, k.id, idx))) : 0);
+}
+
+/**
+ * Можно ли сделать задачу childId подзадачей parentId: не сама в себя, без циклов, глубина ≤ MAX_DEPTH.
+ * Возвращает null или текст причины.
+ */
+export function nestError(data, childId, parentId) {
+  if (!parentId) return null;
+  if (childId === parentId) return 'Задачу нельзя вложить саму в себя';
+  const parent = data.tasks.get(parentId);
+  if (!parent || !isAlive(parent)) return 'Родительская задача не найдена';
+  if (ancestors(data, parent).some((a) => a.id === childId)) return 'Нельзя вложить задачу в её же подзадачу';
+  if (depthOf(data, parent) + subtreeHeight(data, childId) > MAX_DEPTH) return `Вложенность не больше ${MAX_DEPTH} уровней`;
+  return null;
+}
+
+/** Прогресс по прямым подзадачам: { done, total } (без корзины). */
+export function progressOf(data, id, index = null) {
+  const kids = childrenOf(data, id, index);
+  return { done: kids.filter((k) => k.status === 'done').length, total: kids.length };
+}
+
+// ---------- Даты и «Сегодня» ----------
 
 export function deadlinePassed(t, today, time) {
   if (!t.deadlineDate) return false;
@@ -43,16 +154,19 @@ export function isOverdue(t, today, time) {
   return deadlinePassed(t, today, time) || (!!t.scheduledDate && t.scheduledDate < today);
 }
 
-const prioDesc = (a, b) => (b.priority || 0) - (a.priority || 0);
+const prioRank = (data, t) => {
+  const p = data?.priorities?.get(t.priorityId);
+  return p ? p.coins : 0; // чем «дороже» приоритет, тем он важнее
+};
 
 /** Порядок внутри дня: сначала со временем (по времени), потом без времени (приоритет ↓, order). */
-export function dayCompare(a, b) {
+export function dayCompare(a, b, data = null) {
   const ta = a.scheduledTime || (a.scheduledDate ? null : a.deadlineTime);
   const tb = b.scheduledTime || (b.scheduledDate ? null : b.deadlineTime);
   if (ta && tb && ta !== tb) return ta < tb ? -1 : 1;
   if (ta && !tb) return -1;
   if (!ta && tb) return 1;
-  return prioDesc(a, b) || byOrder(a, b);
+  return prioRank(data, b) - prioRank(data, a) || byOrder(a, b);
 }
 
 function overdueKey(t) {
@@ -62,24 +176,23 @@ function overdueKey(t) {
   return a || b || '';
 }
 
-function overdueCompare(a, b) {
-  const ka = overdueKey(a);
-  const kb = overdueKey(b);
-  if (ka !== kb) return ka < kb ? -1 : 1;
-  return prioDesc(a, b) || byOrder(a, b);
-}
-
 const byIsoDesc = (field) => (a, b) => {
   const x = a[field] || '';
   const y = b[field] || '';
   return x === y ? byOrder(a, b) : x < y ? 1 : -1;
 };
 
-/** Экран «Сегодня» (TZ §6.2). */
+/** Экран «Сегодня» (TZ §6.2). Подзадачи с датой попадают сюда сами по себе (с подписью родителя в UI). */
 export function todayView(data, today, time, nowMs = Date.now()) {
   const tz = data.settings.timeZone;
   const v = { focus: [], yesterdayFocus: [], overdue: [], today: [], soon: [], chores: [], doneToday: [] };
   const recent = nowMs - 2 * 86400000;
+  const dc = (a, b) => dayCompare(a, b, data);
+  const oc = (a, b) => {
+    const ka = overdueKey(a);
+    const kb = overdueKey(b);
+    return ka !== kb ? (ka < kb ? -1 : 1) : prioRank(data, b) - prioRank(data, a) || byOrder(a, b);
+  };
   for (const t of data.tasks.values()) {
     if (!isAlive(t) || t.trashedAt || inArchivedList(data, t)) continue;
     if (t.focusDate === today) {
@@ -87,9 +200,7 @@ export function todayView(data, today, time, nowMs = Date.now()) {
       continue;
     }
     if (t.status === 'done') {
-      if (t.completedAt && Date.parse(t.completedAt) >= recent && localDateOf(t.completedAt, tz) === today) {
-        v.doneToday.push(t);
-      }
+      if (t.completedAt && Date.parse(t.completedAt) >= recent && localDateOf(t.completedAt, tz) === today) v.doneToday.push(t);
       continue;
     }
     if (t.focusDate && t.focusDate < today) v.yesterdayFocus.push(t);
@@ -107,14 +218,14 @@ export function todayView(data, today, time, nowMs = Date.now()) {
   }
   v.focus.sort((a, b) => byOrder(a, b, 'focusOrder'));
   v.yesterdayFocus.sort((a, b) => byOrder(a, b, 'focusOrder'));
-  v.overdue.sort(overdueCompare);
-  v.today.sort(dayCompare);
-  v.soon.sort((a, b) => (a.deadlineDate === b.deadlineDate ? dayCompare(a, b) : a.deadlineDate < b.deadlineDate ? -1 : 1));
+  v.overdue.sort(oc);
+  v.today.sort(dc);
+  v.soon.sort((a, b) => (a.deadlineDate === b.deadlineDate ? dc(a, b) : a.deadlineDate < b.deadlineDate ? -1 : 1));
   v.chores.sort((a, b) => {
     const oa = isOverdue(a, today, time);
     const ob = isOverdue(b, today, time);
     if (oa !== ob) return oa ? -1 : 1;
-    return oa ? overdueCompare(a, b) : dayCompare(a, b);
+    return oa ? oc(a, b) : dc(a, b);
   });
   v.doneToday.sort(byIsoDesc('completedAt'));
   return v;
@@ -133,34 +244,35 @@ export function focusIsFull(data, date) {
   return focusTasks(data, date).length >= LIMITS.focusMax;
 }
 
-/** «Входящие»: активные без списка (и с удалённым списком). */
+// ---------- «Входящие», списки, архив, корзина ----------
+
+/** Задача без живых списков (корень дерева) — во «Входящих». */
+export const isInboxRoot = (data, t) => isRoot(data, t) && taskLists(data, t).length === 0;
+
+/** «Входящие»: активные корневые задачи без списков. Подзадачи показываются деревом под родителем. */
 export function inboxView(data) {
   const r = [];
-  for (const t of data.tasks.values()) {
-    if (isActive(t) && (t.listId == null || hasMissingList(data, t))) r.push(t);
-  }
+  for (const t of data.tasks.values()) if (isActive(t) && isInboxRoot(data, t)) r.push(t);
   return r.sort(byOrder);
 }
 
-/** Экран списка (TZ §6.5). */
+/** Корни дерева в списке: члены списка, чей родитель не состоит в этом же списке. */
+const listRoot = (data, t, listId) => inList(t, listId) && !(parentOf(data, t) && inList(parentOf(data, t), listId));
+
+/** Экран списка (TZ §6.5): секции из корней дерева; подзадачи — под родителем. */
 export function listView(data, listId) {
   const v = { scheduled: [], noDate: [], repeating: [], done: [], doneCount: 0 };
   for (const t of data.tasks.values()) {
-    if (!isAlive(t) || t.trashedAt || t.listId !== listId) continue;
-    if (t.status === 'done') {
-      v.done.push(t);
-    } else if (t.repeat) {
-      v.repeating.push(t);
-    } else if (t.scheduledDate || t.deadlineDate) {
-      v.scheduled.push(t);
-    } else {
-      v.noDate.push(t);
-    }
+    if (!isAlive(t) || t.trashedAt || !listRoot(data, t, listId)) continue;
+    if (t.status === 'done') v.done.push(t);
+    else if (t.repeat) v.repeating.push(t);
+    else if (t.scheduledDate || t.deadlineDate) v.scheduled.push(t);
+    else v.noDate.push(t);
   }
   v.scheduled.sort((a, b) => {
     const ka = a.scheduledDate || a.deadlineDate;
     const kb = b.scheduledDate || b.deadlineDate;
-    return ka === kb ? dayCompare(a, b) : ka < kb ? -1 : 1;
+    return ka === kb ? dayCompare(a, b, data) : ka < kb ? -1 : 1;
   });
   v.noDate.sort(byOrder);
   v.repeating.sort((a, b) => a.title.localeCompare(b.title, 'ru'));
@@ -170,11 +282,14 @@ export function listView(data, listId) {
   return v;
 }
 
-/** Все задачи контейнера (список или «Входящие») для расчёта ручного порядка. */
-export function containerTasks(data, listId) {
+/** Соседи для ручного порядка: корни списка (listId) или «Входящих» (null), либо дети родителя (parentId). */
+export function containerTasks(data, listId, parentId = null) {
   const r = [];
   for (const t of data.tasks.values()) {
-    if (isActive(t) && (t.listId ?? null) === (listId ?? null)) r.push(t);
+    if (!isActive(t)) continue;
+    if (parentId) {
+      if (t.parentId === parentId) r.push(t);
+    } else if (listId ? listRoot(data, t, listId) : isInboxRoot(data, t)) r.push(t);
   }
   return r.sort(byOrder);
 }
@@ -187,20 +302,24 @@ export function sortedLists(data, { archived = false } = {}) {
   return r.sort(byOrder);
 }
 
-/** Число активных задач по спискам + 'inbox'. */
+/** Число активных задач по спискам + 'inbox' (корни без списков). */
 export function activeCounts(data) {
   const m = new Map();
   for (const t of data.tasks.values()) {
     if (!isActive(t)) continue;
-    const key = t.listId == null || hasMissingList(data, t) ? 'inbox' : t.listId;
-    m.set(key, (m.get(key) || 0) + 1);
+    const ls = taskLists(data, t);
+    if (!ls.length) {
+      if (isRoot(data, t)) m.set('inbox', (m.get('inbox') || 0) + 1);
+      continue;
+    }
+    for (const l of ls) m.set(l.id, (m.get(l.id) || 0) + 1);
   }
   return m;
 }
 
 /** Есть ли у списка хоть одна задача (включая выполненные и корзину) — тогда его нельзя удалить. */
 export function listHasTasks(data, listId) {
-  for (const t of data.tasks.values()) if (isAlive(t) && t.listId === listId) return true;
+  for (const t of data.tasks.values()) if (isAlive(t) && inList(t, listId)) return true;
   return false;
 }
 
@@ -208,21 +327,47 @@ export function archiveView(data, listFilter = null) {
   const r = [];
   for (const t of data.tasks.values()) {
     if (!isDone(t)) continue;
-    if (listFilter === 'inbox' ? t.listId != null : listFilter && t.listId !== listFilter) continue;
+    if (listFilter === 'inbox' ? taskLists(data, t).length > 0 : listFilter && !inList(t, listFilter)) continue;
     r.push(t);
   }
   return r.sort(byIsoDesc('completedAt'));
 }
 
+/** Корзина: задачи в корзине, кроме подзадач, ушедших туда вместе с родителем (они восстановятся с ним). */
 export function trashView(data) {
   const r = [];
-  for (const t of data.tasks.values()) if (isInTrash(t)) r.push(t);
+  for (const t of data.tasks.values()) {
+    if (!isInTrash(t)) continue;
+    const p = parentOf(data, t);
+    if (p && p.trashedAt && p.trashedAt === t.trashedAt) continue;
+    r.push(t);
+  }
   return r.sort(byIsoDesc('trashedAt'));
 }
 
-/** Задачи в корзине старше срока хранения (кандидаты на надгробие). */
+/** Задачи в корзине старше срока хранения (кандидаты на надгробие), вместе с их потомками. */
 export function expiredTrash(data, nowMs) {
   const days = data.settings.trashRetentionDays || 30;
   const limit = nowMs - days * 86400000;
-  return trashView(data).filter((t) => Date.parse(t.trashedAt) < limit);
+  const out = [];
+  for (const t of data.tasks.values()) if (isInTrash(t) && Date.parse(t.trashedAt) < limit) out.push(t);
+  return out.sort(byIsoDesc('trashedAt'));
+}
+
+// ---------- Приоритеты ----------
+
+export function sortedPriorities(data, { archived = false } = {}) {
+  const r = [];
+  for (const p of data.priorities.values()) if (!p.deletedAt && !!p.archived === archived) r.push(p);
+  return r.sort(byOrder);
+}
+
+export function priorityOf(data, t) {
+  const p = data.priorities.get(t.priorityId);
+  return p && !p.deletedAt ? p : null;
+}
+
+export function priorityInUse(data, priorityId) {
+  for (const t of data.tasks.values()) if (isAlive(t) && t.priorityId === priorityId) return true;
+  return false;
 }

@@ -100,7 +100,7 @@ async function finishWrite(snapshot, newRev) {
 async function purgeOldTombstones() {
   const limit = Date.now() - TOMBSTONE_TTL_DAYS * 86400000;
   const dels = [];
-  for (const c of ['lists', 'tasks', 'media', 'devices']) {
+  for (const c of ['lists', 'tasks', 'media', 'devices', 'priorities', 'rewards', 'coinEvents']) {
     for (const e of store.data[c].values()) if (e.deletedAt && Date.parse(e.deletedAt) < limit) dels.push([c, e.id]);
   }
   if (!dels.length) return;
@@ -282,7 +282,7 @@ export function push() {
       return;
     }
     step('Бэкап');
-    await makeBackup(drive, r.layout, migratedFrom ? `pre-migration-v${migratedFrom}` : 'push', store.deviceId);
+    await makeBackup(drive, r.layout, migratedFrom ? `pre-migration-v${SCHEMA_VERSION}` : 'push', store.deviceId);
     try {
       await rotateBackups(drive, r.layout);
     } catch (e) {

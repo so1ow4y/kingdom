@@ -1,6 +1,6 @@
 // Нижние панели: «Когда», выбор списка, приоритет, меню задачи, выбор главных, синхронизация.
 
-import { html } from '../html.js';
+import { html, useState } from '../html.js';
 import { Icon } from '../icons.js';
 import { Sheet, MenuItem } from './Sheet.js';
 import { ListEditorSheet } from './ListEditor.js';
@@ -10,8 +10,10 @@ import { store, closeSheet, openSheet, showSnackbar } from '../../store/appState
 import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { addDays, mondayOf, weekDates, isoWeekday, WEEKDAY_SHORT, humanDate } from '../../core/dates.js';
-import { PRIORITY_LABEL } from './TaskRow.js';
 import { LIMITS } from '../../config.js';
+import { PRIORITY_NONE_ID } from '../../core/priorities.js';
+import { liveNotes } from '../../core/model.js';
+import { ReminderSheet, MissedSheet } from './Reminders.js';
 
 function WhenSheet({ taskId, mode }) {
   const t = A.getTask(taskId);
@@ -62,35 +64,86 @@ function WhenSheet({ taskId, mode }) {
     <//>`;
 }
 
-function ListPickerSheet({ taskId }) {
+/** Списки задачи (п. 2.4): галочки, задача может быть в нескольких списках; «+ Новый список» прямо здесь. */
+function ListPickerSheet({ taskId, anchor }) {
   const t = A.getTask(taskId);
+  const [name, setName] = useState('');
+  const [adding, setAdding] = useState(false);
   if (!t) return null;
-  const pick = (listId) => {
-    closeSheet();
-    A.moveToList(taskId, listId);
+  const lists = S.sortedLists(store.data);
+  const none = S.taskLists(store.data, t).length === 0;
+  const create = async (e) => {
+    e.preventDefault();
+    const n = name.trim();
+    if (!n) return;
+    await A.createListAndAdd(taskId, n);
+    setName('');
+    setAdding(false);
   };
   return html`
-    <${Sheet} title="Список" onClose=${closeSheet}>
-      <${MenuItem} icon="inbox" label="Входящие" checked=${t.listId == null} onClick=${() => pick(null)}/>
-      ${S.sortedLists(store.data).map((l) => html`
-        <${MenuItem} key=${l.id} icon=${html`<i class="dot big" style=${{ background: l.color }}></i>`}
-          label=${(l.emoji ? l.emoji + ' ' : '') + l.name} checked=${t.listId === l.id} onClick=${() => pick(l.id)}/>`)}
+    <${Sheet} title="Списки" onClose=${closeSheet} anchor=${anchor}>
+      <${MenuItem} icon="inbox" label="Входящие (без списков)" checked=${none} onClick=${() => !none && A.clearLists(taskId)}/>
+      ${lists.map((l) => html`
+        <${MenuItem} key=${l.id} icon=${html`<span class=${'check-box' + (S.inList(t, l.id) ? ' on' : '')} style=${{ '--c': l.color }}>
+            ${S.inList(t, l.id) ? html`<${Icon} name="check" size=${14}/>` : null}</span>`}
+          label=${(l.emoji ? l.emoji + ' ' : '') + l.name} onClick=${() => A.toggleListMembership(taskId, l.id)}/>`)}
+      <div class="menu-sep"></div>
+      ${adding ? html`
+        <form class="inline-add" onSubmit=${create}>
+          <input value=${name} placeholder="Название списка" maxLength="40" autoFocus onInput=${(e) => setName(e.target.value)}/>
+          <button class="btn small primary" type="submit" disabled=${!name.trim()}>Создать</button>
+        </form>` : html`
+        <${MenuItem} icon="plus" label="Новый список" onClick=${() => setAdding(true)}/>`}
     <//>`;
 }
 
-function PrioritySheet({ taskId }) {
-  const t = A.getTask(taskId);
-  if (!t) return null;
-  const pick = (p) => {
+/** Выбор приоритета (п. 2.9): цветная точка, название, монеты; «Без приоритета» внизу; «Настроить приоритеты». */
+function PrioritySheet({ taskId, anchor, onPick = null, current = undefined }) {
+  const t = taskId ? A.getTask(taskId) : null;
+  if (taskId && !t) return null;
+  const cur = current !== undefined ? current : t.priorityId;
+  const pick = (id) => {
     closeSheet();
-    A.setPriority(taskId, p);
+    if (onPick) onPick(id);
+    else A.setPriority(taskId, id);
   };
-  const cls = ['', 'prio-low', 'prio-mid', 'prio-high'];
+  const list = S.sortedPriorities(store.data).filter((p) => p.id !== PRIORITY_NONE_ID).reverse();
+  const none = store.data.priorities.get(PRIORITY_NONE_ID);
+  const game = store.data.settings.gameEnabled;
+  const item = (p) => html`
+    <${MenuItem} key=${p.id} icon=${html`<i class="dot big" style=${{ background: p.color }}></i>`}
+      label=${p.name} hint=${game ? `+${p.coins} 🪙 за выполнение` : null} checked=${cur === p.id} onClick=${() => pick(p.id)}/>`;
   return html`
-    <${Sheet} title="Приоритет" onClose=${closeSheet}>
-      ${[3, 2, 1, 0].map((p) => html`
-        <${MenuItem} key=${p} icon=${html`<span class=${'meta-prio ' + cls[p]}><${Icon} name="flag" size=${20}/></span>`}
-          label=${PRIORITY_LABEL[p]} checked=${(t.priority || 0) === p} onClick=${() => pick(p)}/>`)}
+    <${Sheet} title="Приоритет" onClose=${closeSheet} anchor=${anchor}>
+      ${list.map(item)}
+      ${none && !none.deletedAt ? item(none) : null}
+      <div class="menu-sep"></div>
+      <${MenuItem} icon="settings" label="Настроить приоритеты" onClick=${() => { closeSheet(); navigate('/settings?section=priorities'); }}/>
+    <//>`;
+}
+
+/** «Сделать подзадачей…»: выбор родителя (поиск по названию; недопустимые — без циклов и глубже 4 уровней — скрыты). */
+function ParentPickerSheet({ taskId }) {
+  const t = A.getTask(taskId);
+  const [q, setQ] = useState('');
+  if (!t) return null;
+  const norm = (s) => s.toLowerCase().replace(/ё/g, 'е');
+  const nq = norm(q.trim());
+  const options = [...store.data.tasks.values()]
+    .filter((x) => S.isActive(x) && x.id !== taskId && !S.nestError(store.data, taskId, x.id))
+    .filter((x) => !nq || norm(x.title).includes(nq))
+    .sort((a, b) => (b.updatedAt || '').localeCompare(a.updatedAt || ''))
+    .slice(0, 30);
+  const pick = (id) => {
+    closeSheet();
+    A.setParent(taskId, id);
+  };
+  return html`
+    <${Sheet} title="Сделать подзадачей…" onClose=${closeSheet}>
+      <input class="sheet-search" value=${q} placeholder="Найти задачу-родителя" autoFocus onInput=${(e) => setQ(e.target.value)}/>
+      ${options.length ? options.map((x) => html`<${MenuItem} key=${x.id} icon="list" label=${x.title}
+        hint=${S.parentOf(store.data, x) ? '↳ ' + S.parentOf(store.data, x).title : null} onClick=${() => pick(x.id)}/>`)
+        : html`<p class="empty">Нет подходящих задач.</p>`}
     <//>`;
 }
 
@@ -110,6 +163,8 @@ function TaskMenuSheet({ taskId }) {
       <//>`;
   }
   const focused = t.focusDate === today;
+  const prio = S.priorityOf(store.data, t);
+  const parent = S.parentOf(store.data, t);
   return html`
     <${Sheet} title=${t.title} onClose=${closeSheet} className="sheet-menu">
       ${t.status === 'done'
@@ -121,16 +176,21 @@ function TaskMenuSheet({ taskId }) {
             onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })}/>
           <${MenuItem} icon="flag" label="Дедлайн…" hint=${t.deadlineDate ? humanDate(t.deadlineDate, today) : null}
             onClick=${() => openSheet('when', { taskId, mode: 'deadline' })}/>`}
-      <${MenuItem} icon="lists" label="Список…" onClick=${() => openSheet('listPicker', { taskId })}/>
-      <${MenuItem} icon="flag" label="Приоритет…" hint=${t.priority ? PRIORITY_LABEL[t.priority] : null}
+      <${MenuItem} icon="lists" label="Списки…" hint=${S.taskLists(store.data, t).map((l) => l.name).join(', ') || null}
+        onClick=${() => openSheet('listPicker', { taskId })}/>
+      <${MenuItem} icon="flag" label="Приоритет…" hint=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : null}
         onClick=${() => openSheet('priority', { taskId })}/>
+      <${MenuItem} icon="list" label="Сделать подзадачей…" onClick=${() => openSheet('parentPicker', { taskId })}/>
+      ${parent ? html`<${MenuItem} icon="up" label="Вынести на верхний уровень" hint=${'сейчас внутри «' + parent.title + '»'}
+        onClick=${run(() => A.setParent(taskId, null))}/>` : null}
       <${MenuItem} icon="plus" label="Дублировать" onClick=${run(async () => {
         const c = await A.duplicateTask(taskId);
         if (c) navigate('/task/' + c.id);
       })}/>
       <${MenuItem} icon="copy" label="Скопировать текст" onClick=${run(async () => {
         try {
-          await navigator.clipboard.writeText(t.title + (t.note ? '\n\n' + t.note : ''));
+          const notes = liveNotes(t).map((n) => n.text).filter(Boolean);
+          await navigator.clipboard.writeText([t.title, ...notes].join('\n\n'));
           showSnackbar('Скопировано');
         } catch {
           showSnackbar('Не удалось скопировать');
@@ -178,6 +238,9 @@ export function SheetHost() {
     case 'focusPicker': return html`<${FocusPickerSheet}/>`;
     case 'sync': return html`<${SyncPanel}/>`;
     case 'listEditor': return html`<${ListEditorSheet} ...${s}/>`;
+    case 'reminder': return html`<${ReminderSheet} ...${s}/>`;
+    case 'missed': return html`<${MissedSheet}/>`;
+    case 'parentPicker': return html`<${ParentPickerSheet} ...${s}/>`;
     default: return null;
   }
 }

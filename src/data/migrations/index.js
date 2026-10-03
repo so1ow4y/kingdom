@@ -4,10 +4,9 @@
 
 import { SCHEMA_VERSION } from '../../version.js';
 import { SyncError } from '../../core/errors.js';
+import m001to002 from './m001_to_002.js';
 
-export const MIGRATIONS = [
-  // import m001_to_002 from './m001_to_002.js'; — появится вместе со схемой v2
-];
+export const MIGRATIONS = [m001to002];
 
 /** Довести базу до SCHEMA_VERSION. Версия новее приложения — E-READONLY. */
 export function migrateDb(db, migrations = MIGRATIONS, target = SCHEMA_VERSION) {

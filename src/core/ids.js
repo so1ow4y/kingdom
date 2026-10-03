@@ -15,4 +15,24 @@ export function uuidv7(now = Date.now()) {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
+/**
+ * Детерминированный UUID (версия 8) из строки — для сущностей, которые два устройства должны создать
+ * одинаково без договорённости (миграция 1→2). Алгоритм (DATA_FORMAT §12.3): четыре прохода FNV-1a 32 бит
+ * по кодам UTF-16 строки с начальными значениями 0x811c9dc5, 0x050c5d1f, 0x1b873593, 0xcc9e2d51;
+ * 32 hex-цифры подряд, затем версия 8 и вариант 10.
+ */
+export function uuidFromString(s) {
+  let hex = '';
+  for (const seed of [0x811c9dc5, 0x050c5d1f, 0x1b873593, 0xcc9e2d51]) {
+    let h = seed >>> 0;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193) >>> 0;
+    }
+    hex += h.toString(16).padStart(8, '0');
+  }
+  hex = hex.slice(0, 12) + '8' + hex.slice(13, 16) + ((parseInt(hex[16], 16) & 0x3) | 0x8).toString(16) + hex.slice(17);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20, 32)}`;
+}
+
+export const UUID_RE =/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;

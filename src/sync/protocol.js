@@ -11,10 +11,11 @@ import { migrateDb } from '../data/migrations/index.js';
 
 /** Байты db.json.gz → проверенная и (если нужно) мигрированная база. */
 export async function parseDbBytes(bytes, { fakeNewerSchema = false } = {}) {
-  const raw = validateDb(checkDb(await gunzipJson(bytes)));
+  const raw = checkDb(await gunzipJson(bytes));
   if (fakeNewerSchema) raw.schemaVersion += 1; // режим отладки: проверить «только чтение»
   const fromVersion = raw.schemaVersion;
-  const db = migrateDb(raw); // E-READONLY, если база новее приложения
+  // Сначала миграция (E-READONLY, если база новее приложения), потом проверка структуры уже в текущем формате.
+  const db = validateDb(migrateDb(raw));
   return { db, migratedFrom: db.schemaVersion !== fromVersion ? fromVersion : null };
 }
 

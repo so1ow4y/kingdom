@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.2.0';
+const VERSION = '0.3.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -13,18 +13,23 @@ const PRECACHE = [
   './index.html',
   './manifest.webmanifest',
   './src/config.js',
+  './src/core/analytics.js',
   './src/core/canonical.js',
   './src/core/clock.js',
   './src/core/dates.js',
   './src/core/errors.js',
+  './src/core/game.js',
   './src/core/ids.js',
   './src/core/merge.js',
   './src/core/model.js',
   './src/core/order.js',
   './src/core/plural.js',
+  './src/core/priorities.js',
+  './src/core/reminders.js',
   './src/core/selectors.js',
   './src/data/envelope.js',
   './src/data/migrations/index.js',
+  './src/data/migrations/m001_to_002.js',
   './src/data/serialize.js',
   './src/data/validate.js',
   './src/google/auth.js',
@@ -44,9 +49,14 @@ const PRECACHE = [
   './src/sync/status.js',
   './src/sync/syncEngine.js',
   './src/ui/app.js',
+  './src/ui/components/Appearance.js',
+  './src/ui/components/Dock.js',
+  './src/ui/components/ItemLists.js',
   './src/ui/components/ListEditor.js',
   './src/ui/components/Overlays.js',
+  './src/ui/components/PrioritiesEditor.js',
   './src/ui/components/QuickAdd.js',
+  './src/ui/components/Reminders.js',
   './src/ui/components/Section.js',
   './src/ui/components/Sheet.js',
   './src/ui/components/Sheets.js',
@@ -56,12 +66,16 @@ const PRECACHE = [
   './src/ui/hooks.js',
   './src/ui/html.js',
   './src/ui/icons.js',
+  './src/ui/notifier.js',
+  './src/ui/prefs.js',
   './src/ui/router.js',
+  './src/ui/screens/Analytics.js',
   './src/ui/screens/ArchiveTrash.js',
   './src/ui/screens/Inbox.js',
   './src/ui/screens/Journal.js',
   './src/ui/screens/Lists.js',
   './src/ui/screens/Settings.js',
+  './src/ui/screens/Shop.js',
   './src/ui/screens/Task.js',
   './src/ui/screens/Today.js',
   './src/ui/theme.js',
@@ -97,6 +111,27 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'SKIP_WAITING') self.skipWaiting();
   if (event.data?.type === 'GET_VERSION') event.ports[0]?.postMessage({ version: VERSION });
+});
+
+// Уведомления о задачах (обновление 0.3, п. 2.5): нажатие и кнопки «Готово» / «Отложить на 10 мин».
+// Само действие выполняет открытое приложение (у SW нет доступа к состоянию); если окна нет — открываем его.
+self.addEventListener('notificationclick', (event) => {
+  const n = event.notification;
+  const { taskId } = n.data || {};
+  n.close();
+  if (!taskId) return;
+  const action = event.action || 'open';
+  event.waitUntil((async () => {
+    const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });
+    const win = wins.find((c) => c.visibilityState === 'visible') || wins[0];
+    if (win) {
+      win.postMessage({ type: 'lt-notify', action, taskId });
+      if (action === 'open') await win.focus().catch(() => {});
+      return;
+    }
+    const act = action === 'open' ? '' : '?act=' + action;
+    await self.clients.openWindow(new URL(`./#/task/${encodeURIComponent(taskId)}${act}`, SCOPE).href);
+  })());
 });
 
 self.addEventListener('fetch', (event) => {

@@ -1,7 +1,7 @@
-// Общие заготовки для тестов: детерминированный ctx и сборка данных.
+// Общие заготовки для тестов: детерминированный ctx и сборка данных (формат v2).
 
 import { createClock } from '../src/core/clock.js';
-import { defaultLists, defaultSettings, newTask, touch } from '../src/core/model.js';
+import { defaultLists, defaultSettings, defaultPriorities, newTask, touch } from '../src/core/model.js';
 
 export const DEVICE = '01926f3a-8c1e-7b2a-9f00-3c4d5e6f7a8b';
 
@@ -19,6 +19,9 @@ export function makeData({ timeZone = 'Europe/Moscow' } = {}) {
     tasks: new Map(),
     media: new Map(),
     devices: new Map(),
+    priorities: new Map(defaultPriorities().map((p) => [p.id, p])),
+    coinEvents: new Map(),
+    rewards: new Map(),
   };
 }
 

@@ -85,8 +85,13 @@ def check_schema(schema, last_schema):
         missing = [p for p in need if not os.path.exists(os.path.join(ROOT, p))]
         if missing:
             fail("SCHEMA_VERSION вырос до %d, но нет файлов: %s" % (v, ", ".join(missing)))
-        if not re.search(rf"\| {v} \|", read(os.path.join(ROOT, "docs", "DATA_FORMAT.md"))):
-            fail(f"в docs/DATA_FORMAT.md нет строки журнала изменений формата для v{v} (§8.5)")
+        # Документация живёт в ветке docs; если она рядом (docs/ или ../lifetasks-docs/), проверяем журнал формата.
+        doc = next((p for p in (os.path.join(ROOT, "docs", "DATA_FORMAT.md"),
+                                os.path.join(os.path.dirname(ROOT), "lifetasks-docs", "DATA_FORMAT.md")) if os.path.exists(p)), None)
+        if doc is None:
+            print(f"Напоминание: в DATA_FORMAT.md (ветка docs) должна быть строка журнала формата для v{v} (§8.5).")
+        elif not re.search(rf"\| {v} \|", read(doc)):
+            fail(f"в {doc} нет строки журнала изменений формата для v{v} (§8.5)")
 
 
 def main():

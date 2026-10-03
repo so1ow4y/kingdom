@@ -5,7 +5,7 @@ import { store, bumpData, setUi, refreshNow } from './appState.js';
 import { initActions, refreshDirty, purgeExpiredTrash, syncDeviceInfo } from './actions.js';
 import { createClock } from '../core/clock.js';
 import { uuidv7 } from '../core/ids.js';
-import { defaultLists, defaultSettings, newDevice } from '../core/model.js';
+import { defaultLists, defaultSettings, defaultPriorities, newDevice } from '../core/model.js';
 import { deviceTimeZone } from '../core/dates.js';
 import { buildDb, COLLECTIONS } from '../data/envelope.js';
 import { migrateDb } from '../data/migrations/index.js';
@@ -44,6 +44,7 @@ export async function bootstrap() {
     const puts = [];
     if (!loaded.settings.length) puts.push(['settings', defaultSettings(deviceTimeZone())]);
     if (!loaded.lists.length) for (const l of defaultLists()) puts.push(['lists', l]);
+    if (!loaded.priorities.length) for (const p of defaultPriorities()) puts.push(['priorities', p]);
     puts.push(['devices', newDevice({ id: deviceId, name, platform, appVersion: APP_VERSION }, c)]);
     await repo.commit({
       puts,
@@ -88,6 +89,7 @@ export async function bootstrap() {
   store.data.tasks = new Map(loaded.tasks.map((x) => [x.id, x]));
   store.data.media = new Map(loaded.media.map((x) => [x.id, x]));
   store.data.devices = new Map(loaded.devices.map((x) => [x.id, x]));
+  for (const c of ['priorities', 'coinEvents', 'rewards']) store.data[c] = new Map(loaded[c].map((x) => [x.id, x]));
 
   initActions({ repo, clock, deviceId: store.deviceId });
   refreshNow();

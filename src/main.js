@@ -3,16 +3,19 @@
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { applyTheme } from './ui/theme.js';
+import { applyScheme } from './ui/prefs.js';
 import { navigate } from './ui/router.js';
 import { bootstrap } from './store/bootstrap.js';
 import { startNowTicker } from './store/appState.js';
 import { registerSW } from './pwa/swClient.js';
 import { takeOAuthFragment } from './google/auth.js';
 import { startSync } from './sync/syncEngine.js';
+import { startNotifier } from './ui/notifier.js';
 
 // Самым первым: забрать токен из адреса и убрать его оттуда (до роутера и до любых логов).
 const oauth = takeOAuthFragment();
 applyTheme();
+applyScheme();
 const root = document.getElementById('app');
 
 function showFatal(e) {
@@ -39,6 +42,7 @@ try {
   root.textContent = '';
   render(html`<${App}/>`, root);
   registerSW();
+  startNotifier();
   navigator.storage?.persist?.().catch(() => {});
   startSync(oauth, { navigate: (route) => navigate(route, { replace: true }) }).catch((e) => console.error('startSync', e));
 } catch (e) {

@@ -11,6 +11,7 @@ import { parseDbBytes, mergeRemote, writeDbChecked, pushedKeys, baseFrom } from 
 import { makeBackup, rotateBackups } from '../src/sync/backups.js';
 import { MERGE_COLLECTIONS } from '../src/core/merge.js';
 import { canonicalJson } from '../src/core/canonical.js';
+import { SCHEMA_VERSION } from '../src/version.js';
 
 let now = Date.parse('2026-10-02T09:00:00.000Z');
 
@@ -19,7 +20,7 @@ function device(id, tz) {
   const d = {
     id,
     clock,
-    data: { settings: new Map(), lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map() },
+    data: { settings: new Map(), lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map(), priorities: new Map(), coinEvents: new Map(), rewards: new Map() },
     base: new Map(),
     dirty: new Set(),
     lastRev: null,
@@ -229,7 +230,7 @@ test('база на Диске новее приложения → E-READONLY, �
   put(A, 'tasks', newTask({ title: 'x' }, A.ctx()));
   await push(A, drive);
   const db = await remoteDb(drive, A);
-  await drive.updateContent(A.layout.dbId, await gzipJson({ ...db, schemaVersion: 2 }));
+  await drive.updateContent(A.layout.dbId, await gzipJson({ ...db, schemaVersion: SCHEMA_VERSION + 1 }));
   const revBefore = (await drive.getMeta(A.layout.dbId)).headRevisionId;
   const B = device('B', 'Europe/Moscow');
   put(B, 'tasks', newTask({ title: 'y' }, B.ctx()));
