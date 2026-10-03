@@ -1,17 +1,16 @@
-// Строка задачи (docs/TZ.md §5.2) и дерево подзадач (обновление 0.3, п. 2.4, 2.8).
+// Строка задачи (docs/TZ.md §5.2). Дерево и перетаскивание — components/TaskTree.js (обновление 0.4).
 
-import { html, useState, useRef, useEffect, useMemo } from '../html.js';
+import { html, useState, useRef, useEffect } from '../html.js';
 import { Icon } from '../icons.js';
 import { openTask, currentTaskId } from '../router.js';
-import { useLocal } from '../hooks.js';
 import { store, openSheet } from '../../store/appState.js';
-import { toggleComplete, toggleFocus, dropTask } from '../../store/actions.js';
+import { toggleComplete, toggleFocus } from '../../store/actions.js';
 import { humanDate } from '../../core/dates.js';
 import * as S from '../../core/selectors.js';
 import { liveNotes } from '../../core/model.js';
 import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { TIMINGS } from '../../config.js';
-import { DragHandle, SortableList } from './Sortable.js';
+import { DragHandle } from './Sortable.js';
 
 /** Списки задачи компактно: точка, эмодзи и название; больше двух — «+N». */
 function ListChips({ task }) {
@@ -63,8 +62,12 @@ export function TaskMeta({ task, showList, showParent = false, index = null }) {
   return parts.length ? html`<div class="task-meta">${parts}</div>` : null;
 }
 
+/**
+ * kids — сколько подзадач показано под строкой (для стрелки), hasKids — есть ли подзадачи вообще (вопрос при выполнении).
+ * onKeyMove(key) — клавиши на строке в фокусе: Alt+↑/↓ ('up'/'down'), Tab ('indent'), Shift+Tab ('outdent').
+ */
 export function TaskRow({ task, showList = true, handle = null, quickActions = false, showParent = false,
-  depth = 0, kids = 0, collapsed = false, onToggle = null, index = null }) {
+  depth = 0, kids = 0, hasKids = null, collapsed = false, onToggle = null, index = null, onKeyMove = null }) {
   const [completing, setCompleting] = useState(false);
   const timer = useRef(null);
   const done = task.status === 'done';
@@ -72,6 +75,7 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
   const focused = task.focusDate === today;
   const overdue = S.isOverdue(task, today, store.now.time);
   const readOnly = !!store.ui.readOnly;
+  const hasParent = !!task.parentId && !!S.parentOf(store.data, task); // ★ — только у задач верхнего уровня
 
   useEffect(() => {
     if (done) setCompleting(false);
@@ -89,7 +93,7 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
   const onCheck = (e) => {
     e.stopPropagation();
     if (readOnly || task.trashedAt) return;
-    if (done || kids) {
+    if (done || (hasKids ?? kids)) {
       // У родителя сразу (будет вопрос про подзадачи), у выполненной — вернуть без задержки.
       toggleComplete(task.id);
       return;
@@ -130,7 +134,7 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
   return html`
     <div class=${cls.join(' ')} onClick=${open} onContextMenu=${menu} role="button" tabIndex="0"
       style=${{ '--depth': depth }}
-      onKeyDown=${(e) => { if (e.key === 'Enter' && e.target === e.currentTarget) open(); }}>
+      onKeyDown=${(e) => onRowKey(e, open, onKeyMove)}>
       ${onToggle ? html`<button class=${'tree-toggle' + (kids ? '' : ' empty')} onClick=${stop(onToggle)} disabled=${!kids}
         aria-label=${collapsed ? 'Развернуть подзадачи' : 'Свернуть подзадачи'} aria-expanded=${!collapsed}>
         ${kids ? html`<${Icon} name=${collapsed ? 'chevron' : 'chevronDown'} size=${16}/>` : null}</button>` : null}
@@ -149,7 +153,7 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
               <${Icon} name="lists" size=${14}/> Списки</button>
           </div>` : null}
       </div>
-      ${!done || focused ? html`
+      ${(!done && !hasParent) || focused ? html`
         <button class=${'star' + (focused ? ' on' : ' star-optional') + (quickActions ? ' star-visible' : '')}
           onClick=${stop(() => !readOnly && toggleFocus(task.id))}
           aria-label=${focused ? 'Убрать из главного' : 'Главное на сегодня'} title=${focused ? 'Убрать из главного' : 'Главное на сегодня'}>
@@ -160,34 +164,21 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
     </div>`;
 }
 
-/** Простой список строк (подзадачи — с подписью родителя). */
+const KEYS = { ArrowUp: 'up', ArrowDown: 'down' };
+
+function onRowKey(e, open, onKeyMove) {
+  if (e.target !== e.currentTarget) return;
+  if (e.key === 'Enter') {
+    open();
+    return;
+  }
+  if (!onKeyMove) return;
+  const key = e.altKey && KEYS[e.key] ? KEYS[e.key] : e.key === 'Tab' && !e.altKey && !e.ctrlKey && !e.metaKey ? (e.shiftKey ? 'outdent' : 'indent') : null;
+  if (key && onKeyMove(key)) e.preventDefault();
+}
+
+/** Простой список строк без перетаскивания (архив, корзина). */
 export function TaskList({ tasks, showList = true, quickActions = false, showParent = true }) {
   return html`<div class="task-list">${tasks.map((t) => html`<${TaskRow} key=${t.id} task=${t} showList=${showList}
     quickActions=${quickActions} showParent=${showParent}/>`)}</div>`;
-}
-
-/**
- * Дерево задач: корни и их подзадачи с отступами, сворачиванием и прогрессом «2/5».
- * Перетаскивание: на середину строки — вложить, между строками — переставить на том же уровне (п. 2.8).
- * listId — контекст экрана (null — «Входящие»): задача, вынесенная на верхний уровень, остаётся в этом списке.
- */
-export function TaskTree({ roots, listId = null, showList = true, quickActions = false, sortable = true, rootParentId = null }) {
-  const index = useMemo(() => S.childrenIndex(store.data), [store.version]);
-  const [collapsed, setCollapsed] = useLocal('collapsed', []);
-  const closed = new Set(collapsed);
-  const flat = [];
-  const walk = (list, depth) => {
-    for (const t of list) {
-      const kids = index.get(t.id) || [];
-      flat.push({ id: t.id, task: t, depth, kids: kids.length });
-      if (kids.length && !closed.has(t.id)) walk(kids, depth + 1);
-    }
-  };
-  walk(roots, 0);
-  const toggle = (id) => setCollapsed(closed.has(id) ? collapsed.filter((x) => x !== id) : [...collapsed, id]);
-  return html`<${SortableList} items=${flat} nestable disabled=${!!store.ui.readOnly || !sortable}
-    onDrop=${(d) => dropTask(d.id, d, listId, rootParentId)}
-    render=${(it, handle) => html`<${TaskRow} task=${it.task} depth=${it.depth} kids=${it.kids} collapsed=${closed.has(it.id)}
-      onToggle=${() => toggle(it.id)} showList=${showList && it.depth === 0} quickActions=${quickActions && it.depth === 0}
-      handle=${sortable ? handle : null} index=${index}/>`}/>`;
 }

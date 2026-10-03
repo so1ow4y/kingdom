@@ -123,6 +123,18 @@
       "expected": { "id": "a:t10", "createdAt": "2026-10-02T10:00:00.000Z", "updatedAt": "2026-10-02T10:05:00.000Z", "updatedBy": "devB", "deletedAt": null,
                     "fieldTimes": { "type": 11, "amount": 11, "active": 15, "title": 11, "at": 15 },
                     "type": "award", "amount": 10, "active": false, "taskId": "t10", "occKey": null, "title": "A", "at": "2026-10-02T10:05:00.000Z" }
+    },
+    {
+      "name": "0.4: перемещение и переименование — на одном устройстве X вложили в Y (parentId, order), на другом переименовали X; сохраняются обе правки",
+      "a": { "id": "tX", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-03T10:00:00.000Z", "updatedBy": "devA", "deletedAt": null,
+             "fieldTimes": { "title": 1, "parentId": 40, "order": 40 },
+             "title": "Купить билеты", "parentId": "tY", "order": "a5" },
+      "b": { "id": "tX", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-03T10:01:00.000Z", "updatedBy": "devB", "deletedAt": null,
+             "fieldTimes": { "title": 41, "parentId": 1, "order": 1 },
+             "title": "Купить билеты на поезд", "parentId": null, "order": "a1" },
+      "expected": { "id": "tX", "createdAt": "2026-10-01T00:00:00.000Z", "updatedAt": "2026-10-03T10:01:00.000Z", "updatedBy": "devB", "deletedAt": null,
+                    "fieldTimes": { "title": 41, "parentId": 40, "order": 40 },
+                    "title": "Купить билеты на поезд", "parentId": "tY", "order": "a5" }
     }
   ]
 }

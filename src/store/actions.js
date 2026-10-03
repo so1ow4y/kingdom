@@ -10,6 +10,7 @@ import * as M from '../core/model.js';
 import * as S from '../core/selectors.js';
 import * as G from '../core/game.js';
 import * as R from '../core/reminders.js';
+import * as T from '../core/treeDrop.js';
 import { keyBetween, keyForIndex } from '../core/order.js';
 import { humanDate } from '../core/dates.js';
 import { countLabel } from '../core/plural.js';
@@ -511,53 +512,31 @@ export async function reorderNote(id, noteId, index) {
 // ---------- Вложенные задачи (п. 2.8) ----------
 
 /**
- * Сделать задачу подзадачей parentId (null — вынести на верхний уровень). index — место среди новых соседей
- * (по умолчанию — в конец). Проверяются циклы и глубина.
+ * Перемещение в дереве (обновление 0.4) — общий путь для перетаскивания, клавиш и меню: родитель, порядок,
+ * списки (и у подзадач), правило ★ — одним действием с «Отменить». Расчёт — core/treeDrop.js.
  */
-export async function setParent(id, parentId, index = null, listId = undefined) {
-  const t = getTask(id);
-  if (!t) return false;
-  const err = S.nestError(store.data, id, parentId);
-  if (err) {
-    showSnackbar(err);
-    return false;
+export async function moveTask(move, text = 'Перемещено') {
+  if (!move || !getTask(move.id)) return false;
+  if (move.parentId) {
+    const err = S.nestError(store.data, move.id, move.parentId);
+    if (err) {
+      showSnackbar(err);
+      return false;
+    }
   }
-  const rootList = listId !== undefined ? listId : (M.taskListIds(t)[0] || null);
-  const siblings = parentId
-    ? S.containerTasks(store.data, null, parentId).filter((x) => x.id !== id)
-    : S.containerTasks(store.data, rootList).filter((x) => x.id !== id);
-  let order;
-  try {
-    order = keyForIndex(siblings, index == null ? siblings.length : Math.max(0, Math.min(index, siblings.length)));
-  } catch {
-    order = keyAfterSafe(siblings.at(-1)?.order);
-  }
-  const c0 = ctx();
-  const c = change('tasks', id, (x) => {
-    const y = M.touch(x, { parentId: parentId ?? null, order }, c0);
-    // Вынесли наверх на экране списка — задача остаётся в этом списке, а не уходит во «Входящие».
-    return !parentId && rootList && !S.inList(y, rootList) ? M.setListMembership(y, rootList, true, c0) : y;
-  });
-  const ok = await commit([c]);
-  if (ok && (t.parentId ?? null) !== (parentId ?? null)) {
-    offerUndo(parentId ? `Теперь подзадача «${getTask(parentId)?.title ?? ''}»` : 'Вынесено на верхний уровень', [c]);
-  }
+  const changes = T.applyDrop(store.data, move, ctx(), { today: store.now.today });
+  if (!changes.length) return false;
+  const ok = await commit(changes);
+  if (ok) offerUndo(text, changes);
   return ok;
 }
 
-/** Результат перетаскивания в дереве (Sortable, режим nestable): вложить / встать перед / в конец верхнего уровня. */
-export async function dropTask(id, { kind, targetId }, listId = null, rootParentId = null) {
-  if (kind === 'nest') return setParent(id, targetId);
-  if (kind === 'end') return setParent(id, rootParentId, null, listId);
-  const target = getTask(targetId);
-  if (!target) return false;
-  const parentId = S.parentOf(store.data, target)?.id ?? null;
-  const siblings = (parentId ? S.containerTasks(store.data, null, parentId) : S.containerTasks(store.data, listId))
-    .filter((x) => x.id !== id);
-  const index = siblings.findIndex((x) => x.id === targetId);
-  return setParent(id, parentId, index < 0 ? null : index, listId);
+/** Меню задачи: «Сделать подзадачей…» (в конец подзадач) и «Вынести на верхний уровень» (сразу после родителя). */
+export async function setParent(id, parentId) {
+  const move = T.menuMove(store.data, id, parentId);
+  if (!move) return false;
+  return moveTask(move, parentId ? `Теперь подзадача «${getTask(parentId)?.title ?? ''}»` : 'Вынесено на верхний уровень');
 }
-
 /** ★ — главное на сегодня, с проверкой лимита и даты (TZ §7.6). */
 export async function toggleFocus(id) {
   const t = getTask(id);
@@ -565,6 +544,12 @@ export async function toggleFocus(id) {
   const today = store.now.today;
   if (t.focusDate === today) {
     await commit([change('tasks', id, (x) => M.touch(x, { focusDate: null, focusOrder: null }, ctx()))]);
+    return;
+  }
+  // ★ — только у задач верхнего уровня (обновление 0.4): лимит «Главного» считается по ним
+  const parent = S.parentOf(store.data, t);
+  if (parent) {
+    showSnackbar(`★ ставится задачам верхнего уровня — отметь «${parent.title}»`);
     return;
   }
   const others = S.focusTasks(store.data, today).filter((x) => x.id !== id);
@@ -641,22 +626,6 @@ export async function moveOverdueToToday(ids) {
   const c0 = ctx();
   const changes = ids.map((id) => change('tasks', id, (x) => M.touch(x, { scheduledDate: today }, c0)));
   if (await commit(changes)) offerUndo('Перенесено на сегодня', changes);
-}
-
-/**
- * Ручной порядок. siblings — видимый отсортированный список задач (с перемещаемой или без),
- * index — новая позиция в списке без перемещаемой задачи.
- */
-export async function reorderTask(id, siblings, index, field = 'order') {
-  const rest = siblings.filter((x) => x.id !== id);
-  let key;
-  try {
-    key = keyForIndex(rest, Math.max(0, Math.min(index, rest.length)), field);
-  } catch (e) {
-    reportError(e);
-    return;
-  }
-  await commit([change('tasks', id, (x) => M.touch(x, { [field]: key }, ctx()))]);
 }
 
 export async function duplicateTask(id) {

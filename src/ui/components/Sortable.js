@@ -1,16 +1,12 @@
-// Перестановка перетаскиванием за ручку. Работает мышью и пальцем (pointer events).
-// Обычный режим: onMove(id, index) — index в списке БЕЗ перемещаемого элемента (как ждёт actions.reorderTask).
-// Режим дерева (nestable, п. 2.8): onDrop({ id, kind, targetId }):
-//   kind 'nest'   — бросили на середину строки targetId: сделать подзадачей;
-//   kind 'before' — бросили между строками: встать перед targetId на его уровне;
-//   kind 'end'    — бросили ниже последней строки: верхний уровень, в конец.
+// Перестановка перетаскиванием за ручку (заметки, списки, приоритеты). Работает мышью и пальцем (pointer events).
+// onMove(id, index) — index в списке БЕЗ перемещаемого элемента. Задачи перетаскиваются деревом — components/TaskTree.js.
 
 import { html, useRef, useState } from '../html.js';
 
-export function SortableList({ items, render, onMove, onDrop = null, nestable = false, className = '', disabled = false }) {
+export function SortableList({ items, render, onMove, className = '', disabled = false }) {
   const box = useRef(null);
   const st = useRef(null);
-  const [drag, setDrag] = useState(null); // { from, to, dy, h, nest }
+  const [drag, setDrag] = useState(null); // { from, to, dy, h }
 
   const start = (e, id) => {
     if (disabled || (e.pointerType === 'mouse' && e.button !== 0)) return;
@@ -25,8 +21,8 @@ export function SortableList({ items, render, onMove, onDrop = null, nestable = 
       // захват указателя не обязателен: события всё равно придут на ручку
     }
     const rects = nodes.map((n) => n.getBoundingClientRect());
-    st.current = { id, from, to: from, nest: -1, startY: e.clientY, rects };
-    setDrag({ from, to: from, dy: 0, h: rects[from].height, nest: -1 });
+    st.current = { id, from, to: from, startY: e.clientY, rects };
+    setDrag({ from, to: from, dy: 0, h: rects[from].height });
   };
 
   const move = (e) => {
@@ -35,23 +31,13 @@ export function SortableList({ items, render, onMove, onDrop = null, nestable = 
     e.preventDefault();
     const dy = e.clientY - s.startY;
     const r = s.rects[s.from];
-    let nest = -1;
-    if (nestable) {
-      s.rects.forEach((x, i) => {
-        if (i !== s.from && e.clientY > x.top + x.height * 0.25 && e.clientY < x.bottom - x.height * 0.25) nest = i;
-      });
-    }
-    let to = s.from;
-    if (nest < 0) {
-      const mid = r.top + r.height / 2 + dy;
-      to = 0;
-      s.rects.forEach((x, i) => {
-        if (i !== s.from && x.top + x.height / 2 < mid) to++;
-      });
-    }
+    const mid = r.top + r.height / 2 + dy;
+    let to = 0;
+    s.rects.forEach((x, i) => {
+      if (i !== s.from && x.top + x.height / 2 < mid) to++;
+    });
     s.to = to;
-    s.nest = nest;
-    setDrag({ from: s.from, to, dy, h: r.height, nest });
+    setDrag({ from: s.from, to, dy, h: r.height });
   };
 
   const end = () => {
@@ -59,19 +45,12 @@ export function SortableList({ items, render, onMove, onDrop = null, nestable = 
     if (!s) return;
     st.current = null;
     setDrag(null);
-    if (nestable && onDrop) {
-      const rest = items.filter((x) => x.id !== s.id);
-      if (s.nest >= 0) onDrop({ id: s.id, kind: 'nest', targetId: items[s.nest].id });
-      else if (s.to !== s.from) onDrop(s.to < rest.length ? { id: s.id, kind: 'before', targetId: rest[s.to].id } : { id: s.id, kind: 'end', targetId: null });
-      return;
-    }
     if (s.to !== s.from) onMove(s.id, s.to);
   };
 
   const shiftOf = (i) => {
     if (!drag) return 0;
     if (i === drag.from) return drag.dy;
-    if (drag.nest >= 0) return 0;
     if (drag.to > drag.from && i > drag.from && i <= drag.to) return -drag.h;
     if (drag.to < drag.from && i >= drag.to && i < drag.from) return drag.h;
     return 0;
@@ -88,7 +67,7 @@ export function SortableList({ items, render, onMove, onDrop = null, nestable = 
         };
         const dy = shiftOf(i);
         return html`<div key=${item.id} data-sid=${item.id}
-          class=${'sortable-item' + (drag && i === drag.from ? ' dragging' : '') + (drag && i === drag.nest ? ' nest-target' : '')}
+          class=${'sortable-item' + (drag && i === drag.from ? ' dragging' : '')}
           style=${dy ? { transform: `translateY(${dy}px)` } : { transform: '' }}>
           ${render(item, handle)}
         </div>`;

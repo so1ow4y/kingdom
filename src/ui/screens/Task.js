@@ -151,7 +151,7 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
         <${Chip} icon=${html`<i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i>`}
           active=${prio && prio.id !== PRIORITY_NONE_ID} label=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : 'Приоритет'}
           onClick=${(e) => openSheet('priority', { taskId, anchor: anchorOf(e) })} disabled=${locked}/>
-        ${!done ? html`<${Chip} icon=${html`<${Icon} name="star" filled=${focusedToday} size=${16}/>`} active=${focusedToday}
+        ${!done && (!parent || focusedToday) ? html`<${Chip} icon=${html`<${Icon} name="star" filled=${focusedToday} size=${16}/>`} active=${focusedToday}
           tone=${focusedToday ? 'star-on' : ''} label=${focusedToday ? 'Главное' : 'В главное'}
           onClick=${() => A.toggleFocus(taskId)} disabled=${locked}/>` : null}
       </div>

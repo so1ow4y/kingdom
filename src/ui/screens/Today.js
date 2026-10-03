@@ -1,9 +1,10 @@
-// Экран «Сегодня» (docs/TZ.md §6.2).
+// Экран «Сегодня» (docs/TZ.md §6.2). Все блоки — деревьями в одной области перетаскивания (обновление 0.4):
+// подзадача, чей родитель тоже на экране, показывается под ним; вложить можно и в задачу соседнего блока,
+// а переставлять между блоками нельзя. Ручной порядок — только в «Главном», в остальных блоках он автоматический.
 
 import { html, useMemo } from '../html.js';
 import { Section, Empty } from '../components/Section.js';
-import { TaskRow, TaskList } from '../components/TaskRow.js';
-import { SortableList } from '../components/Sortable.js';
+import { TaskTree, DragScope } from '../components/TaskTree.js';
 import { Banner } from '../components/Overlays.js';
 import { Icon } from '../icons.js';
 import { useLocal } from '../hooks.js';
@@ -16,6 +17,18 @@ import { LIMITS } from '../../config.js';
 export function TodayScreen() {
   const { today, time, ms } = store.now;
   const v = useMemo(() => S.todayView(store.data, today, time, ms), [store.version, today, time]);
+  const f = useMemo(() => S.selectionForest(store.data, {
+    focus: v.focus, overdue: v.overdue, today: v.today, chores: v.chores, soon: v.soon, doneToday: v.doneToday,
+  }), [v]);
+  const zone = (key, autoReason) => ({
+    manual: !autoReason,
+    orderField: key === 'focus' ? 'focusOrder' : 'order',
+    accepts: (t) => f.home.get(t.id) === key,
+    rejectReason: key === 'focus' ? 'В «Главное» — звёздочкой ★' : 'Задача из другого блока — сюда её можно только вложить',
+    autoReason,
+  });
+  const tree = (key, autoReason, props = {}) => html`<${TaskTree} zone=${key} roots=${f.roots[key]} index=${f.index}
+    cfg=${zone(key, autoReason)} ...${props}/>`;
   const inboxCount = useMemo(() => S.inboxView(store.data).length, [store.version]);
   const [dismissedOn, setDismissedOn] = useLocal('yesterdayDismissed', null);
   const readOnly = !!store.ui.readOnly;
@@ -28,7 +41,7 @@ export function TodayScreen() {
   const showYesterday = v.yesterdayFocus.length > 0 && dismissedOn !== today && !readOnly;
 
   return html`
-    <div class="screen today">
+    <${DragScope} className="screen today">
       ${showYesterday ? html`
         <${Banner} tone="warn" onClose=${() => setDismissedOn(today)} actions=${html`
           <button class="btn small primary" onClick=${() => A.carryYesterdayFocus(v.yesterdayFocus.map((t) => t.id))}>Перенести на сегодня</button>
@@ -42,34 +55,32 @@ export function TodayScreen() {
         actions=${!readOnly && v.focus.length < LIMITS.focusMax
           ? html`<button class="btn small ghost" onClick=${() => openSheet('focusPicker')}>Выбрать</button>` : null}>
         ${v.focus.length > LIMITS.focusMax ? html`<p class="hint warn">Главных больше трёх — убери лишние</p>` : null}
-        ${v.focus.length
-          ? html`<${SortableList} items=${v.focus} disabled=${readOnly}
-              onMove=${(id, index) => A.reorderTask(id, v.focus, index, 'focusOrder')}
-              render=${(t, handle) => html`<${TaskRow} task=${t} handle=${handle}/>`}/>`
+        ${f.roots.focus.length
+          ? tree('focus', null)
           : html`<${Empty}>Выбери до ${LIMITS.focusMax} главных задач на сегодня — нажми ★ у задачи или «Выбрать».<//>`}
       <//>
 
-      ${v.overdue.length ? html`
-        <${Section} title="Просрочено" count=${v.overdue.length} tone="danger"
+      ${f.roots.overdue.length ? html`
+        <${Section} title="Просрочено" count=${f.roots.overdue.length} tone="danger"
           actions=${readOnly ? null : html`<button class="btn small ghost" onClick=${() => A.moveOverdueToToday(v.overdue.map((t) => t.id))}>Всё на сегодня</button>`}>
-          <${TaskList} tasks=${v.overdue}/>
+          ${tree('overdue', 'Порядок здесь по дате — можно вложить или вынести')}
         <//>` : null}
 
-      ${v.today.length ? html`
-        <${Section} title="На сегодня" count=${v.today.length}>
-          <${TaskList} tasks=${v.today}/>
+      ${f.roots.today.length ? html`
+        <${Section} title="На сегодня" count=${f.roots.today.length}>
+          ${tree('today', 'Порядок здесь по времени и приоритету — можно вложить или вынести')}
         <//>` : null}
 
-      ${v.soon.length ? html`
-        <${Section} title="Скоро дедлайн" count=${v.soon.length} collapsible defaultOpen=${false} storageKey="today.soon">
-          <${TaskList} tasks=${v.soon}/>
+      ${f.roots.soon.length ? html`
+        <${Section} title="Скоро дедлайн" count=${f.roots.soon.length} collapsible defaultOpen=${false} storageKey="today.soon">
+          ${tree('soon', 'Порядок здесь по дедлайну — можно вложить или вынести')}
         <//>` : null}
 
-      ${v.chores.length ? html`
+      ${f.roots.chores.length ? html`
         <${Section} key=${'chores-' + (mainUndone ? 1 : 0)} className="chores"
-          title=${`${choresList?.emoji ? choresList.emoji + ' ' : ''}Быт`} count=${v.chores.length}
+          title=${`${choresList?.emoji ? choresList.emoji + ' ' : ''}Быт`} count=${f.roots.chores.length}
           collapsible defaultOpen=${!mainUndone}>
-          <${TaskList} tasks=${v.chores} showList=${false}/>
+          ${tree('chores', 'Порядок здесь по времени — можно вложить или вынести', { showList: false })}
         <//>` : null}
 
       ${everythingEmpty ? html`
@@ -79,9 +90,9 @@ export function TodayScreen() {
           <p class="muted">Загляни во «Входящие» (${countLabel(inboxCount, ['задача', 'задачи', 'задач'])}) или запланируй что-нибудь на сегодня.</p>
         </div>` : null}
 
-      ${v.doneToday.length ? html`
-        <${Section} title="Выполнено сегодня" count=${v.doneToday.length} collapsible defaultOpen=${false} storageKey="today.done">
-          <${TaskList} tasks=${v.doneToday}/>
+      ${f.roots.doneToday.length ? html`
+        <${Section} title="Выполнено сегодня" count=${f.roots.doneToday.length} collapsible defaultOpen=${false} storageKey="today.done">
+          ${tree('doneToday', 'Порядок здесь по времени выполнения')}
         <//>` : null}
-    </div>`;
+    <//>`;
 }

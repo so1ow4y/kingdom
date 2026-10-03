@@ -170,8 +170,8 @@ function TaskMenuSheet({ taskId }) {
       ${t.status === 'done'
         ? html`<${MenuItem} icon="restore" label="Вернуть в работу" onClick=${run(() => A.reopenTask(taskId))}/>`
         : html`
-          <${MenuItem} icon=${html`<${Icon} name="star" filled=${focused} size=${20}/>`}
-            label=${focused ? 'Убрать из главного' : 'Главное на сегодня'} onClick=${run(() => A.toggleFocus(taskId))}/>
+          ${!parent || focused ? html`<${MenuItem} icon=${html`<${Icon} name="star" filled=${focused} size=${20}/>`}
+            label=${focused ? 'Убрать из главного' : 'Главное на сегодня'} onClick=${run(() => A.toggleFocus(taskId))}/>` : null}
           <${MenuItem} icon="calendar" label="Когда…" hint=${t.scheduledDate ? humanDate(t.scheduledDate, today) : null}
             onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })}/>
           <${MenuItem} icon="flag" label="Дедлайн…" hint=${t.deadlineDate ? humanDate(t.deadlineDate, today) : null}
@@ -210,7 +210,7 @@ function FocusPickerSheet() {
     ['На сегодня', [...v.today, ...v.chores.filter((t) => !S.isOverdue(t, today, store.now.time))]],
     ['Просрочено', [...v.overdue, ...v.chores.filter((t) => S.isOverdue(t, today, store.now.time))]],
     ['Входящие', S.inboxView(store.data)],
-  ].map(([title, list]) => [title, list.filter((t) => t.focusDate !== today && !seen.has(t.id) && seen.add(t.id))]);
+  ].map(([title, list]) => [title, list.filter((t) => t.focusDate !== today && !S.parentOf(store.data, t) && !seen.has(t.id) && seen.add(t.id))]);
   const pick = async (id) => {
     await A.toggleFocus(id);
     if (S.focusTasks(store.data, today).length >= LIMITS.focusMax) closeSheet();

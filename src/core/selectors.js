@@ -231,6 +231,34 @@ export function todayView(data, today, time, nowMs = Date.now()) {
   return v;
 }
 
+/**
+ * Дерево экрана-подборки (обновление 0.4): blocks — { ключ блока: задачи блока в его порядке }, порядок ключей = важность.
+ * Задача, чей родитель тоже на экране, показывается под родителем — если блок родителя не менее важен
+ * (иначе сегодняшняя подзадача спряталась бы в свёрнутом «Скоро дедлайн» или «Выполнено»). Остальные — корни своего блока.
+ * → { roots: { ключ: Task[] }, index: Map<parentId, Task[]> (по order), home: Map<id, ключ блока> }
+ */
+export function selectionForest(data, blocks) {
+  const keys = Object.keys(blocks);
+  const home = new Map();
+  for (const k of keys) for (const t of blocks[k]) if (!home.has(t.id)) home.set(t.id, k);
+  const rank = (id) => keys.indexOf(home.get(id));
+  const index = new Map();
+  const roots = {};
+  for (const k of keys) {
+    roots[k] = [];
+    for (const t of blocks[k]) {
+      if (home.get(t.id) !== k) continue;
+      const p = parentOf(data, t);
+      if (p && home.has(p.id) && rank(p.id) <= rank(t.id)) {
+        if (!index.has(p.id)) index.set(p.id, []);
+        index.get(p.id).push(t);
+      } else roots[k].push(t);
+    }
+  }
+  for (const list of index.values()) list.sort(byOrder);
+  return { roots, index, home };
+}
+
 /** Сколько задач уже отмечены главными на дату (включая выполненные). */
 export function focusTasks(data, date) {
   const r = [];
@@ -259,15 +287,19 @@ export function inboxView(data) {
 /** Корни дерева в списке: члены списка, чей родитель не состоит в этом же списке. */
 const listRoot = (data, t, listId) => inList(t, listId) && !(parentOf(data, t) && inList(parentOf(data, t), listId));
 
+/** Раздел экрана списка, в который попадает задача: 'done' | 'repeating' | 'scheduled' | 'noDate'. */
+export function listSection(t) {
+  if (t.status === 'done') return 'done';
+  if (t.repeat) return 'repeating';
+  return t.scheduledDate || t.deadlineDate ? 'scheduled' : 'noDate';
+}
+
 /** Экран списка (TZ §6.5): секции из корней дерева; подзадачи — под родителем. */
 export function listView(data, listId) {
   const v = { scheduled: [], noDate: [], repeating: [], done: [], doneCount: 0 };
   for (const t of data.tasks.values()) {
     if (!isAlive(t) || t.trashedAt || !listRoot(data, t, listId)) continue;
-    if (t.status === 'done') v.done.push(t);
-    else if (t.repeat) v.repeating.push(t);
-    else if (t.scheduledDate || t.deadlineDate) v.scheduled.push(t);
-    else v.noDate.push(t);
+    v[listSection(t)].push(t);
   }
   v.scheduled.sort((a, b) => {
     const ka = a.scheduledDate || a.deadlineDate;

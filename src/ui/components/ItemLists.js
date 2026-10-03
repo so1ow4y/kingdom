@@ -3,7 +3,7 @@
 import { html, useState, useRef, useEffect, useLayoutEffect, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { SortableList, DragHandle } from './Sortable.js';
-import { TaskTree } from './TaskRow.js';
+import { TaskTree } from './TaskTree.js';
 import { store, registerFlusher } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
@@ -100,7 +100,7 @@ export function NotesEditor({ taskId, locked = false }) {
 }
 
 /** Поле «+ Добавить подзадачу»: Enter добавляет и оставляет фокус для следующей. */
-function AddLine({ placeholder, onAdd, disabled = false }) {
+export function AddLine({ placeholder, onAdd, disabled = false }) {
   const [v, setV] = useState('');
   const submit = async (e) => {
     e.preventDefault();
@@ -124,7 +124,7 @@ export function SubtasksEditor({ taskId, locked = false }) {
   const canNest = t && S.depthOf(store.data, t) < S.MAX_DEPTH;
   return html`
     <div class="item-list">
-      ${kids.length ? html`<${TaskTree} roots=${kids} showList=${false} rootParentId=${taskId} sortable=${!locked}/>` : null}
+      ${kids.length ? html`<${TaskTree} zone=${'sub:' + taskId} roots=${kids} showList=${false} cfg=${{ manual: true, rootParentId: taskId }}/>` : null}
       ${locked ? null : canNest
         ? html`<${AddLine} placeholder="Добавить подзадачу" onAdd=${(s) => A.addChild(taskId, s)}/>`
         : html`<p class="hint">Глубже ${S.MAX_DEPTH} уровней вкладывать нельзя.</p>`}

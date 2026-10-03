@@ -17,4 +17,5 @@ await run([
   './game.test.js',
   './reminders.test.js',
   './analytics.test.js',
+  './treeDrop.test.js',
 ]);

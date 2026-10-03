@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.3.0';
+const VERSION = '0.4.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -27,6 +27,7 @@ const PRECACHE = [
   './src/core/priorities.js',
   './src/core/reminders.js',
   './src/core/selectors.js',
+  './src/core/treeDrop.js',
   './src/data/envelope.js',
   './src/data/migrations/index.js',
   './src/data/migrations/m001_to_002.js',
@@ -63,6 +64,7 @@ const PRECACHE = [
   './src/ui/components/Sortable.js',
   './src/ui/components/Sync.js',
   './src/ui/components/TaskRow.js',
+  './src/ui/components/TaskTree.js',
   './src/ui/hooks.js',
   './src/ui/html.js',
   './src/ui/icons.js',

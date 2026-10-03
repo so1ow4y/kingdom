@@ -382,7 +382,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 
 /* ---------- Строка задачи ---------- */
 
-.task-list, .sortable { display: flex; flex-direction: column; gap: 6px; }
+.task-list, .sortable, .task-tree { display: flex; flex-direction: column; gap: 6px; }
 .task-row {
   position: relative;
   display: flex;
@@ -657,12 +657,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   box-shadow: var(--shadow);
 }
 .list-link { flex: 1; display: flex; align-items: center; gap: 10px; min-height: 52px; padding: 0 14px 0 0; color: var(--text); text-decoration: none; min-width: 0; }
-.list-row.list-link { padding-right: 14px; }
 .list-color { align-self: stretch; width: 5px; border-radius: var(--radius-sm) 0 0 var(--radius-sm); flex: none; }
 .list-emoji { width: 26px; text-align: center; font-size: 18px; flex: none; }
 .list-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 550; }
 .list-count { color: var(--muted); font-size: 14px; }
-.inbox-link { margin-bottom: 12px; }
 
 .list-editor .color-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 10px; max-width: 360px; }
 .color-swatch { aspect-ratio: 1; border-radius: 50%; border: 3px solid transparent; outline: 1px solid var(--border); }
@@ -737,7 +735,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .task-row.child { margin-left: calc(var(--depth, 0) * 22px); }
 .tree-toggle { flex: none; display: grid; place-items: center; width: 24px; height: 44px; margin-right: -6px; border: 0; background: none; color: var(--muted); }
 .tree-toggle.empty { visibility: hidden; }
-.sortable-item.nest-target .task-row { box-shadow: 0 0 0 2px var(--accent), var(--shadow); background: var(--accent-soft); }
 .meta-lists { display: inline-flex; gap: 8px; flex-wrap: wrap; }
 .meta-list { display: inline-flex; align-items: center; gap: 4px; }
 .meta-more { color: var(--muted); }
@@ -977,3 +974,30 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .rules summary { cursor: pointer; font-weight: 600; }
 .rules ul { margin: 8px 0 0; padding-left: 20px; color: var(--muted); font-size: 13.5px; }
 .rules li { margin: 4px 0; }
+
+/* ---------- Перетаскивание задач в дереве (обновление 0.4) ---------- */
+.tree-row { position: relative; }
+.tree-row.drag-src { z-index: 30; will-change: transform; pointer-events: none; }
+.tree-row.drag-src .task-row { box-shadow: var(--shadow-lg); opacity: .96; }
+.tree-row.drop-into .task-row { box-shadow: 0 0 0 2px var(--accent), var(--shadow); background: var(--accent-soft); }
+.tree-row.drop-into.invalid .task-row { box-shadow: 0 0 0 2px var(--danger), var(--shadow); background: var(--danger-soft); }
+.drop-line { position: fixed; left: 0; top: 0; z-index: 60; display: none; height: 3px; border-radius: 2px; background: var(--accent); pointer-events: none; }
+.drop-line::before { content: ""; position: absolute; left: -5px; top: -3.5px; width: 10px; height: 10px; border-radius: 50%; border: 2px solid var(--accent); background: var(--surface); box-sizing: border-box; }
+.drop-line.invalid { background: var(--danger); }
+.drop-line.invalid::before { border-color: var(--danger); }
+.drop-badge { position: fixed; left: 0; top: 0; z-index: 61; display: none; max-width: min(80vw, 360px); padding: 3px 10px; border-radius: 12px; background: var(--accent); color: var(--accent-text); font-size: 12.5px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; pointer-events: none; box-shadow: var(--shadow); }
+.drop-badge.invalid { background: var(--danger); color: #fff; }
+body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
+.tree-empty { display: grid; place-items: center; min-height: 52px; padding: 8px 12px; border: 2px dashed var(--border); border-radius: var(--radius-sm); color: var(--muted); font-size: 13.5px; text-align: center; }
+.task-tree.compact .task-row { min-height: 48px; }
+
+/* ---------- «Списки»: раскрытие списка на месте ---------- */
+.list-expand { flex: none; align-self: stretch; display: grid; place-items: center; min-width: 52px; border: 0; border-left: 1px solid var(--border); border-radius: 0 var(--radius-sm) var(--radius-sm) 0; background: none; color: var(--muted); }
+.list-expand:hover { background: var(--surface-2); color: var(--accent); }
+.list-row.open { border-bottom-left-radius: 0; border-bottom-right-radius: 0; margin-bottom: 0; }
+.list-row.open .list-expand { color: var(--accent); border-bottom-right-radius: 0; }
+.list-expanded { margin: 0 0 10px; padding: 8px 8px 6px 14px; border-radius: 0 0 var(--radius-sm) var(--radius-sm); background: color-mix(in srgb, var(--surface-2) 70%, transparent); }
+.exp-sub { margin: 6px 2px 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.exp-sub:first-child { margin-top: 0; }
+.list-expanded .item-add-line { margin-top: 6px; }
+.exp-open { display: inline-block; margin-top: 4px; font-size: 14px; text-decoration: none; }
