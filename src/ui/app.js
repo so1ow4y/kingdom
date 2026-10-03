@@ -18,6 +18,7 @@ import { AnalyticsScreen } from './screens/Analytics.js';
 import { ShopScreen } from './screens/Shop.js';
 import { StartScreen, RedirectingScreen } from './components/Sync.js';
 import { Dock } from './components/Dock.js';
+import { Decorations } from './components/Decorations.js';
 import { dockPosition } from './prefs.js';
 import { clearMissed } from './notifier.js';
 import { pull } from '../sync/syncEngine.js';
@@ -26,12 +27,14 @@ import {
 } from '../store/appState.js';
 import { updateSettings } from '../store/actions.js';
 import * as S from '../core/selectors.js';
+import { planningDate } from '../core/planning.js';
+import { humanDate } from '../core/dates.js';
 import { deviceTimeZone } from '../core/dates.js';
 import { applyUpdate } from '../pwa/swClient.js';
 
 function titleFor(route) {
   switch (route.name) {
-    case 'today': return 'Сегодня';
+    case 'today': return humanDate(planningDate(route.query.date, store.now.today), store.now.today);
     case 'inbox': return 'Входящие';
     case 'lists': return 'Списки';
     case 'list': {
@@ -62,7 +65,7 @@ function Screen({ route }) {
     case 'journal': return html`<${JournalScreen}/>`;
     case 'analytics': return html`<${AnalyticsScreen}/>`;
     case 'shop': return html`<${ShopScreen}/>`;
-    default: return html`<${TodayScreen}/>`;
+    default: return html`<${TodayScreen} query=${route.query}/>`;
   }
 }
 
@@ -138,7 +141,7 @@ export function App() {
 
   const quickCtx = () => {
     if (base.name === 'list' && S.liveList(store.data, base.param)) return { listId: base.param };
-    if (base.name === 'today') return { scheduledDate: store.now.today };
+    if (base.name === 'today') return { scheduledDate: planningDate(base.query.date, store.now.today) };
     return {};
   };
   const add = () => !store.ui.readOnly && openQuickAdd(quickCtx());
@@ -200,7 +203,7 @@ export function App() {
 
   return html`
     <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + dockPosition(!desktop)}>
-      <${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
+      <${Decorations}/><${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
       <div class="main-col">
         ${base.name !== 'task' ? html`<${TopBar} route=${base}/>` : null}
         <${Banners}/>

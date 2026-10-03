@@ -20,6 +20,8 @@ import { humanDate } from '../core/dates.js';
 import { countLabel } from '../core/plural.js';
 import { LIMITS, MEDIA } from '../config.js';
 import { APP_VERSION } from '../version.js';
+import { tokenValid } from '../google/auth.js';
+import { planningDate } from '../core/planning.js';
 
 let repo = null;
 let clock = null;
@@ -152,6 +154,28 @@ export async function renameDevice(name) {
   await repo.setMeta('deviceName', n);
 }
 
+export async function removeDevices(ids) {
+  if (!tokenValid()) { showSnackbar('Сначала войди через Google'); return false; }
+  const devices = [...new Set(ids)].map(id => store.data.devices.get(id))
+    .filter(d => d && !d.deletedAt && d.id !== deviceId);
+  if (!devices.length) return false;
+  if (!await confirm({ title: devices.length === 1 ? `Удалить устройство «${devices[0].name}»?` : 'Очистить все сессии, кроме текущей?',
+    text: 'После отправки на Диск эти устройства выйдут из LifeTasks при следующей синхронизации. Локальные задачи сохранятся. Старые версии приложения могут не поддерживать выход. Доступ Google не отзывается.',
+    confirmLabel: 'Удалить и отправить', danger: true })) return false;
+  if (!tokenValid()) { showSnackbar('Сессия истекла — войди заново'); return false; }
+  return commit(devices.map(d => change('devices', d.id, x => M.tombstone(x, ctx()))));
+}
+
+export async function restoreDeviceSession() {
+  const d = store.data.devices.get(deviceId);
+  if (d?.deletedAt && (store.auth?.authenticatedAt || 0) > Date.parse(d.deletedAt)) {
+    const savedName = await repo.getMeta('deviceName');
+    await commit([change('devices', deviceId, () => M.newDevice({ id: deviceId,
+      name: d.name || savedName || (navigator.userAgent.includes('Android') ? 'Телефон' : 'Комп'),
+      platform: d.platform || 'other', appVersion: APP_VERSION }, ctx()))]);
+  }
+}
+
 /** Восстановить проигравшее значение из журнала конфликтов (новой правкой). */
 export async function restoreConflict(row) {
   const [coll, id] = row.entityKey.split('/');
@@ -213,7 +237,7 @@ function coinChanges(task, done, c0) {
  */
 export async function createTask(input) {
   const { title, listIds = [], parentId = null, focus = false, subtasks = [] } = input;
-  const today = store.now.today;
+  const today = planningDate(input.focusDate, store.now.today);
   const c0 = ctx();
   const first = S.containerTasks(store.data, listIds[0] || null, parentId)[0];
   let focusDate = null;
@@ -661,10 +685,9 @@ export async function setParent(id, parentId) {
   return moveTask(move, parentId ? `Теперь подзадача «${getTask(parentId)?.title ?? ''}»` : 'Вынесено на верхний уровень');
 }
 /** ★ — главное на сегодня, с проверкой лимита и даты (TZ §7.6). */
-export async function toggleFocus(id) {
+export async function toggleFocus(id, today = store.now.today) {
   const t = getTask(id);
   if (!t) return;
-  const today = store.now.today;
   if (t.focusDate === today) {
     await commit([change('tasks', id, (x) => M.touch(x, { focusDate: null, focusOrder: null }, ctx()))]);
     return;
@@ -691,10 +714,10 @@ export async function toggleFocus(id) {
   if (t.scheduledDate && t.scheduledDate > today) {
     const v = await ask({
       title: `Задача запланирована на ${humanDate(t.scheduledDate, today)}`,
-      text: 'Сделать её сегодня?',
+      text: 'Перенести на выбранный день?',
       buttons: [
         { label: 'Только отметить главной', value: 'focus' },
-        { label: 'Да, на сегодня', value: 'today', kind: 'primary' },
+        { label: 'Да, перенести', value: 'today', kind: 'primary' },
       ],
     });
     if (!v) return;
@@ -947,7 +970,7 @@ export async function updateSettings(changes) {
 
 export async function syncDeviceInfo() {
   const d = store.data.devices.get(deviceId);
-  if (d && d.appVersion !== APP_VERSION) {
+  if (d && !d.deletedAt && d.appVersion !== APP_VERSION) {
     await commit([change('devices', deviceId, (x) => M.touch(x, { appVersion: APP_VERSION }, ctx()))]);
   }
 }

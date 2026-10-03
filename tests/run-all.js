@@ -15,6 +15,7 @@ await run([
   './status.test.js',
   './migration.test.js',
   './game.test.js',
+  './planning-game.test.js',
   './reminders.test.js',
   './analytics.test.js',
   './treeDrop.test.js',

@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.5.0';
+const VERSION = '0.6.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -24,11 +24,13 @@ const PRECACHE = [
   './src/core/merge.js',
   './src/core/model.js',
   './src/core/order.js',
+  './src/core/planning.js',
   './src/core/plural.js',
   './src/core/priorities.js',
   './src/core/reminders.js',
   './src/core/retention.js',
   './src/core/selectors.js',
+  './src/core/sessions.js',
   './src/core/treeDrop.js',
   './src/data/envelope.js',
   './src/data/exportZip.js',
@@ -61,6 +63,7 @@ const PRECACHE = [
   './src/ui/components/Appearance.js',
   './src/ui/components/Attachments.js',
   './src/ui/components/DataSettings.js',
+  './src/ui/components/Decorations.js',
   './src/ui/components/Dock.js',
   './src/ui/components/ItemLists.js',
   './src/ui/components/ListEditor.js',
@@ -76,6 +79,7 @@ const PRECACHE = [
   './src/ui/components/TaskRow.js',
   './src/ui/components/TaskTree.js',
   './src/ui/components/TimeInput.js',
+  './src/ui/dayContext.js',
   './src/ui/hooks.js',
   './src/ui/html.js',
   './src/ui/icons.js',

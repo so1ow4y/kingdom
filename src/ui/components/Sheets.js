@@ -149,7 +149,7 @@ function ParentPickerSheet({ taskId }) {
     <//>`;
 }
 
-function TaskMenuSheet({ taskId }) {
+function TaskMenuSheet({ taskId, date }) {
   const t = A.getTask(taskId);
   if (!t || t.deletedAt) return null;
   const run = (fn) => () => {
@@ -164,7 +164,8 @@ function TaskMenuSheet({ taskId }) {
         <${MenuItem} icon="trash" label="Удалить навсегда" danger onClick=${run(() => A.deleteForever(taskId))}/>
       <//>`;
   }
-  const focused = t.focusDate === today;
+  const focusDate = date || today;
+  const focused = t.focusDate === focusDate;
   const prio = S.priorityOf(store.data, t);
   const parent = S.parentOf(store.data, t);
   return html`
@@ -173,7 +174,7 @@ function TaskMenuSheet({ taskId }) {
         ? html`<${MenuItem} icon="restore" label="Вернуть в работу" onClick=${run(() => A.reopenTask(taskId))}/>`
         : html`
           ${!parent || focused ? html`<${MenuItem} icon=${html`<${Icon} name="star" filled=${focused} size=${20}/>`}
-            label=${focused ? 'Убрать из главного' : 'Главное на сегодня'} onClick=${run(() => A.toggleFocus(taskId))}/>` : null}
+            label=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(focusDate, today).toLowerCase()} onClick=${run(() => A.toggleFocus(taskId, focusDate))}/>` : null}
           <${MenuItem} icon="calendar" label="Когда…" hint=${t.scheduledDate ? humanDate(t.scheduledDate, today) : null}
             onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })}/>
           <${MenuItem} icon="flag" label="Дедлайн…" hint=${t.deadlineDate ? humanDate(t.deadlineDate, today) : null}
@@ -203,24 +204,25 @@ function TaskMenuSheet({ taskId }) {
 }
 
 /** «Выбрать» главные: задачи на сегодня, просроченные и «Входящие». */
-function FocusPickerSheet() {
-  const today = store.now.today;
-  const v = S.todayView(store.data, today, store.now.time, store.now.ms);
+function FocusPickerSheet({ date }) {
+  const today = date || store.now.today;
+  const v = S.todayView(store.data, today, today === store.now.today ? store.now.time : '00:00',
+    Date.parse(today + 'T12:00:00Z'), today !== store.now.today);
   const focusCount = S.focusTasks(store.data, today).length;
   const seen = new Set();
   const groups = [
-    ['На сегодня', [...v.today, ...v.chores.filter((t) => !S.isOverdue(t, today, store.now.time))]],
+    ['На выбранный день', [...v.today, ...v.chores.filter((t) => !S.isOverdue(t, today, store.now.time))]],
     ['Просрочено', [...v.overdue, ...v.chores.filter((t) => S.isOverdue(t, today, store.now.time))]],
     ['Входящие', S.inboxView(store.data)],
   ].map(([title, list]) => [title, list.filter((t) => t.focusDate !== today && !S.parentOf(store.data, t) && !seen.has(t.id) && seen.add(t.id))]);
   const pick = async (id) => {
-    await A.toggleFocus(id);
+    await A.toggleFocus(id, today);
     if (S.focusTasks(store.data, today).length >= LIMITS.focusMax) closeSheet();
   };
   const total = groups.reduce((n, [, l]) => n + l.length, 0);
   return html`
-    <${Sheet} title=${`Главное на сегодня · ${focusCount}/${LIMITS.focusMax}`} onClose=${closeSheet}>
-      ${total === 0 ? html`<p class="empty">Нет задач на сегодня и во «Входящих». Отметь ★ у любой задачи в её списке.</p>` : null}
+    <${Sheet} title=${`Главное: ${humanDate(today, store.now.today)} · ${focusCount}/${LIMITS.focusMax}`} onClose=${closeSheet}>
+      ${total === 0 ? html`<p class="empty">Нет задач на выбранный день и во «Входящих». Отметь ★ у любой задачи в её списке.</p>` : null}
       ${groups.filter(([, l]) => l.length).map(([title, list]) => html`
         <div class="picker-group">
           <div class="wp-label">${title}</div>
@@ -237,7 +239,7 @@ export function SheetHost() {
     case 'listPicker': return html`<${ListPickerSheet} ...${s}/>`;
     case 'priority': return html`<${PrioritySheet} ...${s}/>`;
     case 'taskMenu': return html`<${TaskMenuSheet} ...${s}/>`;
-    case 'focusPicker': return html`<${FocusPickerSheet}/>`;
+    case 'focusPicker': return html`<${FocusPickerSheet} ...${s}/>`;
     case 'sync': return html`<${SyncPanel}/>`;
     case 'listEditor': return html`<${ListEditorSheet} ...${s}/>`;
     case 'reminder': return html`<${ReminderSheet} ...${s}/>`;

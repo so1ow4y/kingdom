@@ -13,10 +13,22 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { countLabel } from '../../core/plural.js';
 import { LIMITS } from '../../config.js';
+import { addDays, humanDate } from '../../core/dates.js';
+import { planningDate } from '../../core/planning.js';
+import { navigate } from '../router.js';
+import { DayContext } from '../dayContext.js';
 
-export function TodayScreen() {
-  const { today, time, ms } = store.now;
-  const v = useMemo(() => S.todayView(store.data, today, time, ms), [store.version, today, time]);
+export function TodayScreen({ query = {} }) {
+  const today = planningDate(query.date, store.now.today);
+  const current = today === store.now.today;
+  const time = current ? store.now.time : '00:00';
+  const ms = current ? store.now.ms : Date.parse(today + 'T12:00:00Z');
+  const go = (date) => navigate(date === store.now.today ? '/today' : '/today?date=' + date);
+  const v = useMemo(() => {
+    const view = S.todayView(store.data, today, time, ms, !current);
+    if (!current) { view.overdue = []; view.soon = []; view.chores = view.chores.filter(t => t.scheduledDate === today || t.deadlineDate === today); }
+    return view;
+  }, [store.version, today, time, current]);
   const f = useMemo(() => S.selectionForest(store.data, {
     focus: v.focus, overdue: v.overdue, today: v.today, chores: v.chores, soon: v.soon, doneToday: v.doneToday,
   }), [v]);
@@ -38,10 +50,19 @@ export function TodayScreen() {
   const mainUndone = v.focus.some((t) => t.status === 'active') || v.overdue.length || v.today.length;
   const everythingEmpty = !v.focus.length && !v.overdue.length && !v.today.length && !v.chores.length && !v.soon.length;
 
-  const showYesterday = v.yesterdayFocus.length > 0 && dismissedOn !== today && !readOnly;
+  const showYesterday = current && v.yesterdayFocus.length > 0 && dismissedOn !== today && !readOnly;
 
   return html`
+    <${DayContext.Provider} value=${today}>
     <${DragScope} className="screen today">
+      <div class="day-navigation card-block">
+        <button class="btn" aria-label="Предыдущий день" onClick=${() => go(addDays(today, -1))}>←</button>
+        <label class="field"><span>${humanDate(today, store.now.today)}</span><input type="date" aria-label="День планирования" value=${today}
+          onChange=${e => e.target.value && go(planningDate(e.target.value, store.now.today))}/></label>
+        <button class="btn" aria-label="Следующий день" onClick=${() => go(addDays(today, 1))}>→</button>
+        <button class="chip" onClick=${() => go(store.now.today)}>Сегодня</button>
+        <button class="chip" onClick=${() => go(addDays(store.now.today, 1))}>Завтра</button>
+      </div>
       ${showYesterday ? html`
         <${Banner} tone="warn" onClose=${() => setDismissedOn(today)} actions=${html`
           <button class="btn small primary" onClick=${() => A.carryYesterdayFocus(v.yesterdayFocus.map((t) => t.id))}>Перенести на сегодня</button>
@@ -53,11 +74,11 @@ export function TodayScreen() {
       <${Section} title=${html`<${Icon} name="star" filled size=${18}/> Главное`}
         count=${v.focus.length ? `${focusDone}/${v.focus.length}` : null} className="focus-section"
         actions=${!readOnly && v.focus.length < LIMITS.focusMax
-          ? html`<button class="btn small ghost" onClick=${() => openSheet('focusPicker')}>Выбрать</button>` : null}>
+          ? html`<button class="btn small ghost" onClick=${() => openSheet('focusPicker', { date: today })}>Выбрать</button>` : null}>
         ${v.focus.length > LIMITS.focusMax ? html`<p class="hint warn">Главных больше трёх — убери лишние</p>` : null}
         ${f.roots.focus.length
           ? tree('focus', null)
-          : html`<${Empty}>Выбери до ${LIMITS.focusMax} главных задач на сегодня — нажми ★ у задачи или «Выбрать».<//>`}
+          : html`<${Empty}>Выбери до ${LIMITS.focusMax} главных задач на этот день — нажми ★ у задачи или «Выбрать».<//>`}
       <//>
 
       ${f.roots.overdue.length ? html`
@@ -67,7 +88,7 @@ export function TodayScreen() {
         <//>` : null}
 
       ${f.roots.today.length ? html`
-        <${Section} title="На сегодня" count=${f.roots.today.length}>
+        <${Section} title=${current ? 'На сегодня' : 'На этот день'} count=${f.roots.today.length}>
           ${tree('today', 'Порядок здесь по времени и приоритету — можно вложить или вынести')}
         <//>` : null}
 
@@ -86,13 +107,13 @@ export function TodayScreen() {
       ${everythingEmpty ? html`
         <div class="empty-state">
           <div class="empty-emoji">🌤</div>
-          <p>На сегодня ничего.</p>
-          <p class="muted">Загляни во «Входящие» (${countLabel(inboxCount, ['задача', 'задачи', 'задач'])}) или запланируй что-нибудь на сегодня.</p>
+          <p>На этот день ничего.</p>
+          <p class="muted">Загляни во «Входящие» (${countLabel(inboxCount, ['задача', 'задачи', 'задач'])}) или добавь задачу кнопкой «+».</p>
         </div>` : null}
 
       ${f.roots.doneToday.length ? html`
-        <${Section} title="Выполнено сегодня" count=${f.roots.doneToday.length} collapsible defaultOpen=${false} storageKey="today.done">
+        <${Section} title="Выполнено в этот день" count=${f.roots.doneToday.length} collapsible defaultOpen=${false} storageKey=${'today.done.' + today}>
           ${tree('doneToday', 'Порядок здесь по времени выполнения')}
         <//>` : null}
-    <//>`;
+    <//><//>`;
 }

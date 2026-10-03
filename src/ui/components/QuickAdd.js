@@ -45,7 +45,7 @@ function QuickAddSheet({ ctx }) {
     const t = normalizeTitle(title);
     if (!t || readOnly) return;
     const r = await createTask({
-      title: t, listIds, priorityId, scheduledDate: date, scheduledTime: date ? time : null, focus,
+      title: t, listIds, priorityId, scheduledDate: date, scheduledTime: date ? time : null, focus, focusDate: date || today,
       reminders: reminders ?? undefined,
       notes: notes.filter((n) => n.trim()), subtasks: subtasks.filter((s) => s.trim()),
     });
@@ -111,6 +111,8 @@ function QuickAddSheet({ ctx }) {
             <button type="button" class=${'chip' + (date === d ? ' selected' : '')}
               onClick=${() => setDate(date === d ? null : d)}>${dayLabel(d, i)}</button>`)}
         </div>
+        <label class="field"><span>Дата задачи</span><input type="date" aria-label="Дата новой задачи" value=${date || ''}
+          onChange=${e => setDate(e.target.value || null)}/></label>
         ${date ? html`<div class="chip-row wrap">
           <span class=${'chip chip-timebox' + (time ? ' selected' : '')}><${Icon} name="clock" size=${16}/>
             <${TimeInput} value=${time} onChange=${setTime} label="Время"/></span>

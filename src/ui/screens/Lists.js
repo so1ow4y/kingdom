@@ -44,6 +44,8 @@ function ListRow({ list, count, handle = null, reorder = false, onUp, onDown, op
         <span class="list-name">${list ? list.name : 'Входящие'}</span>
         <span class="list-count">${count || ''}</span>
       <//>
+      ${list && !reorder ? html`<button class="icon-btn" title="Изменить список" aria-label=${'Изменить список ' + list.name}
+        disabled=${!!store.ui.readOnly} onClick=${() => openSheet('listEditor', { listId: list.id })}><${Icon} name="edit" size=${18}/></button>` : null}
       ${reorder ? html`
         <button class="icon-btn" onClick=${onUp} aria-label="Выше" disabled=${!onUp}><${Icon} name="up" size=${18}/></button>
         <button class="icon-btn" onClick=${onDown} aria-label="Ниже" disabled=${!onDown}><${Icon} name="down" size=${18}/></button>

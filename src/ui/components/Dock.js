@@ -6,7 +6,7 @@
 
 import { html, useState, useRef, useEffect, useLayoutEffect } from '../html.js';
 import { Icon } from '../icons.js';
-import { Link } from '../router.js';
+import { Link, navigate } from '../router.js';
 import { store, openSheet } from '../../store/appState.js';
 import * as S from '../../core/selectors.js';
 import { indicator } from '../../sync/status.js';
@@ -23,14 +23,14 @@ export function AppLetter({ size = 36 }) {
   return html`<span class="app-letter" style=${{ width: size + 'px', height: size + 'px', fontSize: size * 0.5 + 'px' }} aria-hidden="true">L</span>`;
 }
 
-function Item({ to, icon, label, active, count, mode, color, emoji, onClick = null, title = null }) {
+function Item({ to, icon, label, active, count, mode, color, emoji, onClick = null, title = null, expanded }) {
   const body = html`
     ${active ? html`<i class="dock-indicator"></i>` : null}
     ${color ? html`<i class="dot big" style=${{ background: color }}></i>` : html`<${Icon} name=${icon} size=${mode === 'row' ? 20 : 22}/>`}
     <span class="dock-label">${emoji ? emoji + ' ' : ''}${label}</span>
     ${count ? html`<span class="dock-count">${count}</span>` : null}`;
   const cls = 'dock-item' + (active ? ' active' : '');
-  if (onClick) return html`<button type="button" class=${cls} onClick=${onClick} title=${title || label} aria-label=${label}>${body}</button>`;
+  if (onClick) return html`<button type="button" class=${cls} onClick=${onClick} title=${title || label} aria-label=${label} aria-expanded=${expanded}>${body}</button>`;
   return html`<${Link} to=${to} className=${cls} title=${title || label}>${body}<//>`;
 }
 
@@ -106,8 +106,9 @@ export function Dock({ route, counts, onAdd, phone }) {
         ${compact ? null : sep}
         <${Item} to="/today" icon="sun" label="Сегодня" active=${is('today')} mode=${mode}/>
         <${Item} to="/inbox" icon="inbox" label="Входящие" active=${is('inbox')} count=${counts.get('inbox')} mode=${mode}/>
-        <${Item} to="/lists" icon="lists" label="Списки" active=${is('lists') || (is('list') && mode !== 'row')} mode=${mode}/>
-        ${lists.length ? html`<div class="dock-sub">${lists.map((l) => html`<${Item} key=${l.id} to=${'/list/' + l.id}
+        <${Item} icon="lists" label=${'Списки ' + (p.listsCollapsed ? '▸' : '▾')} expanded=${!p.listsCollapsed} active=${is('lists') || (is('list') && mode !== 'row')} mode=${mode}
+          onClick=${() => { setPrefs({ listsCollapsed: !p.listsCollapsed }); navigate('/lists'); }}/>
+        ${lists.length && !p.listsCollapsed ? html`<div class="dock-sub">${lists.map((l) => html`<${Item} key=${l.id} to=${'/list/' + l.id}
           label=${l.name} emoji=${l.emoji} color=${l.color} active=${is('list') && route.param === l.id} count=${counts.get(l.id)} mode=${mode}/>`)}</div>` : null}
         ${compact ? html`<${Item} to="/more" icon="more" label="Ещё" active=${is('more', 'archive', 'trash', 'settings', 'analytics', 'shop', 'journal')} mode=${mode}/>` : html`
           <${Item} to="/analytics" icon="chart" label="Аналитика" active=${is('analytics')} mode=${mode}/>

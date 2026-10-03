@@ -10,6 +10,7 @@ import { formatMoment } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { getPrefs, setPrefs, SCHEMES } from '../prefs.js';
 import { readLocal, writeLocal } from '../hooks.js';
+import { CosmeticPreview, DecorationSettings } from '../components/Decorations.js';
 
 const TABS = [['rewards', 'Награды'], ['cosmetics', 'Оформление'], ['achievements', 'Достижения'], ['history', 'История']];
 const EMOJI = ['🎁', '🍕', '📺', '🎮', '☕', '🍰', '🛌', '🎬', '📚', '🛍', '🏖', '🎧'];
@@ -88,6 +89,13 @@ function Rewards({ bal }) {
       </div>`;
   };
   return html`
+    <div class="reward-ideas card-block"><b>Маленькие квесты — приятные награды</b>
+      <p class="muted small">Добавь идею в свои награды и измени цену под себя.</p>
+      <div class="chip-row wrap">${[
+        ['☕', 'Кофе и 20 минут без дел', 30], ['🎮', 'Час любимой игры', 80], ['🎬', 'Вечер кино', 120], ['🧭', 'Маленькое приключение в выходной', 250],
+      ].map(([emoji, name, price]) => html`<button class="chip" disabled=${readOnly || all.some(r => r.name === name)}
+        onClick=${() => A.createReward({ emoji, name, price, repeatable: true })}>${emoji} ${name} · ${price} 🪙</button>`)}</div>
+    </div>
     <div class="reward-list">
       ${list.length ? list.map(row) : html`<p class="muted">Придумай награды, на которые хочется копить: «Серия сериала — 50», «Пицца — 300».</p>`}
     </div>
@@ -101,18 +109,27 @@ function Rewards({ bal }) {
 function Cosmetics({ bal }) {
   const p = getPrefs();
   const readOnly = !!store.ui.readOnly;
-  const applied = (c) => (c.kind === 'scheme' ? (p.scheme || 'indigo') === c.value : p.letter === c.value);
-  const apply = (c) => setPrefs(c.kind === 'scheme' ? { scheme: applied(c) ? 'indigo' : c.value } : { letter: applied(c) ? null : c.value });
+  const [category, setCategory] = useState('all');
+  const applied = c => c.kind === 'prop' ? (p.props || []).includes(c.value) : p[c.kind] === c.value;
+  const apply = c => setPrefs(c.kind === 'prop'
+    ? { props: applied(c) ? (p.props || []).filter(v => v !== c.value) : [...(p.props || []), c.value] }
+    : { [c.kind]: applied(c) ? (c.kind === 'scheme' ? 'indigo' : null) : c.value });
   return html`
     <p class="muted small">Купленное оформление включается на каждом устройстве отдельно (здесь или в «Настройки → Внешний вид»).</p>
+    <div class="chip-row wrap">
+      ${[['all','Всё'],['scene','Миры'],['static','Питомцы на месте'],['dynamic','Подвижные питомцы'],['prop','Предметы'],['colors','Цвета']].map(([id,label]) => html`<button class=${'chip' + (category === id ? ' selected' : '')} onClick=${() => setCategory(id)}>${label}</button>`)}
+    </div>
+    <${DecorationSettings}/>
+    <p class="muted small">Предметы: 35–120 🪙 · питомцы: 60–280 🪙 · миры: 180–240 🪙. Базовые приоритеты дают 1–20 монет за задачу. Можно включить один мир, одного питомца и несколько предметов.</p>
     <div class="cosmetic-grid">
-      ${G.COSMETICS.map((c) => {
+      ${G.COSMETICS.filter(c => category === 'all' || c.kind === category || c.motion === category || (category === 'colors' && ['scheme','letter'].includes(c.kind))).map((c) => {
         const owned = G.ownsItem(store.data, c.id);
         const swatch = c.kind === 'scheme' ? (document.documentElement.dataset.theme === 'dark' ? SCHEMES[c.value].dark : SCHEMES[c.value].light) : c.value;
         return html`
           <div class=${'cosmetic' + (applied(c) ? ' selected' : '')} key=${c.id}>
-            <span class="cosmetic-swatch" style=${{ background: swatch }}>${c.kind === 'letter' ? 'L' : ''}</span>
+            ${['scene','pet','prop'].includes(c.kind) ? html`<${CosmeticPreview} item=${c}/>` : html`<span class="cosmetic-swatch" style=${{ background: swatch }}>${c.kind === 'letter' ? 'L' : ''}</span>`}
             <div class="cosmetic-name">${c.name}</div>
+            <p class="cosmetic-description muted small">${c.description || 'Акцент для твоего рабочего пространства'}</p>
             ${owned ? html`<button class="btn small" onClick=${() => apply(c)}>${applied(c) ? 'Снять' : 'Включить'}</button>`
               : html`<button class="btn small primary" disabled=${c.price > bal || readOnly} onClick=${() => A.buyCosmetic(c.id)}
                   title=${c.price > bal ? `Не хватает ${c.price - bal} 🪙` : 'Купить'}>${c.price} 🪙</button>`}
@@ -122,11 +139,29 @@ function Cosmetics({ bal }) {
 }
 
 function Achievements({ st }) {
+  const [group, setGroup] = useState('all');
+  const [status, setStatus] = useState('all');
+  const groups = [...new Map(st.achievements.filter(a => a.group !== 'general').map(a => [a.group, a.groupName])).entries()];
+  const visible = st.achievements.filter(a => (group === 'all' || a.group === group)
+    && (status === 'all' || (status === 'unlocked' ? a.unlocked : status === 'negative' ? a.negative : !a.unlocked)));
   return html`
-    <div class="achievements">
-      ${st.achievements.map((a) => html`<div class=${'badge' + (a.unlocked ? ' on' : '')} key=${a.id} title=${a.unlocked ? 'Получено' : 'Ещё не получено'}>
-        <span class="badge-emoji">${a.unlocked ? a.emoji : '🔒'}</span><span class="badge-name">${a.name}</span></div>`)}
+    <div class="achievement-filters field-row">
+      <label class="field"><span>Список</span><select value=${group} onChange=${e => setGroup(e.target.value)}>
+        <option value="all">Все достижения</option><option value="general">Общие достижения</option>
+        ${groups.map(([id,name]) => html`<option value=${id}>${name}</option>`)}</select></label>
+      <label class="field"><span>Показать</span><select value=${status} onChange=${e => setStatus(e.target.value)}>
+        <option value="all">Все</option><option value="unlocked">Полученные</option><option value="locked">Впереди</option><option value="negative">Неудачи</option></select></label>
     </div>
+    <p class="muted small">У каждого списка — четыре ранга. Достижения отражают текущую статистику; шуточные неудачи не отнимают монеты и исчезают после исправления ситуации.</p>
+    <div class="achievements">
+      ${visible.map((a) => html`<div class=${'badge' + (a.unlocked ? ' on' : '') + (a.negative ? ' negative' : '')} key=${a.id}>
+        <small class="badge-group">${a.groupName || (a.negative ? 'Неудача' : 'Общее')}</small>
+        <span class="badge-emoji">${a.emoji}</span><span class="badge-name">${a.name}</span>
+        <small>${a.description || a.name}</small>
+        ${a.target ? html`<progress value=${a.progress} max=${a.target}></progress><small>${a.progress} / ${a.target}</small>` : null}
+        <small>${a.unlocked ? '✓ Получено' : 'Ещё не получено'}</small></div>`)}
+    </div>
+    ${!visible.length ? html`<p class="empty">В этой подборке пока нет достижений.</p>` : null}
     <p class="muted small">Получено ${st.achievements.filter((a) => a.unlocked).length} из ${st.achievements.length}. Выполнено задач за всё время: ${st.done}, лучшая серия: ${countLabel(st.bestStreak, ['день', 'дня', 'дней'])}.</p>`;
 }
 
@@ -190,6 +225,9 @@ export function GameSettingsSection() {
   return html`
     <section class="set-section" id="game">
       <h2>Игра</h2>
+      <label class="toggle-row"><input type="checkbox" checked=${getPrefs().achievementNotifications !== false}
+        onChange=${e => setPrefs({ achievementNotifications: e.target.checked })}/><span>Уведомлять о достижениях<small>Всплывающее сообщение в открытом приложении на этом устройстве.</small></span></label>
+      <${DecorationSettings}/>
       <label class="toggle-row">
         <input type="checkbox" checked=${!!s.gameEnabled} disabled=${readOnly} onChange=${(e) => A.updateSettings({ gameEnabled: e.target.checked })}/>
         <span>Игровой режим<small>Монеты за задачи, магазин, уровни, серии и достижения. Настройка общая для всех устройств.</small></span>

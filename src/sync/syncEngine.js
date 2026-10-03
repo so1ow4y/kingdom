@@ -3,9 +3,10 @@
 
 import { store, setSync, setUi, showSnackbar, ask, notify, bumpData, refreshNow } from '../store/appState.js';
 import { getRepo } from '../store/localRepo.js';
-import { syncHooks, refreshDirty, markDevicePushed } from '../store/actions.js';
+import { syncHooks, refreshDirty, markDevicePushed, restoreDeviceSession } from '../store/actions.js';
 import { createDrive } from '../google/drive.js';
-import { tokenValid, startLogin, completeLogin } from '../google/auth.js';
+import { tokenValid, startLogin, completeLogin, endLocalSession } from '../google/auth.js';
+import { sessionRevoked } from '../core/sessions.js';
 import { ensureLayout, recreateDb } from '../google/layout.js';
 import { buildDb, buildManifest, extrasOf } from '../data/envelope.js';
 import { gzipJson } from '../data/serialize.js';
@@ -48,6 +49,10 @@ const step = (text) => setSync({ step: text });
 
 /** Слить удалённую базу в локальную. revId — ревизия, с которой теперь совпадаем (null — не менять). */
 async function mergeIntoLocal(db, revId) {
+  if (sessionRevoked(db.data.devices || [], store.deviceId, store.auth?.authenticatedAt)) {
+    await endLocalSession();
+    throw Object.assign(new Error('Сессия завершена с другого устройства. Войди заново через настройки. Локальные изменения сохранены.'), { code: 'E-SESSION-REVOKED' });
+  }
   const repo = getRepo();
   const base = await repo.loadBase();
   // Снимок, слияние и применение в памяти — синхронно, без await: правки пользователя не вклинятся.
@@ -70,6 +75,7 @@ async function mergeIntoLocal(db, revId) {
     if (res.changes.some((c) => c.coll === 'settings')) refreshNow();
   }
   await written;
+  await restoreDeviceSession();
   if (revId) store.sync.lastRevisionId = revId;
   if (res.changes.length) syncHooks.broadcast(res.changes.map((c) => [c.coll, c.entity.id]));
   await refreshDirty();
@@ -194,6 +200,7 @@ async function run(kind, fn, { silent = false } = {}) {
 
 async function handleError(e, kind, silent) {
   const code = e?.code || 'E-INTERNAL';
+  if (code === 'E-SESSION-REVOKED') { showSnackbar(e.message); return; }
   if (code === 'E-OFFLINE') {
     setSync({ offline: true });
     if (!silent) showSnackbar(errorText(e));
@@ -451,6 +458,7 @@ export async function startSync(oauth, { navigate }) {
     return;
   }
   if (!navigator.onLine) return;
+  if (await repo.getMeta('auth.sessionRevoked')) return;
   if (((await repo.getMeta('auth.blockedUntil')) || 0) > Date.now()) return;
   if (!store.sync.everLoggedIn) {
     if (!(await repo.getMeta('start.dismissed'))) setUi({ start: true });

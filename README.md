@@ -2,7 +2,7 @@
 
 A personal task planner: a serverless PWA. Tasks live in the browser (IndexedDB) and sync between devices through a single file in your own Google Drive when you press **Push**. Interface language: Russian.
 
-Version 0.3: dock navigation panel, unlimited notes, tasks in several lists, nested tasks, reminders (while the app is open), coins/shop/levels, analytics with a GitHub-style heatmap.
+Version 0.6: planning by calendar day, device/session cleanup, inline list editing, achievements for every list, achievement notifications, collectible pets, background worlds and decorations. Includes note attachments, reminders, coins/levels and analytics.
 
 Live: https://so1ow4y.github.io/lifetasks/
 
@@ -21,7 +21,7 @@ Google sign-in works only on origins registered for the OAuth client (`http://lo
 ## Release and deploy
 
 ```
-python tools/release.py 0.3.1
+python tools/release.py 0.6.1
 git push origin main
 ```
 

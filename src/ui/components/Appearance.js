@@ -6,6 +6,7 @@ import { store } from '../../store/appState.js';
 import * as G from '../../core/game.js';
 import { getPrefs, setPrefs, dockPosition, SCHEMES } from '../prefs.js';
 import { AppLetter } from './Dock.js';
+import { DecorationSettings, CosmeticPreview } from './Decorations.js';
 
 const POS_LABEL = { left: 'Слева', bottom: 'Снизу', right: 'Справа', top: 'Сверху' };
 
@@ -32,6 +33,18 @@ export function AppearanceSection({ theme, onTheme, phone }) {
     <section class="set-section" id="appearance">
       <h2>Внешний вид</h2>
       <p class="muted small">Эти настройки хранятся только на этом устройстве.</p>
+      <h3 class="set-sub">Миры, питомцы и предметы</h3>
+      <${DecorationSettings}/>
+      <button class="btn small" onClick=${() => setPrefs({ scene: null, pet: null, props: [] })}>Снять весь декор</button>
+      <div class="pick-grid">
+        ${G.COSMETICS.filter(c => ['scene','pet','prop'].includes(c.kind) && G.cosmeticAvailable(store.data, c.id)).map(c => {
+          const on = c.kind === 'prop' ? (p.props || []).includes(c.value) : p[c.kind] === c.value;
+          return html`<button class=${'pick-card' + (on ? ' selected' : '')} aria-pressed=${on} onClick=${() => setPrefs(c.kind === 'prop'
+            ? { props: on ? (p.props || []).filter(v => v !== c.value) : [...(p.props || []), c.value] }
+            : { [c.kind]: on ? null : c.value })}><${CosmeticPreview} item=${c}/><span>${c.name}</span></button>`;
+        })}
+      </div>
+      <a class="link-btn" href="#/shop">Открыть магазин оформлений</a>
 
       <h3 class="set-sub">Панель навигации</h3>
       <div class="pick-grid" role="radiogroup" aria-label="Положение панели">

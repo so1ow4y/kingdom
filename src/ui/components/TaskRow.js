@@ -1,6 +1,7 @@
 // Строка задачи (docs/TZ.md §5.2). Дерево и перетаскивание — components/TaskTree.js (обновление 0.4).
 
-import { html, useState, useRef, useEffect } from '../html.js';
+import { html, useState, useRef, useEffect, useContext } from '../html.js';
+import { DayContext } from '../dayContext.js';
 import { Icon } from '../icons.js';
 import { openTask, currentTaskId } from '../router.js';
 import { store, openSheet } from '../../store/appState.js';
@@ -71,9 +72,9 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
   const [completing, setCompleting] = useState(false);
   const timer = useRef(null);
   const done = task.status === 'done';
-  const today = store.now.today;
+  const today = useContext(DayContext) || store.now.today;
   const focused = task.focusDate === today;
-  const overdue = S.isOverdue(task, today, store.now.time);
+  const overdue = S.isOverdue(task, store.now.today, store.now.time);
   const readOnly = !!store.ui.readOnly;
   const hasParent = !!task.parentId && !!S.parentOf(store.data, task); // ★ — только у задач верхнего уровня
 
@@ -117,7 +118,7 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
   const menu = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    openSheet('taskMenu', { taskId: task.id });
+    openSheet('taskMenu', { taskId: task.id, date: today });
   };
   const stop = (fn) => (e) => {
     e.stopPropagation();
@@ -155,8 +156,8 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
       </div>
       ${(!done && !hasParent) || focused ? html`
         <button class=${'star' + (focused ? ' on' : ' star-optional') + (quickActions ? ' star-visible' : '')}
-          onClick=${stop(() => !readOnly && toggleFocus(task.id))}
-          aria-label=${focused ? 'Убрать из главного' : 'Главное на сегодня'} title=${focused ? 'Убрать из главного' : 'Главное на сегодня'}>
+          onClick=${stop(() => !readOnly && toggleFocus(task.id, today))}
+          aria-label=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(today, store.now.today)} title=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(today, store.now.today)}>
           <${Icon} name="star" filled=${focused} size=${20}/>
         </button>` : null}
       <button class="icon-btn row-menu" onClick=${menu} aria-label="Действия" title="Действия"><${Icon} name="dots" size=${18}/></button>

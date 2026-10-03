@@ -10,6 +10,12 @@ const DEFAULTS = {
   expanded: true, // развёрнутый вид (с подписями)
   autoHide: false, // уезжает за край и выезжает у края
   hidden: false, // спрятан целиком: у края только квадрат с буквой
+  listsCollapsed: false,
+  scene: null,
+  pet: null,
+  props: [],
+  decorMotion: true,
+  achievementNotifications: true,
   scheme: 'indigo', // цветовая схема (косметика из магазина, п. 2.6)
   letter: null, // цвет квадрата с буквой (косметика); null — цвет акцента
 };
@@ -52,6 +58,7 @@ export const SCHEMES = {
 
 export function applyScheme() {
   const root = document.documentElement;
+  root.dataset.decorMotion = prefs.decorMotion === false ? 'off' : 'on';
   if (prefs.scheme && prefs.scheme !== 'indigo' && SCHEMES[prefs.scheme]) root.dataset.scheme = prefs.scheme;
   else delete root.dataset.scheme;
   for (const [k, v] of [['--letter-bg', prefs.letter], ['--letter-text', prefs.letter && '#fff']]) {

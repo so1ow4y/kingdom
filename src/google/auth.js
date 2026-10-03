@@ -100,6 +100,7 @@ export async function completeLogin(params) {
   }
 
   const auth = {
+    authenticatedAt: Date.now(),
     accessToken: params.access_token,
     expiresAt: Date.now() + (Number(params.expires_in) || 3600) * 1000,
     scope: params.scope,
@@ -116,7 +117,15 @@ export async function completeLogin(params) {
   await repo.setMeta('auth.everLoggedIn', true);
   await repo.setMeta('auth.blockedUntil', 0);
   await repo.setMeta('auth.needConsent', false);
+  await repo.setMeta('auth.sessionRevoked', false);
   return { ...base, ok: true, email: auth.email };
+}
+
+export async function endLocalSession() {
+  store.auth = null;
+  await getRepo().setMeta('auth', null);
+  await getRepo().setMeta('auth.sessionRevoked', true);
+  setUi({});
 }
 
 /** Испортить токен (режим отладки): следующий пуш пойдёт через повторный вход. */

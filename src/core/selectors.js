@@ -183,7 +183,7 @@ const byIsoDesc = (field) => (a, b) => {
 };
 
 /** Экран «Сегодня» (TZ §6.2). Подзадачи с датой попадают сюда сами по себе (с подписью родителя в UI). */
-export function todayView(data, today, time, nowMs = Date.now()) {
+export function todayView(data, today, time, nowMs = Date.now(), exactDay = false) {
   const tz = data.settings.timeZone;
   const v = { focus: [], yesterdayFocus: [], overdue: [], today: [], soon: [], chores: [], doneToday: [] };
   const recent = nowMs - 2 * 86400000;
@@ -204,7 +204,7 @@ export function todayView(data, today, time, nowMs = Date.now()) {
       continue;
     }
     if (t.focusDate && t.focusDate < today) v.yesterdayFocus.push(t);
-    const overdue = isOverdue(t, today, time);
+    const overdue = !exactDay && isOverdue(t, today, time);
     const forToday = t.scheduledDate === today || t.deadlineDate === today;
     if (isChore(data, t)) {
       if (overdue || forToday) v.chores.push(t);

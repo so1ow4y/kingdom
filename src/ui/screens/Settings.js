@@ -101,6 +101,13 @@ function SyncSection() {
     if (name.trim() && name.trim() !== me?.name) A.renameDevice(name);
   };
   const busy = !!store.sync.phase;
+  const [removing, setRemoving] = useState(false);
+  const canRemove = tokenValid() && !busy && !removing && !store.ui.readOnly && !store.sync.offline;
+  const remove = async (ids) => {
+    setRemoving(true);
+    try { if (await A.removeDevices(ids)) await push(); }
+    finally { setRemoving(false); }
+  };
   return html`
     <section class="set-section">
       <h2>Синхронизация</h2>
@@ -117,10 +124,15 @@ function SyncSection() {
         <button class="btn" onClick=${() => navigate('/journal')}>Журнал конфликтов и ошибок</button>
       </div>
       <h3 class="set-sub">Устройства</h3>
+      <p class="muted small">Удаление завершает сессию LifeTasks при следующей синхронизации устройства. Старые версии могут не поддерживать выход; доступ к аккаунту Google сохраняется.</p>
+      <button class="btn" disabled=${!canRemove || devices.length < 2}
+        onClick=${() => remove(devices.map(d => d.id))}>Очистить все сессии, кроме текущей</button>
       ${devices.map((d) => html`
         <${Row} key=${d.id} label=${d.name + (d.id === store.deviceId ? ' (это устройство)' : '')}
           hint=${`${PLATFORM[d.platform] || d.platform}, версия ${d.appVersion}`}>
           <span class="muted small">${d.lastPushAt ? 'пуш ' + when(d.lastPushAt) : 'пушей не было'}</span>
+          ${d.id !== store.deviceId ? html`<button class="icon-btn" aria-label=${'Удалить устройство ' + d.name} title="Удалить устройство"
+            disabled=${!canRemove} onClick=${() => remove([d.id])}><${Icon} name="trash" size=${18}/></button>` : null}
         <//>`)}
     </section>`;
 }
