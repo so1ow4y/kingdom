@@ -6,7 +6,7 @@ import { byOrder } from './order.js';
 import { daysBetween, localDateOf } from './dates.js';
 import { SOON_DEADLINE_DAYS, LIMITS } from '../config.js';
 
-export const MAX_DEPTH = 4; // уровней вложенности: задача → подзадача → … (4 уровня всего)
+export const MAX_DEPTH = LIMITS.maxDepth; // уровней вложенности: задача → подзадача → … (4 уровня всего)
 
 export const isAlive = (t) => !!t && !t.deletedAt;
 export const isInTrash = (t) => isAlive(t) && !!t.trashedAt;

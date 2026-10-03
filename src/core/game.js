@@ -7,7 +7,8 @@
 
 import { uuidv7 } from './ids.js';
 import { touch } from './model.js';
-import { localDateOf, addDays } from './dates.js';
+import { addDays } from './dates.js';
+import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 
 export const COIN_EVENT_FIELDS = ['type', 'amount', 'active', 'taskId', 'occKey', 'rewardId', 'itemId', 'title', 'at', 'deletedAt'];
@@ -109,19 +110,13 @@ export function purchasedCount(data, rewardId) {
 
 // ---------- Выполненные по дням, серии ----------
 
-/** Map<'YYYY-MM-DD', число выполненных> по задачам и экземплярам повторов (без корзины и удалённых). */
+/**
+ * Map<'YYYY-MM-DD', число выполненных> по задачам, экземплярам повторов и сводкам удалённых выполненных
+ * (лимит хранения, core/retention.js) — без корзины и без двойного счёта.
+ */
 export function doneByDay(data, tz) {
   const m = new Map();
-  const add = (iso) => {
-    if (!iso) return;
-    const d = localDateOf(iso, tz);
-    m.set(d, (m.get(d) || 0) + 1);
-  };
-  for (const t of data.tasks.values()) {
-    if (t.deletedAt || t.trashedAt) continue;
-    if (!t.repeat && t.status === 'done') add(t.completedAt);
-    for (const o of Object.values(t.occurrences || {})) if (o && o.state === 'done') add(o.doneAt);
-  }
+  for (const e of doneEntries(data, tz)) m.set(e.date, (m.get(e.date) || 0) + 1);
   return m;
 }
 

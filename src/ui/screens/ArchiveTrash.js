@@ -10,6 +10,8 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { localDateOf, daysBetween, longDate } from '../../core/dates.js';
 import { plural } from '../../core/plural.js';
+import { doneCount } from '../../core/retention.js';
+import { Link } from '../router.js';
 
 const PAGE = 100;
 
@@ -45,6 +47,8 @@ export function ArchiveScreen({ query }) {
           </select>
         </label>
       </div>
+      <p class="hint">Хранится выполненных: ${doneCount(store.data)}${store.data.settings.completedLimit == null ? ' · без лимита'
+        : ` из ${store.data.settings.completedLimit}`} — старые сверх лимита удаляются, статистика остаётся. <${Link} to="/settings?section=data">Настроить<//></p>
       ${!all.length ? html`<${Empty}>Выполненных задач пока нет.<//>` : null}
       ${groups.map((g) => html`
         <section class="section" key=${g.date}>

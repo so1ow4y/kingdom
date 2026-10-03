@@ -22,6 +22,7 @@ export function makeData({ timeZone = 'Europe/Moscow' } = {}) {
     priorities: new Map(defaultPriorities().map((p) => [p.id, p])),
     coinEvents: new Map(),
     rewards: new Map(),
+    doneArchive: new Map(),
   };
 }
 

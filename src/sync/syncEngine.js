@@ -11,6 +11,7 @@ import { buildDb, buildManifest, extrasOf } from '../data/envelope.js';
 import { gzipJson } from '../data/serialize.js';
 import { parseDbBytes, mergeRemote, writeDbChecked, pushedKeys, baseFrom } from './protocol.js';
 import { makeBackup, rotateBackups } from './backups.js';
+import { uploadPending, collectGarbage } from './mediaSync.js';
 import { errorText, SOFT_CODES } from './errors.js';
 import { MERGE_COLLECTIONS } from '../core/merge.js';
 import { countLabel } from '../core/plural.js';
@@ -280,6 +281,15 @@ export function push() {
       setSync({ remoteNewer: false });
       showSnackbar('Нечего пушить — всё уже на Диске');
       return;
+    }
+    // Медиа (обновление 0.5): новые вложения — на Диск до записи базы, чтобы в базе уже был driveFileId
+    step('Медиа');
+    const media = await uploadPending(drive, r.layout, (text) => step(text));
+    if (media.missing) console.info(`LifeTasks: ${media.missing} медиа нет на этом устройстве — их зальёт устройство, где они есть`);
+    try {
+      await collectGarbage(drive);
+    } catch (e) {
+      console.warn('Сборка мусора медиа не удалась — повторится при следующем пуше', e);
     }
     step('Бэкап');
     await makeBackup(drive, r.layout, migratedFrom ? `pre-migration-v${SCHEMA_VERSION}` : 'push', store.deviceId);

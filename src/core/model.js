@@ -1,13 +1,14 @@
 // Фабрики сущностей и чистые мутации. Единственное место, где ставятся метки fieldTimes,
-// updatedAt и updatedBy (docs/DATA_FORMAT.md §5.0). Формат v2 (обновление 0.3).
+// updatedAt и updatedBy (docs/DATA_FORMAT.md §5.0). Формат v3 (обновление 0.5: вложения в заметках, сводки удалённых выполненных).
 //
 // ctx = { now: число мс, stamp: () => метка гибридных часов, deviceId }
 // Все функции возвращают НОВЫЙ объект и сохраняют неизвестные поля (spread исходной сущности).
 
 import { uuidv7 } from './ids.js';
+import { keyBetween } from './order.js';
 import { sameValue, canonicalJson } from './canonical.js';
 import {
-  SETTINGS_ID, DEFAULT_LISTS, DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, CHORES_LIST_ID, LIMITS,
+  SETTINGS_ID, DEFAULT_LISTS, DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, CHORES_LIST_ID, LIMITS, RETENTION,
 } from '../config.js';
 import { DEFAULT_PRIORITIES, PRIORITY_NONE_ID } from './priorities.js';
 
@@ -26,7 +27,12 @@ export const PRIORITY_FIELDS = ['name', 'color', 'coins', 'order', 'archived', '
 export const REWARD_FIELDS = ['name', 'emoji', 'price', 'repeatable', 'order', 'archived', 'deletedAt'];
 export const SETTINGS_FIELDS = ['timeZone', 'choresListId', 'photoMaxSide', 'photoQuality', 'photoFormat',
   'voiceBitrate', 'trashRetentionDays', 'orphanMediaRetentionDays', 'writeReadableCopy',
-  'gameEnabled', 'reminderPresets', 'defaultReminderMinutes', 'dayReminderTime', 'deletedAt'];
+  'gameEnabled', 'reminderPresets', 'defaultReminderMinutes', 'dayReminderTime',
+  'completedLimit', 'voiceMaxSeconds', 'attachmentMaxMB', 'nagPresets', 'deletedAt'];
+export const ATTACHMENT_FIELDS = ['mediaId', 'name', 'order', 'deletedAt'];
+export const MEDIA_FIELDS = ['kind', 'mime', 'ext', 'codec', 'size', 'width', 'height', 'durationMs', 'original',
+  'driveFileId', 'orphanedAt', 'deletedAt'];
+export const ARCHIVE_FIELDS = ['completedAt', 'listIds', 'priorityId', 'coins', 'deletedAt'];
 export const DEVICE_FIELDS = ['name', 'platform', 'appVersion', 'lastPushAt', 'deletedAt'];
 
 /** Новые поля настроек v2 и их значения по умолчанию (миграция 1→2 добавляет их с меткой 1). */
@@ -35,6 +41,14 @@ export const SETTINGS_V2_DEFAULTS = {
   reminderPresets: [5, 15, 30, 60, 1440],
   defaultReminderMinutes: 5,
   dayReminderTime: '09:00',
+};
+
+/** Новые поля настроек v3 (обновление 0.5); миграция 2→3 добавляет их с меткой 1. */
+export const SETTINGS_V3_DEFAULTS = {
+  completedLimit: RETENTION.completedDefault, // null — без лимита
+  voiceMaxSeconds: 600,
+  attachmentMaxMB: 100,
+  nagPresets: [1, 5, 10, 15, 30, 60],
 };
 
 const iso = (ctx) => new Date(ctx.now).toISOString();
@@ -106,25 +120,37 @@ export function revert(current, prev, ctx) {
     if (next) out = { ...bumped(out, ctx), [k]: next };
   }
   for (const k of NESTED_ARRAYS) {
-    const cur = new Map((current[k] || []).map((x) => [x.id, x]));
-    const old = new Map((prev[k] || []).map((x) => [x.id, x]));
-    let changed = false;
-    const items = [];
-    for (const id of new Set([...cur.keys(), ...old.keys()])) {
-      const c = cur.get(id);
-      const o = old.get(id);
-      if (c && o && canonicalJson(c) === canonicalJson(o)) {
-        items.push(c);
-        continue;
-      }
-      changed = true;
-      const t = ctx.stamp();
-      if (o) items.push({ ...o, fieldTimes: Object.fromEntries(Object.keys(o.fieldTimes || {}).map((f) => [f, t])), updatedAt: iso(ctx) });
-      else items.push({ id, createdAt: c.createdAt, deletedAt: iso(ctx), fieldTimes: { deletedAt: t } });
-    }
-    if (changed) out = { ...bumped(out, ctx), [k]: items.sort((x, y) => (x.id < y.id ? -1 : 1)) };
+    const items = revertItems(current[k], prev[k], ctx);
+    if (items) out = { ...bumped(out, ctx), [k]: items };
   }
   return out;
+}
+
+/** «Отменить» для вложенного массива: вернуть элементы из old новыми метками (и их вложенные массивы — тоже). null — без изменений. */
+function revertItems(curArr, oldArr, ctx) {
+  const cur = new Map((curArr || []).map((x) => [x.id, x]));
+  const old = new Map((oldArr || []).map((x) => [x.id, x]));
+  let changed = false;
+  const items = [];
+  for (const id of new Set([...cur.keys(), ...old.keys()])) {
+    const c = cur.get(id);
+    const o = old.get(id);
+    if (c && o && canonicalJson(c) === canonicalJson(o)) {
+      items.push(c);
+      continue;
+    }
+    changed = true;
+    const t = ctx.stamp();
+    if (o) {
+      const restored = { ...o, fieldTimes: Object.fromEntries(Object.keys(o.fieldTimes || {}).map((f) => [f, t])), updatedAt: iso(ctx) };
+      for (const n of NESTED_ARRAYS) {
+        const inner = c && !o.deletedAt ? revertItems(c[n], o[n], ctx) : null;
+        if (inner) restored[n] = inner;
+      }
+      items.push(restored);
+    } else items.push({ id, createdAt: c.createdAt, deletedAt: iso(ctx), fieldTimes: { deletedAt: t } });
+  }
+  return changed ? items.sort((x, y) => (x.id < y.id ? -1 : 1)) : null;
 }
 
 /** Надгробие: окончательное удаление (содержимое вычищается). */
@@ -288,6 +314,72 @@ export function addNote(task, text, order, ctx) {
   return withNested(task, 'notes', [...(task.notes || []), note], ctx);
 }
 
+// ---------- Вложения заметок (формат v3) ----------
+
+const byOrderId = (a, b) => (a.order === b.order ? (a.id < b.id ? -1 : 1) : a.order < b.order ? -1 : 1);
+
+export function liveAttachments(note) {
+  return (note?.attachments || []).filter((a) => !a.deletedAt).sort(byOrderId);
+}
+
+/** Заменить заметку noteId результатом fn(note); updatedAt заметки и задачи — сейчас. */
+function updateNote(task, noteId, fn, ctx) {
+  const notes = task.notes || [];
+  const note = notes.find((n) => n.id === noteId);
+  if (!note || note.deletedAt) return task;
+  const next = fn(note);
+  if (next === note) return task;
+  return withNested(task, 'notes', notes.map((n) => (n.id === noteId ? { ...next, updatedAt: iso(ctx) } : n)), ctx);
+}
+
+function safeKeyAfter(last) {
+  try {
+    return keyBetween(last ?? null, null);
+  } catch {
+    return 'a0';
+  }
+}
+
+/** att: { mediaId, name } — в конец списка вложений заметки. */
+export function addAttachment(task, noteId, att, ctx) {
+  return updateNote(task, noteId, (note) => {
+    const order = safeKeyAfter(liveAttachments(note).at(-1)?.order);
+    const item = nestedNew({ mediaId: att.mediaId, name: String(att.name || 'файл').slice(0, 255), order }, ATTACHMENT_FIELDS, ctx);
+    delete item.updatedBy;
+    return { ...note, attachments: [...(note.attachments || []), item].sort((a, b) => (a.id < b.id ? -1 : 1)) };
+  }, ctx);
+}
+
+export function removeAttachment(task, noteId, attId, ctx) {
+  return updateNote(task, noteId, (note) => {
+    const items = note.attachments || [];
+    if (!items.some((a) => a.id === attId && !a.deletedAt)) return note;
+    const at = iso(ctx);
+    return { ...note, attachments: items.map((a) => (a.id === attId ? { id: a.id, createdAt: a.createdAt, deletedAt: at, fieldTimes: { deletedAt: ctx.stamp() } } : a)) };
+  }, ctx);
+}
+
+export function moveAttachment(task, noteId, attId, order, ctx) {
+  return updateNote(task, noteId, (note) => {
+    const items = note.attachments || [];
+    const a = items.find((x) => x.id === attId && !x.deletedAt);
+    if (!a) return note;
+    const next = touch(a, { order }, ctx);
+    if (next === a) return note;
+    const { updatedBy, ...rest } = next;
+    return { ...note, attachments: items.map((x) => (x.id === attId ? rest : x)) };
+  }, ctx);
+}
+
+/** Медиа: id = sha256 сохранённых байтов (DATA_FORMAT §5.5). meta: { id, kind, mime, ext, codec, size, width, height, durationMs, original } */
+export function newMedia(meta, ctx) {
+  return create(meta.id, {
+    kind: meta.kind, mime: meta.mime, ext: meta.ext, codec: meta.codec ?? null, size: meta.size | 0,
+    width: meta.width ?? null, height: meta.height ?? null, durationMs: meta.durationMs ?? null,
+    original: !!meta.original, driveFileId: null, orphanedAt: null,
+  }, MEDIA_FIELDS, ctx);
+}
+
 export const REMINDER_FIELDS = ['kind', 'at', 'offsetMinutes', 'anchor', 'time', 'deletedAt'];
 
 /** r: { kind: 'relative', offsetMinutes, anchor } | { kind: 'absolute', at } | { kind: 'timeOfDay', time } */
@@ -307,10 +399,19 @@ export function duplicateTask(task, order, ctx) {
     scheduledTime: task.scheduledTime,
     deadlineDate: task.deadlineDate,
     deadlineTime: task.deadlineTime,
-    notes: liveNotes(task).map((n) => n.text),
     order,
   }, ctx);
-  return { ...copy, repeat: task.repeat ?? null, nag: task.nag ?? copy.nag };
+  // Заметки (в том числе голосовые без текста) и вложения — ссылками на те же медиа, файлы не дублируются
+  let out = copy;
+  let key = null;
+  for (const n of liveNotes(task)) {
+    if (!n.text.trim() && !liveAttachments(n).length) continue;
+    key = key ? nextOrderKey(key) : 'a0';
+    out = addNote(out, n.text, key, ctx);
+    const dst = (out.notes || []).find((x) => x.order === key && !x.deletedAt);
+    for (const a of liveAttachments(n)) out = addAttachment(out, dst.id, a, ctx);
+  }
+  return { ...out, repeat: task.repeat ?? null, nag: task.nag ?? copy.nag };
 }
 
 // ---------- Списки, приоритеты, награды ----------
@@ -386,6 +487,7 @@ export function defaultSettings(timeZone) {
     orphanMediaRetentionDays: 30,
     writeReadableCopy: true,
     ...structuredClone(SETTINGS_V2_DEFAULTS),
+    ...structuredClone(SETTINGS_V3_DEFAULTS),
   };
 }
 

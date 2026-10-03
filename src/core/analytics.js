@@ -3,6 +3,7 @@
 
 import { localDateOf, addDays, daysBetween, mondayOf } from './dates.js';
 import { doneByDay, streaks } from './game.js';
+import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 
 export const PERIODS = [
@@ -44,23 +45,9 @@ export function datesBetween(from, to) {
   return out;
 }
 
-/** Выполненные задачи (и экземпляры повторов) в диапазоне: [{ task, date }]. */
+/** Выполнения в диапазоне (задачи, экземпляры повторов и сводки удалённых): [{ date, listIds, priorityId }]. */
 function doneItems(data, tz, from, to) {
-  const out = [];
-  for (const t of data.tasks.values()) {
-    if (t.deletedAt || t.trashedAt) continue;
-    if (!t.repeat && t.status === 'done' && t.completedAt) {
-      const d = localDateOf(t.completedAt, tz);
-      if (d >= from && d <= to) out.push({ task: t, date: d });
-    }
-    for (const o of Object.values(t.occurrences || {})) {
-      if (o && o.state === 'done' && o.doneAt) {
-        const d = localDateOf(o.doneAt, tz);
-        if (d >= from && d <= to) out.push({ task: t, date: d });
-      }
-    }
-  }
-  return out;
+  return doneEntries(data, tz).filter((e) => e.date >= from && e.date <= to);
 }
 
 /** Монеты по дням: сумма активных начислений (покупки — отдельно, это траты). */
@@ -97,16 +84,16 @@ export function analyze(data, tz, today, from, to) {
   // По спискам: задача в нескольких списках считается в каждом; без списков — «Входящие».
   const lists = new Map();
   const pri = new Map();
-  for (const { task } of items) {
-    const ids = Object.entries(task.lists || {}).filter(([id, v]) => v?.in && data.lists.get(id) && !data.lists.get(id).deletedAt).map(([id]) => id);
+  for (const e of items) {
+    const ids = (e.listIds || []).filter((id) => data.lists.get(id) && !data.lists.get(id).deletedAt);
     for (const id of ids.length ? ids : [null]) lists.set(id, (lists.get(id) || 0) + 1);
-    const pid = data.priorities.has(task.priorityId) ? task.priorityId : PRIORITY_NONE_ID;
+    const pid = data.priorities.has(e.priorityId) ? e.priorityId : PRIORITY_NONE_ID;
     pri.set(pid, (pri.get(pid) || 0) + 1);
   }
   const byList = [...lists].map(([id, n]) => {
     const l = id ? data.lists.get(id) : null;
     return { id, name: l ? (l.emoji ? l.emoji + ' ' : '') + l.name : 'Входящие', color: l?.color || '#9E9E9E', n };
-  }).sort((a, b) => b.n - a.n);
+  }).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'ru'));
   const byPriority = [...pri].map(([id, n]) => {
     const p = data.priorities.get(id);
     return { id, name: p?.name || 'Без приоритета', color: p?.color || '#9E9E9E', n, order: p?.order || '' };

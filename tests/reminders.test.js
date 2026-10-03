@@ -93,3 +93,34 @@ test('подписи и сравнение напоминаний', () => {
   assert.ok(sameReminder({ kind: 'relative', anchor: 'scheduled', offsetMinutes: 5, id: 'x' }, { kind: 'relative', anchor: 'scheduled', offsetMinutes: 5 }));
   assert.ok(!sameReminder({ kind: 'relative', anchor: 'scheduled', offsetMinutes: 5 }, { kind: 'relative', anchor: 'deadline', offsetMinutes: 5 }));
 });
+
+test('«за 1 мин» и своё значение (за 7 мин): момент срабатывания и попадание в промежуток', () => {
+  const c = makeCtx();
+  const d = makeData();
+  const t = addTask(d, c, { title: 'A', scheduledDate: '2026-10-05', scheduledTime: '14:00', reminders: [
+    { kind: 'relative', anchor: 'scheduled', offsetMinutes: 1 },
+    { kind: 'relative', anchor: 'scheduled', offsetMinutes: 7 },
+  ] });
+  const start = Date.parse('2026-10-05T11:00:00Z'); // 14:00 по Москве
+  assert.equal(reminderMoment(t, t.reminders.find((r) => r.offsetMinutes === 1), MSK), start - MIN);
+  assert.equal(reminderMoment(t, t.reminders.find((r) => r.offsetMinutes === 7), MSK), start - 7 * MIN);
+  assert.deepEqual(dueBetween(d, start - 8 * MIN, start).map((x) => x.at), [start - 7 * MIN, start - MIN]);
+  assert.equal(reminderLabel({ kind: 'relative', anchor: 'scheduled', offsetMinutes: 1 }, '2026-10-02'), 'за 1 мин до начала');
+});
+
+test('«Повторять, пока не отмечу»: каждую минуту и своё значение (каждые 3 мин)', () => {
+  const c = makeCtx();
+  const d = makeData();
+  const t = addTask(d, c, { title: 'A', scheduledDate: '2026-10-05', scheduledTime: '14:00', reminders: [{ kind: 'relative', anchor: 'scheduled', offsetMinutes: 0 }] },
+    { nag: { enabled: true, intervalMinutes: 1 } });
+  const first = Date.parse('2026-10-05T11:00:00Z');
+  const n1 = dueBetween(d, first, first + MIN);
+  assert.equal(n1.length, 1);
+  assert.equal(n1[0].at, first + MIN, 'через минуту');
+  assert.equal(dueBetween(d, first + MIN, first + 2 * MIN)[0].at, first + 2 * MIN);
+  d.tasks.set(t.id, { ...t, nag: { enabled: true, intervalMinutes: 3 } });
+  assert.equal(dueBetween(d, first, first + 2 * MIN).length, 0);
+  assert.equal(dueBetween(d, first + 2 * MIN, first + 3 * MIN)[0].at, first + 3 * MIN);
+  d.tasks.set(t.id, { ...t, nag: { enabled: true, intervalMinutes: 0 } });
+  assert.equal(dueBetween(d, first, first + MIN)[0].at, first + MIN, 'меньше минуты не бывает');
+});

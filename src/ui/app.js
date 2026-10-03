@@ -216,5 +216,6 @@ export function App() {
       <${RedirectingScreen}/>
       <${DialogHost}/>
       <${Snackbar}/>
+      ${store.ui.busyText ? html`<div class="busy-toast" role="status">⏳ ${store.ui.busyText}</div>` : null}
     </div>`;
 }

@@ -8,6 +8,7 @@ export const store = {
   data: {
     settings: null, lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map(),
     priorities: new Map(), coinEvents: new Map(), rewards: new Map(), // формат v2
+    doneArchive: new Map(), // формат v3: сводки удалённых выполненных задач
   },
   version: 0, // растёт при каждом изменении data — по нему мемоизируются выборки
   now: { today: '', time: '', ms: 0 },

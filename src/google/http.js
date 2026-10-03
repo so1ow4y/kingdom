@@ -29,7 +29,7 @@ async function parseError(res) {
 
 /**
  * Запрос к Google API.
- * opts: { method, headers, body, as: 'json' | 'bytes' | 'text' | 'none', auth: true }
+ * opts: { method, headers, body, as: 'json' | 'bytes' | 'text' | 'none' | 'response', auth: true }
  * Ошибки: SyncError с code E-OFFLINE, E-AUTH-EXPIRED, E-QUOTA-DRIVE, E-RATE, E-SERVER, E-NOT-FOUND, E-HTTP.
  */
 export async function gfetch(url, opts = {}) {
@@ -53,6 +53,7 @@ export async function gfetch(url, opts = {}) {
       throw new SyncError('E-OFFLINE', 'Нет сети', { cause: e });
     }
     if (res.ok) {
+      if (as === 'response') return res;
       if (as === 'none' || res.status === 204) return null;
       if (as === 'bytes') return new Uint8Array(await res.arrayBuffer());
       if (as === 'text') return res.text();

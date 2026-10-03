@@ -11,7 +11,7 @@ import { uuidFromString } from '../src/core/ids.js';
 const load = async (p) => (await fetch(new URL(p, import.meta.url))).json();
 const v1 = await load('../samples/v1/db.json');
 const v2Schema = await load('../schemas/v2/db.schema.json');
-const migrated = () => migrateDb(structuredClone(v1));
+const migrated = () => migrateDb(structuredClone(v1), undefined, 2); // только шаг 1→2
 
 const HIGH = '00000000-0000-7000-8000-000000000203';
 const MID = '00000000-0000-7000-8000-000000000202';

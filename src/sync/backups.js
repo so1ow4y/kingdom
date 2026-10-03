@@ -1,6 +1,8 @@
 // Бэкапы базы в LifeTasks/backups/ (docs/TZ.md §11.3, D-13): копия через files.copy, без скачивания.
 
-export const KEEP_PUSH_BACKUPS = 20;
+import { BACKUPS_KEEP } from '../config.js';
+
+export const KEEP_PUSH_BACKUPS = BACKUPS_KEEP;
 
 export function backupName(kind, deviceId, now = new Date()) {
   const ts = now.toISOString().replace(/[:.]/g, '-');

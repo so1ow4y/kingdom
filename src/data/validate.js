@@ -25,6 +25,8 @@ export function validateDb(db) {
     for (const k of ['notes', 'attachments', 'reminders']) if (!Array.isArray(t[k])) t[k] = [];
     for (const k of ['occurrences', 'lists']) if (!t[k] || typeof t[k] !== 'object' || Array.isArray(t[k])) t[k] = {};
     if (t.parentId === undefined) t.parentId = null;
+    // v3: вложения заметок — массив (у заметок от других клиентов может не быть)
+    for (const n of t.notes) if (!n.deletedAt && n.attachments !== undefined && !Array.isArray(n.attachments)) n.attachments = [];
   }
   if (db.data.settings.length > 1) {
     throw new SyncError('E-DB-CORRUPT', 'В базе больше одной записи настроек');

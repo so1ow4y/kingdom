@@ -12,7 +12,7 @@ export const NESTED_ARRAYS = ['subtasks', 'notes', 'attachments', 'reminders'];
 // Словари «ключ → значение с меткой t», сливаются по ключу: экземпляры повторов и членство в списках (v2).
 export const KEYED_MAPS = ['occurrences', 'lists'];
 const STRUCTURAL = new Set([...SERVICE, ...NESTED_ARRAYS, ...KEYED_MAPS]);
-export const MERGE_COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards'];
+export const MERGE_COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards', 'doneArchive'];
 
 const isTomb = (e) => !!e.deletedAt;
 const ft = (e, k) => {

@@ -4,10 +4,11 @@
 import { openDb, req, txDone, deleteDb } from './idb.js';
 import { DB_NAME } from '../config.js';
 
-const IDB_VERSION = 2;
+const IDB_VERSION = 3;
 const V1_STORES = ['settings', 'lists', 'tasks', 'media', 'devices'];
 const V2_STORES = ['priorities', 'coinEvents', 'rewards']; // формат данных v2 (обновление 0.3)
-export const ENTITY_STORES = [...V1_STORES, ...V2_STORES];
+const V3_STORES = ['doneArchive']; // формат данных v3 (обновление 0.5)
+export const ENTITY_STORES = [...V1_STORES, ...V2_STORES, ...V3_STORES];
 
 /** Создаёт все недостающие сторы — независимо от старой версии (переживает и «пустую» базу без сторов). */
 function upgrade(db) {
@@ -168,6 +169,63 @@ export async function openRepo() {
       if (snapshot) tx.objectStore('snapshots').put(snapshot);
       for (const [key, value] of Object.entries(meta)) tx.objectStore('meta').put({ key, value });
       await done;
+    },
+
+    // ---------- Байты медиа (стор blobs; docs/TZ.md §10.3): { id: sha256, blob, size, lastAccess, pinned } ----------
+
+    async putBlob(id, blob, { pinned = false } = {}) {
+      const tx = db.transaction('blobs', 'readwrite');
+      const done = txDone(tx);
+      tx.objectStore('blobs').put({ id, blob, size: blob.size, lastAccess: Date.now(), pinned });
+      await done;
+    },
+
+    /** Байты или null; отмечает время обращения (для вытеснения по LRU). */
+    async getBlob(id) {
+      const tx = db.transaction('blobs', 'readwrite');
+      const done = txDone(tx);
+      const s = tx.objectStore('blobs');
+      const row = await req(s.get(id));
+      if (row) s.put({ ...row, lastAccess: Date.now() });
+      await done;
+      return row ? row.blob : null;
+    },
+
+    async hasBlob(id) {
+      return !!(await req(db.transaction('blobs', 'readonly').objectStore('blobs').getKey(id)));
+    },
+
+    async setBlobPinned(id, pinned) {
+      const tx = db.transaction('blobs', 'readwrite');
+      const done = txDone(tx);
+      const s = tx.objectStore('blobs');
+      const row = await req(s.get(id));
+      if (row && row.pinned !== pinned) s.put({ ...row, pinned });
+      await done;
+    },
+
+    async deleteBlob(id) {
+      const tx = db.transaction('blobs', 'readwrite');
+      const done = txDone(tx);
+      tx.objectStore('blobs').delete(id);
+      await done;
+    },
+
+    /** Метаданные кэша без самих байтов: [{ id, size, lastAccess, pinned }]. */
+    async listBlobs() {
+      const out = [];
+      await new Promise((resolve, reject) => {
+        const r = db.transaction('blobs', 'readonly').objectStore('blobs').openCursor();
+        r.onsuccess = () => {
+          const cur = r.result;
+          if (!cur) return resolve();
+          const { id, size, lastAccess, pinned } = cur.value;
+          out.push({ id, size, lastAccess, pinned });
+          cur.continue();
+        };
+        r.onerror = () => reject(r.error);
+      });
+      return out;
     },
 
     close() {

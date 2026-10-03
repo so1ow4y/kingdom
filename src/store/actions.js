@@ -11,10 +11,14 @@ import * as S from '../core/selectors.js';
 import * as G from '../core/game.js';
 import * as R from '../core/reminders.js';
 import * as T from '../core/treeDrop.js';
+import * as RT from '../core/retention.js';
+import { formatBytes } from '../core/media.js';
+import { prepareFile, sha256Hex } from '../media/process.js';
+import { putBlob } from '../media/cache.js';
 import { keyBetween, keyForIndex } from '../core/order.js';
 import { humanDate } from '../core/dates.js';
 import { countLabel } from '../core/plural.js';
-import { LIMITS } from '../config.js';
+import { LIMITS, MEDIA } from '../config.js';
 import { APP_VERSION } from '../version.js';
 
 let repo = null;
@@ -473,7 +477,7 @@ export async function removeReminder(id, remId) {
 export async function setNag(id, nag) {
   const t = getTask(id);
   if (!t) return;
-  const next = { enabled: !!nag.enabled, intervalMinutes: Math.min(1440, Math.max(5, nag.intervalMinutes | 0 || 15)) };
+  const next = { enabled: !!nag.enabled, intervalMinutes: Math.min(LIMITS.nagMax, Math.max(LIMITS.nagMin, nag.intervalMinutes | 0 || 15)) };
   await commit([change('tasks', id, (x) => M.touch(x, { nag: next }, ctx()))]);
 }
 
@@ -507,6 +511,125 @@ export async function reorderNote(id, noteId, index) {
     return;
   }
   await commit([change('tasks', id, (x) => M.touchNested(x, 'notes', noteId, { order: key }, ctx()))]);
+}
+
+// ---------- Вложения заметок и голосовые (обновление 0.5) ----------
+
+const MB = 1024 * 1024;
+const stampName = (prefix, ext) => {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${prefix} ${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}-${p(d.getMinutes())}.${ext}`;
+};
+
+/** Медиа для новых байтов: новое (или «воскрешённое»), а у существующего — снять отметку «сирота». */
+function mediaChange(meta, c0) {
+  const cur = store.data.media.get(meta.id);
+  if (!cur || cur.deletedAt) return { coll: 'media', prev: cur, next: M.newMedia(meta, c0) };
+  return cur.orphanedAt ? { coll: 'media', prev: cur, next: M.touch(cur, { orphanedAt: null }, c0) } : null;
+}
+
+/** Сохранить байты на устройстве (закреплены до заливки на Диск) и прикрепить к заметке. */
+async function attachPrepared(taskId, noteId, { blob, meta, name }) {
+  await putBlob(meta.id, blob, { pinned: !store.data.media.get(meta.id)?.driveFileId });
+  const c0 = ctx();
+  return commit([mediaChange(meta, c0), change('tasks', taskId, (x) => M.addAttachment(x, noteId, { mediaId: meta.id, name }, c0))]);
+}
+
+/** Фото, видео, файлы → вложения заметки. original — фото без сжатия (у JPEG вырезается EXIF). → сколько добавлено. */
+export async function attachFiles(taskId, noteId, files, { original = false } = {}) {
+  if (store.ui.readOnly) return showSnackbar('Только чтение: сначала обнови приложение');
+  const s = store.data.settings;
+  const max = (s.attachmentMaxMB || 100) * MB;
+  let added = 0;
+  for (const file of files) {
+    if (file.size > max && !/^image\//.test(file.type)) {
+      showSnackbar(`«${file.name}» больше ${s.attachmentMaxMB} МБ — не добавлен`);
+      continue;
+    }
+    if (file.size > MEDIA.bigFileWarnMB * MB && !/^image\//.test(file.type)) {
+      const ok = await confirm({
+        title: 'Большой файл',
+        text: `«${file.name}» — ${formatBytes(file.size)}. Он займёт столько же на Google Диске (общие 15 ГБ) и будет залит при «Пуш». Добавить?`,
+        confirmLabel: 'Добавить',
+      });
+      if (!ok) continue;
+    }
+    try {
+      setUi({ busyText: `Обработка: ${file.name}` });
+      const p = await prepareFile(file, { photoMaxSide: s.photoMaxSide, photoQuality: s.photoQuality, photoFormat: s.photoFormat, original });
+      if (p.blob.size > max) {
+        showSnackbar(`«${file.name}» больше ${s.attachmentMaxMB} МБ — не добавлен`);
+        continue;
+      }
+      if (await attachPrepared(taskId, noteId, p)) added++;
+      if (p.note) showSnackbar(p.note);
+    } catch (e) {
+      reportError(e);
+    } finally {
+      setUi({ busyText: null });
+    }
+  }
+  return added;
+}
+
+/** Запись голоса → вложение заметки. rec: { blob, mime, ext, codec, durationMs } */
+export async function attachRecording(taskId, noteId, rec) {
+  const id = await sha256Hex(rec.blob);
+  const meta = { id, kind: 'audio', mime: rec.mime, ext: rec.ext, codec: rec.codec, size: rec.blob.size, durationMs: rec.durationMs, original: true };
+  return attachPrepared(taskId, noteId, { blob: rec.blob, meta, name: stampName('Голосовое', rec.ext) });
+}
+
+/** «+ Голосовая заметка»: пустая заметка, к которой сразу пишется голос. → id заметки */
+export async function createVoiceNote(taskId) {
+  return addNote(taskId, '');
+}
+
+/** Пустую заметку (без текста и вложений) — удалить молча (отменили запись голосовой заметки). */
+export async function dropEmptyNote(taskId, noteId) {
+  const t = getTask(taskId);
+  const n = t?.notes?.find((x) => x.id === noteId && !x.deletedAt);
+  if (!n || n.text.trim() || M.liveAttachments(n).length) return;
+  await commit([change('tasks', taskId, (x) => M.removeNested(x, 'notes', noteId, ctx()))]);
+}
+
+export async function deleteAttachment(taskId, noteId, attId) {
+  const c = change('tasks', taskId, (x) => M.removeAttachment(x, noteId, attId, ctx()));
+  if (await commit([c])) offerUndo('Вложение удалено', [c]);
+}
+
+export async function reorderAttachment(taskId, noteId, attId, index) {
+  const note = getTask(taskId)?.notes?.find((n) => n.id === noteId);
+  const rest = M.liveAttachments(note).filter((a) => a.id !== attId);
+  let key;
+  try {
+    key = keyForIndex(rest, Math.max(0, Math.min(index, rest.length)));
+  } catch (e) {
+    reportError(e);
+    return;
+  }
+  await commit([change('tasks', taskId, (x) => M.moveAttachment(x, noteId, attId, key, ctx()))]);
+}
+
+/** Изменения медиа от синхронизации (driveFileId, orphanedAt) и надгробия сборки мусора. */
+export async function commitMedia(updates = [], tombIds = []) {
+  const c0 = ctx();
+  const changes = updates.map(({ id, fields }) => change('media', id, (m) => M.touch(m, fields, c0)));
+  for (const id of tombIds) changes.push(change('media', id, (m) => M.tombstone(m, c0)));
+  return commit(changes);
+}
+
+// ---------- Лимит хранения выполненных (обновление 0.5) ----------
+
+export function completedPlan() {
+  return RT.purgePlan(store.data, store.data.settings.completedLimit ?? null, Date.now());
+}
+
+/** Удалить старые выполненные сверх лимита (статистика остаётся в сводках doneArchive). → сколько удалено. */
+export async function purgeCompleted(plan = completedPlan()) {
+  if (!plan.count || store.ui.readOnly) return 0;
+  const ok = await commit(RT.applyPurge(store.data, plan, ctx()));
+  return ok ? plan.count : 0;
 }
 
 // ---------- Вложенные задачи (п. 2.8) ----------

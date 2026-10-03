@@ -6,6 +6,7 @@ import { Icon } from '../icons.js';
 import { Sheet } from './Sheet.js';
 import { DraftList } from './ItemLists.js';
 import { DraftReminders } from './Reminders.js';
+import { TimeInput } from './TimeInput.js';
 import { store, closeQuickAdd, showSnackbar, openSheet } from '../../store/appState.js';
 import { createTask, createList } from '../../store/actions.js';
 import { sortedLists } from '../../core/selectors.js';
@@ -111,8 +112,8 @@ function QuickAddSheet({ ctx }) {
               onClick=${() => setDate(date === d ? null : d)}>${dayLabel(d, i)}</button>`)}
         </div>
         ${date ? html`<div class="chip-row wrap">
-          <label class=${'chip' + (time ? ' selected' : '')}><${Icon} name="clock" size=${16}/>
-            <input type="time" class="chip-time" value=${time || ''} aria-label="Время" onInput=${(e) => setTime(e.target.value || null)}/></label>
+          <span class=${'chip chip-timebox' + (time ? ' selected' : '')}><${Icon} name="clock" size=${16}/>
+            <${TimeInput} value=${time} onChange=${setTime} label="Время"/></span>
           <button type="button" class=${'chip' + (open.reminders ? ' selected' : '')} onClick=${() => flip('reminders')} aria-expanded=${open.reminders}>
             <${Icon} name="bell" size=${16}/> Напоминание${reminders && !reminders.length ? ': нет' : ''}</button>
         </div>` : null}
@@ -142,7 +143,7 @@ function QuickAddSheet({ ctx }) {
             </div>
           </div>` : null}
         ${open.reminders && date ? html`<div class="qa-panel"><div class="field-label">Напоминания</div>
-          <${DraftReminders} draft=${{ scheduledDate: date, scheduledTime: time, deadlineDate: null }} value=${reminders} setValue=${setReminders}/></div>` : null}
+          <${DraftReminders} draft=${{ scheduledDate: date, scheduledTime: time, deadlineDate: null }} value=${reminders} setValue=${setReminders} onSetTime=${setTime}/></div>` : null}
         ${open.subtasks ? html`<div class="qa-panel"><div class="field-label">Подзадачи</div>
           <${DraftList} items=${subtasks} setItems=${setSubtasks} placeholder="Подзадача" addLabel="Добавить подзадачу"/></div>` : null}
         ${open.notes ? html`<div class="qa-panel"><div class="field-label">Заметки</div>

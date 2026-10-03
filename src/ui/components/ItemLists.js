@@ -4,6 +4,7 @@ import { html, useState, useRef, useEffect, useLayoutEffect, useMemo } from '../
 import { Icon } from '../icons.js';
 import { SortableList, DragHandle } from './Sortable.js';
 import { TaskTree } from './TaskTree.js';
+import { NoteAttachments, startVoice } from './Attachments.js';
 import { store, registerFlusher } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
@@ -69,7 +70,8 @@ function NoteItem({ taskId, note, handle, locked, autoFocus }) {
   return html`
     <div class="item-row note-item">
       <div class="item-body">
-        <textarea ref=${el} class="note-input" rows="2" value=${text} disabled=${locked} placeholder="Текст заметки…"
+        <textarea ref=${el} class="note-input" rows="2" value=${text} disabled=${locked}
+          placeholder=${(note.attachments || []).some((a) => !a.deletedAt) ? 'Подпись (необязательно)…' : 'Текст заметки…'}
           aria-label="Заметка" onInput=${onInput} onFocus=${() => { focused.current = true; }}
           onBlur=${() => { focused.current = false; flush(); }}></textarea>
         <${Links} text=${text}/>
@@ -80,6 +82,7 @@ function NoteItem({ taskId, note, handle, locked, autoFocus }) {
         <button class="icon-btn" onClick=${() => A.deleteNote(taskId, note.id)} aria-label="Удалить заметку" title="Удалить заметку">
           <${Icon} name="trash" size=${18}/></button>
         <${DragHandle} handle=${handle} label="Перетащить заметку"/>`}
+      <${NoteAttachments} taskId=${taskId} note=${note} locked=${locked}/>
     </div>`;
 }
 
@@ -90,12 +93,20 @@ export function NotesEditor({ taskId, locked = false }) {
   if (!t) return null;
   const notes = liveNotes(t);
   const add = async () => setFresh(await A.addNote(taskId, ''));
+  // «+ Голосовая заметка»: сразу создаёт заметку и начинает запись (при отмене пустая заметка удаляется)
+  const voice = async () => {
+    const id = await A.createVoiceNote(taskId);
+    if (id) startVoice(taskId, id, true);
+  };
   return html`
     <div class="item-list">
       ${notes.length ? html`<${SortableList} items=${notes} disabled=${locked}
         onMove=${(id, index) => A.reorderNote(taskId, id, index)}
         render=${(n, handle) => html`<${NoteItem} key=${n.id} taskId=${taskId} note=${n} handle=${handle} locked=${locked} autoFocus=${n.id === fresh}/>`}/>` : null}
-      ${locked ? null : html`<button class="item-add" onClick=${add}><${Icon} name="plus" size=${16}/> Добавить заметку</button>`}
+      ${locked ? null : html`<div class="item-add-row">
+        <button class="item-add" onClick=${add}><${Icon} name="plus" size=${16}/> Добавить заметку</button>
+        <button class="item-add" onClick=${voice}>🎤 Голосовая заметка</button>
+      </div>`}
     </div>`;
 }
 

@@ -3,9 +3,10 @@
 // Показ уведомлений и «Пропущенные» — в ui/notifier.js.
 
 import { zonedToEpoch, todayIn, humanDate } from './dates.js';
+import { LIMITS } from '../config.js';
 
-export const MAX_REMINDERS = 10;
-export const MAX_OFFSET_MINUTES = 10080; // неделя — ограничение формата
+export const MAX_REMINDERS = LIMITS.remindersMax;
+export const MAX_OFFSET_MINUTES = LIMITS.reminderOffsetMax; // неделя — ограничение формата
 const DAY_END = '23:59';
 const MIN = 60000;
 
@@ -105,7 +106,7 @@ export function dueBetween(data, from, to) {
       if (at > from && at <= to) out.push({ key: fireKey(t.id, r.id, at), taskId: t.id, title: t.title, at, nag: false });
     }
     if (first != null && t.nag?.enabled) {
-      const step = Math.max(5, t.nag.intervalMinutes | 0) * MIN;
+      const step = Math.max(LIMITS.nagMin, t.nag.intervalMinutes | 0) * MIN;
       const k = Math.floor((to - first) / step); // последний повтор не позже to
       const at = first + k * step;
       if (k >= 1 && at > from) out.push({ key: `${t.id}|nag|${first}|${k}`, taskId: t.id, title: t.title, at, nag: true });

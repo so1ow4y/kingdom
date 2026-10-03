@@ -5,6 +5,7 @@ import { SyncError } from '../src/core/errors.js';
 
 const FOLDER = 'application/vnd.google-apps.folder';
 const toBytes = (c) => (c instanceof Uint8Array ? c : new TextEncoder().encode(String(c)));
+const blobBytes = async (c) => (typeof Blob !== 'undefined' && c instanceof Blob ? new Uint8Array(await c.arrayBuffer()) : toBytes(c));
 
 export function createFakeDrive() {
   let seq = 0;
@@ -44,6 +45,8 @@ export function createFakeDrive() {
       if (/value='root'/.test(q)) list = list.filter((f) => f.appProperties?.lifetasks === 'root' && f.mimeType === FOLDER);
       const parent = q.match(/'([^']+)' in parents/);
       if (parent) list = list.filter((f) => f.parents?.includes(parent[1]));
+      const sha = q.match(/key='sha256' and value='([0-9a-f]+)'/);
+      if (sha) list = list.filter((f) => f.appProperties?.sha256 === sha[1]);
       if (/trashed=false/.test(q)) list = list.filter((f) => !f.trashed);
       list.sort((a, b) => a.createdTime.localeCompare(b.createdTime));
       if (/desc/.test(orderBy)) list.reverse();
@@ -52,6 +55,19 @@ export function createFakeDrive() {
 
     async getMeta(id) {
       return meta(get(id));
+    },
+
+    async quota() {
+      return { limit: String(15 * 1024 ** 3), usage: '1000', usageInDrive: '600', usageInDriveTrash: '0' };
+    },
+
+    async findMediaBySha(parentId, sha) {
+      return (await drive.findFiles(`'${parentId}' in parents and appProperties has { key='sha256' and value='${sha}' } and trashed=false`))[0] || null;
+    },
+
+    async uploadResumable(m, content) {
+      drive.calls.push(['resumable', m.name]);
+      return drive.createFile(m, new Uint8Array(await content.arrayBuffer()));
     },
 
     async download(id) {
@@ -68,7 +84,7 @@ export function createFakeDrive() {
     async createFile({ name, parentId, mimeType, appProperties }, content) {
       const f = { id: nextId('file'), name, mimeType, appProperties, parents: parentId ? [parentId] : ['root'],
         createdTime: tick(), trashed: false, revisions: [] };
-      addRevision(f, toBytes(content));
+      addRevision(f, await blobBytes(content));
       files.set(f.id, f);
       return meta(f);
     },

@@ -15,6 +15,7 @@ import { getTheme, setTheme } from '../theme.js';
 import { PrioritiesSection } from '../components/PrioritiesEditor.js';
 import { AppearanceSection } from '../components/Appearance.js';
 import { NotificationsSection } from '../components/Reminders.js';
+import { DataSection, LimitsSection } from '../components/DataSettings.js';
 import { GameSettingsSection } from './Shop.js';
 import { useMedia } from '../hooks.js';
 import { tokenValid, startLogin, logout, expireToken } from '../../google/auth.js';
@@ -211,6 +212,10 @@ export function SettingsScreen({ query = {} }) {
       <${NotificationsSection} focus=${query.section === 'notifications'}/>
 
       <${GameSettingsSection}/>
+
+      <${DataSection}/>
+
+      <${LimitsSection}/>
 
       <${PrioritiesSection} focus=${query.section === 'priorities'}/>
 

@@ -11,6 +11,7 @@ import { registerSW } from './pwa/swClient.js';
 import { takeOAuthFragment } from './google/auth.js';
 import { startSync } from './sync/syncEngine.js';
 import { startNotifier } from './ui/notifier.js';
+import { runRetention } from './ui/components/DataSettings.js';
 
 // Самым первым: забрать токен из адреса и убрать его оттуда (до роутера и до любых логов).
 const oauth = takeOAuthFragment();
@@ -43,6 +44,8 @@ try {
   render(html`<${App}/>`, root);
   registerSW();
   startNotifier();
+  // Лимит выполненных (обновление 0.5): чистка после запуска, не мешая первой отрисовке и синхронизации
+  setTimeout(() => runRetention().catch((e) => console.warn('retention', e)), 4000);
   navigator.storage?.persist?.().catch(() => {});
   startSync(oauth, { navigate: (route) => navigate(route, { replace: true }) }).catch((e) => console.error('startSync', e));
 } catch (e) {

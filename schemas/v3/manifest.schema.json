@@ -1,0 +1,130 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://lifetasks.local/schemas/v3/manifest.schema.json",
+  "title": "LifeTasks manifest v3",
+  "type": "object",
+  "required": [
+    "format",
+    "schemaVersion",
+    "createdAt",
+    "updatedAt",
+    "writer",
+    "files",
+    "lastPush"
+  ],
+  "properties": {
+    "format": {
+      "const": "lifetasks-manifest"
+    },
+    "schemaVersion": {
+      "const": 3
+    },
+    "createdAt": {
+      "$ref": "#/$defs/isoTime"
+    },
+    "updatedAt": {
+      "$ref": "#/$defs/isoTime"
+    },
+    "writer": {
+      "$ref": "#/$defs/writer"
+    },
+    "files": {
+      "type": "object",
+      "required": [
+        "db",
+        "mediaFolder",
+        "backupsFolder"
+      ],
+      "properties": {
+        "db": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "mediaFolder": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "backupsFolder": {
+          "$ref": "#/$defs/fileRef"
+        },
+        "readable": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/fileRef"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      }
+    },
+    "lastPush": {
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "type": "object",
+          "required": [
+            "at",
+            "deviceId",
+            "dbRevisionId"
+          ],
+          "properties": {
+            "at": {
+              "$ref": "#/$defs/isoTime"
+            },
+            "deviceId": {
+              "type": "string"
+            },
+            "dbRevisionId": {
+              "type": "string"
+            }
+          }
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "isoTime": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}\\.\\d{3}Z$"
+    },
+    "writer": {
+      "type": "object",
+      "required": [
+        "app",
+        "appVersion",
+        "deviceId"
+      ],
+      "properties": {
+        "app": {
+          "type": "string",
+          "minLength": 1
+        },
+        "appVersion": {
+          "type": "string",
+          "pattern": "^\\d+\\.\\d+\\.\\d+"
+        },
+        "deviceId": {
+          "type": "string"
+        }
+      }
+    },
+    "fileRef": {
+      "type": "object",
+      "required": [
+        "id",
+        "name"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "name": {
+          "type": "string"
+        }
+      }
+    }
+  }
+}

@@ -5,8 +5,9 @@
 import { SCHEMA_VERSION } from '../../version.js';
 import { SyncError } from '../../core/errors.js';
 import m001to002 from './m001_to_002.js';
+import m002to003 from './m002_to_003.js';
 
-export const MIGRATIONS = [m001to002];
+export const MIGRATIONS = [m001to002, m002to003];
 
 /** Довести базу до SCHEMA_VERSION. Версия новее приложения — E-READONLY. */
 export function migrateDb(db, migrations = MIGRATIONS, target = SCHEMA_VERSION) {

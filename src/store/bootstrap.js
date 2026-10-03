@@ -89,7 +89,7 @@ export async function bootstrap() {
   store.data.tasks = new Map(loaded.tasks.map((x) => [x.id, x]));
   store.data.media = new Map(loaded.media.map((x) => [x.id, x]));
   store.data.devices = new Map(loaded.devices.map((x) => [x.id, x]));
-  for (const c of ['priorities', 'coinEvents', 'rewards']) store.data[c] = new Map(loaded[c].map((x) => [x.id, x]));
+  for (const c of ['priorities', 'coinEvents', 'rewards', 'doneArchive']) store.data[c] = new Map(loaded[c].map((x) => [x.id, x]));
 
   initActions({ repo, clock, deviceId: store.deviceId });
   refreshNow();

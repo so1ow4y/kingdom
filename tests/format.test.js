@@ -16,6 +16,7 @@ import { SCHEMA_VERSION } from '../src/version.js';
 const load = async (p) => (await fetch(new URL(p, import.meta.url))).json();
 const dbSchema = await load('../schemas/v1/db.schema.json');
 const dbSchemaV2 = await load('../schemas/v2/db.schema.json');
+const dbSchemaV3 = await load('../schemas/v3/db.schema.json');
 const manifestSchema = await load('../schemas/v1/manifest.schema.json');
 const sampleDb = await load('../samples/v1/db.json');
 const sampleManifest = await load('../samples/v1/manifest.json');
@@ -64,7 +65,7 @@ function appData() {
 
 test('база, которую пишет приложение, проходит схему', () => {
   const { data, deviceId } = appData();
-  assertValid(dbSchemaV2, buildDb(data, { deviceId }), 'база приложения');
+  assertValid(dbSchemaV3, buildDb(data, { deviceId }), 'база приложения');
 });
 
 test('манифест, который пишет приложение, проходит схему', () => {
@@ -83,11 +84,11 @@ test('gzip: туда и обратно без потерь, сжатие зам�
   assert.equal(canonicalJson(await gunzipJson(bytes)), canonicalJson(db));
 });
 
-test('образец v1 → gzip → чтение: мигрирован в v2, проходит схему v2, неизвестные поля на месте', async () => {
+test('образец v1 → gzip → чтение: мигрирован до текущей версии, проходит её схему, неизвестные поля на месте', async () => {
   const { db, migratedFrom } = await parseDbBytes(await gzipJson(sampleDb));
   assert.equal(migratedFrom, 1);
-  assert.equal(db.schemaVersion, 2);
-  assertValid(dbSchemaV2, db, 'мигрированный образец');
+  assert.equal(db.schemaVersion, SCHEMA_VERSION);
+  assertValid(dbSchemaV3, db, 'мигрированный образец');
   const { extraEnvelope, extraCollections } = extrasOf(db);
   assert.equal(extraEnvelope.x_futureEnvelope, sampleDb.x_futureEnvelope);
   assert.deepEqual(extraCollections.x_futureCollection, sampleDb.data.x_futureCollection);
@@ -153,4 +154,12 @@ const manifestSchemaV2 = await load('../schemas/v2/manifest.schema.json');
 test('samples/v2/*.json проходят schemas/v2/*', () => {
   assertValid(dbSchemaV2, sampleDbV2, 'образец базы v2');
   assertValid(manifestSchemaV2, sampleManifestV2, 'образец манифеста v2');
+});
+
+const sampleDbV3 = await load('../samples/v3/db.json');
+const sampleManifestV3 = await load('../samples/v3/manifest.json');
+const manifestSchemaV3 = await load('../schemas/v3/manifest.schema.json');
+test('samples/v3/*.json проходят schemas/v3/*', () => {
+  assertValid(dbSchemaV3, sampleDbV3, 'образец базы v3');
+  assertValid(manifestSchemaV3, sampleManifestV3, 'образец манифеста v3');
 });

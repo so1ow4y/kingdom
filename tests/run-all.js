@@ -18,4 +18,7 @@ await run([
   './reminders.test.js',
   './analytics.test.js',
   './treeDrop.test.js',
+  './migration3.test.js',
+  './retention.test.js',
+  './media.test.js',
 ]);

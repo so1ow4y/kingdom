@@ -11,7 +11,7 @@ export const FOLDER_MIME = 'application/vnd.google-apps.folder';
 const qs = (o) => new URLSearchParams(o).toString();
 
 function toBytes(content) {
-  if (content instanceof Uint8Array) return content;
+  if (content instanceof Uint8Array || (typeof Blob !== 'undefined' && content instanceof Blob)) return content;
   return new TextEncoder().encode(String(content));
 }
 
@@ -30,6 +30,33 @@ export function createDrive() {
   return {
     async about() {
       return gfetch(`${API}/about?${qs({ fields: 'user(displayName,emailAddress)' })}`);
+    },
+
+    /** Место на Google Диске (общее для Диска, Gmail и Фото): { limit, usage, usageInDrive, usageInDriveTrash } в байтах (строки). */
+    async quota() {
+      const r = await gfetch(`${API}/about?${qs({ fields: 'storageQuota' })}`);
+      return r.storageQuota || {};
+    },
+
+    /** Медиафайл по sha256 в папке media (файлы не перезаписываются, дубли не заливаются). */
+    async findMediaBySha(parentId, sha) {
+      const q = `'${parentId}' in parents and appProperties has { key='sha256' and value='${sha}' } and trashed=false`;
+      return (await this.findFiles(q))[0] || null;
+    },
+
+    /** Большой файл: resumable upload (сессия + один PUT). content — Blob. */
+    async uploadResumable({ name, parentId, mimeType, appProperties }, content) {
+      const meta = { name, mimeType, appProperties };
+      if (parentId) meta.parents = [parentId];
+      const res = await gfetch(`${UPLOAD}/files?${qs({ uploadType: 'resumable', fields: FILE_FIELDS })}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': mimeType, 'X-Upload-Content-Length': String(content.size) },
+        body: JSON.stringify(meta),
+        as: 'response',
+      });
+      const session = res.headers.get('Location');
+      if (!session) throw new Error('Drive: нет адреса сессии загрузки');
+      return gfetch(session, { method: 'PUT', headers: { 'Content-Type': mimeType }, body: content });
     },
 
     /** Все файлы по запросу q (с постраничной загрузкой). */

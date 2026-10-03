@@ -3,6 +3,7 @@
 import { html, useState } from '../html.js';
 import { Icon } from '../icons.js';
 import { Sheet, MenuItem } from './Sheet.js';
+import { TimeInput } from './TimeInput.js';
 import { ListEditorSheet } from './ListEditor.js';
 import { SyncPanel } from './Sync.js';
 import { navigate } from '../router.js';
@@ -14,6 +15,7 @@ import { LIMITS } from '../../config.js';
 import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { liveNotes } from '../../core/model.js';
 import { ReminderSheet, MissedSheet } from './Reminders.js';
+import { RecorderSheet } from './Attachments.js';
 
 function WhenSheet({ taskId, mode }) {
   const t = A.getTask(taskId);
@@ -53,11 +55,11 @@ function WhenSheet({ taskId, mode }) {
           <input type="date" value=${cur || ''}
             onChange=${(e) => e.target.value && apply(e.target.value)}/>
         </label>
-        <label class="field">
+        <div class="field">
           <span>Время</span>
-          <input type="time" value=${curTime || ''}
-            onChange=${(e) => apply(cur || today, e.target.value || null)}/>
-        </label>
+          <${TimeInput} value=${curTime || null} label="Время"
+            onChange=${(v) => (deadline ? A.setDeadline : A.setSchedule)(taskId, cur || today, v || null)}/>
+        </div>
       </div>
       ${curTime ? html`<button class="link-btn" onClick=${() => apply(cur, null)}>Убрать время</button>` : null}
       ${warn ? html`<p class="hint warn">Дедлайн раньше даты выполнения</p>` : null}
@@ -240,6 +242,7 @@ export function SheetHost() {
     case 'listEditor': return html`<${ListEditorSheet} ...${s}/>`;
     case 'reminder': return html`<${ReminderSheet} ...${s}/>`;
     case 'missed': return html`<${MissedSheet}/>`;
+    case 'recorder': return html`<${RecorderSheet} ...${s}/>`;
     case 'parentPicker': return html`<${ParentPickerSheet} ...${s}/>`;
     default: return null;
   }
