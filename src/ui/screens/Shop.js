@@ -10,16 +10,19 @@ import { formatMoment } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { getPrefs, setPrefs, SCHEMES } from '../prefs.js';
 import { readLocal, writeLocal } from '../hooks.js';
-import { CosmeticPreview, DecorationSettings } from '../components/Decorations.js';
+import { VillagePanel } from './Village.js';
+import { DecorationSettings } from '../components/Decorations.js';
+import { gemBalance } from '../../core/village.js';
 
-const TABS = [['rewards', 'Награды'], ['cosmetics', 'Оформление'], ['achievements', 'Достижения'], ['history', 'История']];
+const TABS = [['rewards', 'Награды'], ['village', '🏡 Деревня'], ['cosmetics', 'Цвета'], ['achievements', 'Достижения'], ['history', 'История']];
 const EMOJI = ['🎁', '🍕', '📺', '🎮', '☕', '🍰', '🛌', '🎬', '📚', '🛍', '🏖', '🎧'];
 
 export function GameHeader({ st }) {
   const lv = st.levelInfo;
   return html`
     <div class="game-head">
-      <div class="gh-balance"><span class="gh-coin">🪙</span><b>${st.balance}</b><small>монет</small></div>
+      <div class="gh-balance"><span class="gh-coin">🪙</span><b>${st.balance}</b><small>монет</small>
+        <span class="gh-gem" title="Изумруды — из изумрудной шахты и фокус-сессий">💎 <b>${gemBalance(store.data)}</b></span></div>
       <div class="gh-level">
         <div class="gh-row"><b>Уровень ${lv.level}</b><small>${lv.xp} / ${lv.to} опыта</small></div>
         <div class="progress"><i style=${{ width: Math.round(lv.progress * 100) + '%' }}></i></div>
@@ -109,33 +112,30 @@ function Rewards({ bal }) {
 function Cosmetics({ bal }) {
   const p = getPrefs();
   const readOnly = !!store.ui.readOnly;
-  const [category, setCategory] = useState('all');
-  const applied = c => c.kind === 'prop' ? (p.props || []).includes(c.value) : p[c.kind] === c.value;
-  const apply = c => setPrefs(c.kind === 'prop'
-    ? { props: applied(c) ? (p.props || []).filter(v => v !== c.value) : [...(p.props || []), c.value] }
-    : { [c.kind]: applied(c) ? (c.kind === 'scheme' ? 'indigo' : null) : c.value });
+  const applied = (c) => p[c.kind] === c.value;
+  const apply = (c) => setPrefs({ [c.kind]: applied(c) ? (c.kind === 'scheme' ? 'indigo' : null) : c.value });
+  const legacy = G.COSMETICS.filter((c) => c.legacy && G.ownsItem(store.data, c.id));
+  const hint = {
+    lime: 'Деревня станет сказочным лугом', lavender: 'Деревня станет готической', ocean: 'Деревня переедет к морю с маяком', sunset: 'В деревню придёт осень',
+  };
   return html`
-    <p class="muted small">Купленное оформление включается на каждом устройстве отдельно (здесь или в «Настройки → Внешний вид»).</p>
-    <div class="chip-row wrap">
-      ${[['all','Всё'],['scene','Миры'],['static','Питомцы на месте'],['dynamic','Подвижные питомцы'],['prop','Предметы'],['colors','Цвета']].map(([id,label]) => html`<button class=${'chip' + (category === id ? ' selected' : '')} onClick=${() => setCategory(id)}>${label}</button>`)}
-    </div>
-    <${DecorationSettings}/>
-    <p class="muted small">Предметы: 35–120 🪙 · питомцы: 60–280 🪙 · миры: 180–240 🪙. Базовые приоритеты дают 1–20 монет за задачу. Можно включить один мир, одного питомца и несколько предметов.</p>
+    <p class="muted small">Цветовая схема меняет и стиль деревни, а цвет квадрата с буквой — флаги на башне, флюгер и паруса мельницы. Включается на каждом устройстве отдельно.</p>
     <div class="cosmetic-grid">
-      ${G.COSMETICS.filter(c => category === 'all' || c.kind === category || c.motion === category || (category === 'colors' && ['scheme','letter'].includes(c.kind))).map((c) => {
+      ${G.COSMETICS.filter((c) => !c.legacy).map((c) => {
         const owned = G.ownsItem(store.data, c.id);
         const swatch = c.kind === 'scheme' ? (document.documentElement.dataset.theme === 'dark' ? SCHEMES[c.value].dark : SCHEMES[c.value].light) : c.value;
         return html`
           <div class=${'cosmetic' + (applied(c) ? ' selected' : '')} key=${c.id}>
-            ${['scene','pet','prop'].includes(c.kind) ? html`<${CosmeticPreview} item=${c}/>` : html`<span class="cosmetic-swatch" style=${{ background: swatch }}>${c.kind === 'letter' ? 'L' : ''}</span>`}
+            <span class="cosmetic-swatch" style=${{ background: swatch }}>${c.kind === 'letter' ? 'L' : ''}</span>
             <div class="cosmetic-name">${c.name}</div>
-            <p class="cosmetic-description muted small">${c.description || 'Акцент для твоего рабочего пространства'}</p>
+            <p class="cosmetic-description muted small">${c.description || hint[c.value] || 'Флаги и акценты деревни этого цвета'}</p>
             ${owned ? html`<button class="btn small" onClick=${() => apply(c)}>${applied(c) ? 'Снять' : 'Включить'}</button>`
               : html`<button class="btn small primary" disabled=${c.price > bal || readOnly} onClick=${() => A.buyCosmetic(c.id)}
                   title=${c.price > bal ? `Не хватает ${c.price - bal} 🪙` : 'Купить'}>${c.price} 🪙</button>`}
           </div>`;
       })}
-    </div>`;
+    </div>
+    ${legacy.length ? html`<p class="muted small">Купленное раньше оформление теперь живёт в деревне: ${legacy.map((c) => `${c.emoji} ${c.name}`).join(', ')}.</p>` : null}`;
 }
 
 function Achievements({ st }) {
@@ -172,6 +172,7 @@ function History() {
     .sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 200);
   const label = (e) => {
     if (e.type === 'purchase') return e.active ? 'Покупка' : 'Возврат покупки';
+    if (e.type === 'focus') return `Фокус-сессия · ${e.minutes | 0} мин`;
     return e.active ? 'За задачу' : 'Отметка снята — монеты возвращены';
   };
   return html`
@@ -182,7 +183,7 @@ function History() {
     ${events.length ? html`<div class="coin-log">
       ${events.map((e) => html`<div class=${'coin-row' + (e.active ? '' : ' inactive')} key=${e.id}>
         <div class="coin-main"><div>${e.title || '—'}</div><small class="muted">${label(e)} · ${formatMoment(e.at, tz)}</small></div>
-        <b class=${e.amount < 0 ? 'neg' : 'pos'}>${e.amount > 0 ? '+' : ''}${e.amount}</b>
+        <b class=${e.amount < 0 || e.gems < 0 ? 'neg' : 'pos'}>${e.gems ? `${e.gems > 0 ? '+' : ''}${e.gems} 💎` : `${e.amount > 0 ? '+' : ''}${e.amount}`}</b>
         ${e.type === 'purchase' && e.active ? html`<button class="btn small ghost" onClick=${() => A.refundPurchase(e.id)} disabled=${!!store.ui.readOnly}>Вернуть</button>` : null}
       </div>`)}
     </div>` : html`<p class="muted">${all ? 'Событий пока нет — выполни задачу.' : 'Покупок пока не было.'}</p>`}`;
@@ -213,6 +214,7 @@ export function ShopScreen() {
         ${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${'chip' + (tab === k ? ' selected' : '')} onClick=${() => setTab(k)}>${label}</button>`)}
       </div>
       ${tab === 'rewards' ? html`<${Rewards} bal=${st.balance}/>` : tab === 'cosmetics' ? html`<${Cosmetics} bal=${st.balance}/>`
+        : tab === 'village' ? html`<${VillagePanel}/>`
         : tab === 'achievements' ? html`<${Achievements} st=${st}/>` : html`<${History}/>`}
     </div>`;
 }
@@ -246,7 +248,8 @@ export function GameSettingsSection() {
             <li>Покупка списывает монеты; купить дороже баланса нельзя. Покупку можно вернуть в «Истории».</li>
             <li>Опыт — все заработанные монеты за всё время, траты его не уменьшают. Уровень L требует 25·(L−1)·L опыта: 50, 150, 300, 500…</li>
             <li>Серия — дни подряд, в которые выполнена хотя бы одна задача.</li>
-            <li>Пока игра выключена, монеты не начисляются, а всё оформление доступно бесплатно. Журнал монет при этом сохраняется.</li>
+            <li>Деревня: постройки, жители, свет и декор покупаются за монеты или изумруды 💎. Изумруды дают изумрудная шахта и фокус-сессии от 15 минут, золотая шахта увеличивает монеты за задачи.</li>
+            <li>Пока игра выключена, монеты не начисляются, деревня спит, а цветовые схемы доступны бесплатно. Журнал монет при этом сохраняется.</li>
           </ul>
         </details>` : null}
     </section>`;

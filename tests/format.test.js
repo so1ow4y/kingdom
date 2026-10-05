@@ -9,7 +9,7 @@ import { validateDb } from '../src/data/validate.js';
 import { migrateDb } from '../src/data/migrations/index.js';
 import { parseDbBytes } from '../src/sync/protocol.js';
 import { newTask, newList, newDevice, newReward, defaultLists, defaultSettings, defaultPriorities, tombstone, touch } from '../src/core/model.js';
-import { purchaseEvent } from '../src/core/game.js';
+import { purchaseEvent, focusEvent } from '../src/core/game.js';
 import { canonicalJson } from '../src/core/canonical.js';
 import { SCHEMA_VERSION } from '../src/version.js';
 
@@ -56,7 +56,11 @@ function appData() {
       tasks: [t1, t2, t3, t4],
       priorities: defaultPriorities(),
       rewards: [newReward({ name: 'Пицца', emoji: '🍕', price: 300, repeatable: true, order: 'a0' }, c)],
-      coinEvents: [purchaseEvent({ price: 300, title: 'Пицца' }, c)],
+      coinEvents: [
+        purchaseEvent({ price: 300, title: 'Пицца' }, c),
+        purchaseEvent({ gems: 3, title: 'Смена дня и ночи', itemId: 'v:daynight' }, c), // 0.7: покупка за изумруды
+        focusEvent({ coinEvents: new Map() }, { minutes: 25, taskId: t1.id, title: 'Бег' }, c), // 0.7: фокус-сессия
+      ],
       media: [],
       devices: [newDevice({ id: deviceId, name: 'Комп', platform: 'windows-chrome', appVersion: '0.1.0' }, c)],
     },

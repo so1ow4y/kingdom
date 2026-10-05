@@ -18,7 +18,10 @@ import { AnalyticsScreen } from './screens/Analytics.js';
 import { ShopScreen } from './screens/Shop.js';
 import { StartScreen, RedirectingScreen } from './components/Sync.js';
 import { Dock } from './components/Dock.js';
-import { Decorations } from './components/Decorations.js';
+import { AchievementToast } from './components/Decorations.js';
+import { VillageHost } from './components/VillageView.js';
+import { FocusBar } from './components/Focus.js';
+import { VillageScreen } from './screens/Village.js';
 import { dockPosition } from './prefs.js';
 import { clearMissed } from './notifier.js';
 import { pull } from '../sync/syncEngine.js';
@@ -48,6 +51,7 @@ function titleFor(route) {
     case 'journal': return 'Журнал';
     case 'analytics': return 'Аналитика';
     case 'shop': return 'Магазин';
+    case 'village': return 'Деревня';
     default: return 'LifeTasks';
   }
 }
@@ -65,6 +69,7 @@ function Screen({ route }) {
     case 'journal': return html`<${JournalScreen}/>`;
     case 'analytics': return html`<${AnalyticsScreen}/>`;
     case 'shop': return html`<${ShopScreen}/>`;
+    case 'village': return html`<${VillageScreen}/>`;
     default: return html`<${TodayScreen} query=${route.query}/>`;
   }
 }
@@ -203,9 +208,10 @@ export function App() {
 
   return html`
     <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + dockPosition(!desktop)}>
-      <${Decorations}/><${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
+      <${VillageHost}/><${AchievementToast}/><${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
       <div class="main-col">
         ${base.name !== 'task' ? html`<${TopBar} route=${base}/>` : null}
+        <${FocusBar} sticky=${base.name !== 'task'}/>
         <${Banners}/>
         <main class="content" id="main"><${Screen} route=${base}/></main>
       </div>

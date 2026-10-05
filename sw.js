@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.6.0';
+const VERSION = '0.7.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -32,6 +32,7 @@ const PRECACHE = [
   './src/core/selectors.js',
   './src/core/sessions.js',
   './src/core/treeDrop.js',
+  './src/core/village.js',
   './src/data/envelope.js',
   './src/data/exportZip.js',
   './src/data/migrations/index.js',
@@ -51,6 +52,7 @@ const PRECACHE = [
   './src/store/actions.js',
   './src/store/appState.js',
   './src/store/bootstrap.js',
+  './src/store/focus.js',
   './src/store/idb.js',
   './src/store/localRepo.js',
   './src/sync/backups.js',
@@ -63,8 +65,10 @@ const PRECACHE = [
   './src/ui/components/Appearance.js',
   './src/ui/components/Attachments.js',
   './src/ui/components/DataSettings.js',
+  './src/ui/components/DayStrip.js',
   './src/ui/components/Decorations.js',
   './src/ui/components/Dock.js',
+  './src/ui/components/Focus.js',
   './src/ui/components/ItemLists.js',
   './src/ui/components/ListEditor.js',
   './src/ui/components/Overlays.js',
@@ -79,6 +83,7 @@ const PRECACHE = [
   './src/ui/components/TaskRow.js',
   './src/ui/components/TaskTree.js',
   './src/ui/components/TimeInput.js',
+  './src/ui/components/VillageView.js',
   './src/ui/dayContext.js',
   './src/ui/hooks.js',
   './src/ui/html.js',
@@ -95,8 +100,14 @@ const PRECACHE = [
   './src/ui/screens/Shop.js',
   './src/ui/screens/Task.js',
   './src/ui/screens/Today.js',
+  './src/ui/screens/Village.js',
   './src/ui/theme.js',
   './src/version.js',
+  './src/village/bus.js',
+  './src/village/draw.js',
+  './src/village/puppets.js',
+  './src/village/runtime.js',
+  './src/village/world.js',
   './styles/app.css',
   './vendor/htm-preact-standalone.mjs',
 ];
@@ -136,7 +147,13 @@ self.addEventListener('notificationclick', (event) => {
   const n = event.notification;
   const { taskId } = n.data || {};
   n.close();
-  if (!taskId) return;
+  if (!taskId) {
+    // уведомление без задачи (например, «Фокус завершён») — просто показываем приложение
+    event.waitUntil(self.clients.matchAll({ type: 'window', includeUncontrolled: true })
+      .then((wins) => (wins[0] ? wins[0].focus() : self.clients.openWindow(new URL('./', SCOPE).href)))
+      .catch(() => {}));
+    return;
+  }
   const action = event.action || 'open';
   event.waitUntil((async () => {
     const wins = await self.clients.matchAll({ type: 'window', includeUncontrolled: true });

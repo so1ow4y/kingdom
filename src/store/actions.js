@@ -22,6 +22,9 @@ import { LIMITS, MEDIA } from '../config.js';
 import { APP_VERSION } from '../version.js';
 import { tokenValid } from '../google/auth.js';
 import { planningDate } from '../core/planning.js';
+import * as V from '../core/village.js';
+import { getFocus, setFocus, claimFocus } from './focus.js';
+import { emitVillage } from '../village/bus.js';
 
 let repo = null;
 let clock = null;
@@ -959,9 +962,103 @@ export async function buyCosmetic(itemId) {
 export async function refundPurchase(eventId) {
   const e = store.data.coinEvents.get(eventId);
   if (!e || e.deletedAt || e.type !== 'purchase' || !e.active) return false;
-  const ok = await confirm({ title: `Вернуть «${e.title}»?`, text: `Вернётся ${Math.abs(e.amount)} 🪙.`, confirmLabel: 'Вернуть' });
+  // постройку, на которой стоит следующий уровень, сначала не вернуть; шахту — если её изумруды уже потрачены
+  const owned = V.ownedVillage(store.data);
+  const dependent = V.VILLAGE_ITEMS.find((it) => it.requires === e.itemId && owned.has(it.id));
+  if (dependent) {
+    showSnackbar(`Сначала верни «${dependent.name}»`);
+    return false;
+  }
+  const test = { ...store.data, coinEvents: new Map(store.data.coinEvents) };
+  test.coinEvents.set(eventId, { ...e, active: false });
+  if (V.gemBalance(test) < 0) {
+    showSnackbar('Нельзя вернуть: изумруды из этой шахты уже потрачены');
+    return false;
+  }
+  const back = e.gems ? `${Math.abs(e.gems)} 💎` : `${Math.abs(e.amount)} 🪙`;
+  const ok = await confirm({ title: `Вернуть «${e.title}»?`, text: `Вернётся ${back}.`, confirmLabel: 'Вернуть' });
   if (!ok) return false;
   return commit([change('coinEvents', eventId, (x) => M.touch(x, { active: false, at: new Date(Date.now()).toISOString() }, ctx()))]);
+}
+
+// ---------- Деревня и фокус (обновление 0.7) ----------
+
+/** Купить постройку, жителя, свет или декор деревни — за монеты или изумруды. */
+export async function buyVillageItem(itemId) {
+  const item = V.villageItem(itemId);
+  if (!item) return false;
+  const check = V.canBuy(store.data, item, G.balance(store.data));
+  if (!check.ok) {
+    showSnackbar(check.reason);
+    return false;
+  }
+  const price = item.coins || 0;
+  const gems = item.gems || 0;
+  const cost = gems ? `${gems} 💎` : `${price} 🪙`;
+  const left = gems ? `${V.gemBalance(store.data) - gems} 💎` : `${G.balance(store.data) - price} 🪙`;
+  const ok = await confirm({ title: `Купить «${item.name}»?`, text: `Спишется ${cost}. Останется ${left}.`, confirmLabel: 'Купить' });
+  if (!ok || !V.canBuy(store.data, item, G.balance(store.data)).ok) return false;
+  const e = G.purchaseEvent({ price, gems, title: item.name, itemId }, ctx());
+  if (!(await commit([{ coll: 'coinEvents', prev: undefined, next: e }]))) return false;
+  showSnackbar(`Куплено: ${item.emoji} ${item.name} · −${cost}`);
+  emitVillage('bought', { itemId });
+  return true;
+}
+
+/** Взяться за задачу: таймер фокуса на этом устройстве; в деревне в это время работает строитель. */
+export async function startFocus({ taskId = null, minutes = 25 } = {}) {
+  const cur = getFocus();
+  if (cur) {
+    const ok = await confirm({ title: 'Уже идёт фокус', text: `«${cur.title}». Начать новый? Текущий не засчитается.`, confirmLabel: 'Начать новый' });
+    if (!ok) return false;
+    emitVillage('focus-fail');
+  }
+  const t = taskId ? getTask(taskId) : null;
+  const now = Date.now();
+  const m = Math.max(1, Math.min(240, Math.round(minutes)));
+  setFocus({ taskId: t ? t.id : null, title: t?.title || 'Фокус без задачи', minutes: m, startedAt: now, endsAt: now + m * 60000 });
+  emitVillage('focus-start');
+  showSnackbar(`Фокус на ${m} мин. Деревня работает вместе с тобой`);
+  return true;
+}
+
+/**
+ * Завершить фокус: по таймеру (все минуты) или раньше (сколько прошло). В журнал — событие focus с изумрудами,
+ * если игра включена. Если сессия была про задачу — спрашиваем, выполнена ли она.
+ */
+export async function finishFocus({ early = false } = {}) {
+  const f = claimFocus(); // другая вкладка могла уже завершить эту сессию
+  if (!f) return;
+  const minutes = early ? Math.min(f.minutes, Math.floor((Date.now() - f.startedAt) / 60000)) : f.minutes;
+  if (minutes < 1) {
+    emitVillage('focus-fail');
+    showSnackbar('Фокус отменён');
+    return;
+  }
+  let gems = 0;
+  if (store.data.settings.gameEnabled) {
+    const e = G.focusEvent(store.data, { minutes, taskId: f.taskId, title: f.title }, ctx());
+    if (await commit([{ coll: 'coinEvents', prev: undefined, next: e }])) gems = e.gems | 0;
+  }
+  emitVillage('focus-done', { gems, minutes });
+  const summary = `Фокус ${minutes} мин${gems ? ` · +${gems} 💎` : ''}`;
+  const t = f.taskId ? getTask(f.taskId) : null;
+  if (t && t.status === 'active' && !t.deletedAt && !t.trashedAt) {
+    const v = await ask({
+      title: summary,
+      text: `Задача «${t.title}» выполнена?`,
+      buttons: [{ label: 'Ещё нет', value: false }, { label: 'Выполнена', value: true, kind: 'primary' }],
+    });
+    if (v === true) await toggleComplete(t.id);
+  } else showSnackbar(summary);
+}
+
+/** Прервать фокус без зачёта (как засохшее дерево в Forest — жители немного расстроятся). */
+export function cancelFocus(reason = 'Фокус прерван') {
+  if (!getFocus()) return;
+  setFocus(null);
+  emitVillage('focus-fail');
+  showSnackbar(reason);
 }
 
 export async function updateSettings(changes) {

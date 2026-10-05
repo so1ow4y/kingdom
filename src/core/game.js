@@ -11,8 +11,10 @@ import { addDays } from './dates.js';
 import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 import { countLabel } from './plural.js';
+import { coinMultiplierAt, focusFields, levelAt } from './village.js';
 
-export const COIN_EVENT_FIELDS = ['type', 'amount', 'active', 'taskId', 'occKey', 'rewardId', 'itemId', 'title', 'at', 'deletedAt'];
+// gems и minutes — с 0.7 (деревня): изумруды у покупок и фокус-сессий, длительность фокуса. Старые версии их просто хранят.
+export const COIN_EVENT_FIELDS = ['type', 'amount', 'active', 'taskId', 'occKey', 'rewardId', 'itemId', 'title', 'at', 'gems', 'minutes', 'deletedAt'];
 
 export const awardId = (taskId, occKey = null) => (occKey ? `a:${taskId}:${occKey}` : `a:${taskId}`);
 
@@ -36,10 +38,13 @@ export function coinsForTask(data, task) {
   return p && !p.deletedAt ? Math.max(0, p.coins | 0) : 0;
 }
 
-/** Событие начисления за выполнение (новое или снова активное). Возвращает null, если менять нечего. */
+/**
+ * Событие начисления за выполнение (новое или снова активное). Возвращает null, если менять нечего.
+ * Золотая шахта деревни увеличивает монеты: ×1.1 / 1.2 / 1.3 (по уровню на момент выполнения).
+ */
 export function awardEvent(data, task, occKey, ctx) {
   const id = awardId(task.id, occKey);
-  const amount = coinsForTask(data, task);
+  const amount = Math.round(coinsForTask(data, task) * coinMultiplierAt(data, iso(ctx)));
   const cur = data.coinEvents.get(id);
   if (!cur || cur.deletedAt) return newEvent(id, { type: 'award', amount, taskId: task.id, occKey, title: task.title }, ctx);
   if (cur.active && cur.amount === amount) return null;
@@ -53,9 +58,16 @@ export function revokeEvent(data, taskId, occKey, ctx) {
   return touch(cur, { active: false, at: iso(ctx) }, ctx);
 }
 
-/** Покупка: награда пользователя (rewardId) или встроенный предмет магазина (itemId). */
-export function purchaseEvent({ price, title, rewardId = null, itemId = null }, ctx) {
-  return newEvent(uuidv7(ctx.now), { type: 'purchase', amount: -Math.abs(price | 0), rewardId, itemId, title }, ctx);
+/** Покупка: награда пользователя (rewardId) или встроенный предмет магазина (itemId). gems — цена в изумрудах. */
+export function purchaseEvent({ price = 0, gems = 0, title, rewardId = null, itemId = null }, ctx) {
+  const fields = { type: 'purchase', amount: -Math.abs(price | 0), rewardId, itemId, title };
+  if (gems) fields.gems = -Math.abs(gems | 0);
+  return newEvent(uuidv7(ctx.now), fields, ctx);
+}
+
+/** Завершённая фокус-сессия: изумруды и минуты (монеты не меняются). */
+export function focusEvent(data, { minutes, taskId = null, title = '' }, ctx) {
+  return newEvent(uuidv7(ctx.now), focusFields({ minutes, taskId, title, gemLevel: levelAt(data, 'gemmine') }), ctx);
 }
 
 const live = (data) => [...data.coinEvents.values()].filter((e) => !e.deletedAt && e.active);
@@ -91,20 +103,17 @@ export function ownsItem(data, itemId) {
 /**
  * Встроенная косметика магазина. Покупка — событие purchase с itemId (синхронизируется);
  * что сейчас включено — настройка устройства (ui/prefs.js). Пока игра выключена, всё доступно бесплатно.
+ * С 0.7 миры и предметы больше не продаются (legacy): купленные раньше живут в деревне — фонарь, грибы, кристалл,
+ * кирка у шахты, паутинки на домах, звёздное небо. Питомцы pet:* переехали в каталог деревни (core/village.js).
  */
 export const COSMETICS = [
-  { id: 'scene:forest', kind: 'scene', value: 'forest', name: 'Пиксельный лес', emoji: '🌲', price: 180, description: 'Ели, мягкий туман и мерцающие светлячки.' },
-  { id: 'scene:web', kind: 'scene', value: 'web', name: 'Паучье королевство', emoji: '🕸️', price: 180, description: 'Серебристая паутина в углах страницы.' },
-  { id: 'scene:stars', kind: 'scene', value: 'stars', name: 'Звёздная обсерватория', emoji: '🌌', price: 240, description: 'Ночное небо и созвездия за карточками.' },
-  { id: 'pet:cat', kind: 'pet', value: 'cat', name: 'Кот Баюн', emoji: '🐈', price: 60, motion: 'static', description: 'Дремлет на месте и шевелит ушами.' },
-  { id: 'pet:spider', kind: 'pet', value: 'spider', name: 'Паучок Ниточка', emoji: '🕷️', price: 90, motion: 'static', description: 'Качается на своей паутинке.' },
-  { id: 'pet:fox', kind: 'pet', value: 'fox', name: 'Лисичка Искра', emoji: '🦊', price: 160, motion: 'dynamic', description: 'Гуляет по краю страницы, радуется выполненным задачам.' },
-  { id: 'pet:kitten', kind: 'pet', value: 'kitten', name: 'Котёнок Пиксель', emoji: '🐱', price: 140, motion: 'dynamic', description: 'Исследует страницу и следит за указателем.' },
-  { id: 'pet:neko', kind: 'pet', value: 'neko', name: 'Нэко — хранительница планов', emoji: '🐾', price: 280, motion: 'static', description: 'Кошкодевочка машет рукой и празднует твои победы.' },
-  { id: 'prop:pickaxe', kind: 'prop', value: 'pickaxe', name: 'Кирка исследователя', emoji: '⛏️', price: 45, description: 'Трофей на заднем плане. Приключения начинаются с малого.' },
-  { id: 'prop:lantern', kind: 'prop', value: 'lantern', name: 'Фонарь странника', emoji: '🏮', price: 75, description: 'Тёплый огонёк для вечерних планов.' },
-  { id: 'prop:crystal', kind: 'prop', value: 'crystal', name: 'Кристалл маны', emoji: '💎', price: 120, description: 'Пульсирующий кристалл из подземелья.' },
-  { id: 'prop:mushrooms', kind: 'prop', value: 'mushrooms', name: 'Грибная полянка', emoji: '🍄', price: 35, description: 'Маленький уголок леса под списком дел.' },
+  { id: 'scene:forest', kind: 'scene', value: 'forest', legacy: true, name: 'Пиксельный лес', emoji: '🌲', price: 180, description: 'Лес вокруг деревни.' },
+  { id: 'scene:web', kind: 'scene', value: 'web', legacy: true, name: 'Паучье королевство', emoji: '🕸️', price: 180, description: 'Паутинки под крышами домиков.' },
+  { id: 'scene:stars', kind: 'scene', value: 'stars', legacy: true, name: 'Звёздная обсерватория', emoji: '🌌', price: 240, description: 'Больше звёзд и падающие звёзды ночью.' },
+  { id: 'prop:pickaxe', kind: 'prop', value: 'pickaxe', legacy: true, name: 'Кирка исследователя', emoji: '⛏️', price: 45, description: 'Воткнута у золотой шахты.' },
+  { id: 'prop:lantern', kind: 'prop', value: 'lantern', legacy: true, name: 'Фонарь странника', emoji: '🏮', price: 75, description: 'Ещё один фонарь на улице деревни.' },
+  { id: 'prop:crystal', kind: 'prop', value: 'crystal', legacy: true, name: 'Кристалл маны', emoji: '💎', price: 120, description: 'Светится на поляне.' },
+  { id: 'prop:mushrooms', kind: 'prop', value: 'mushrooms', legacy: true, name: 'Грибная полянка', emoji: '🍄', price: 35, description: 'Грибы у тропинки.' },
   { id: 'scheme:lime', kind: 'scheme', value: 'lime', name: 'Схема Lime', emoji: '🍋', price: 150 },
   { id: 'scheme:lavender', kind: 'scheme', value: 'lavender', name: 'Схема Lavender', emoji: '💜', price: 150 },
   { id: 'scheme:ocean', kind: 'scheme', value: 'ocean', name: 'Схема «Океан»', emoji: '🌊', price: 250 },

@@ -27,6 +27,7 @@ export function MoreScreen() {
     <div class="screen">
       <nav class="menu-list">
         <${Link} to="/analytics" className="menu-item"><span class="mi-icon"><${Icon} name="chart"/></span><span class="mi-label">Аналитика</span><//>
+        <${Link} to="/village" className="menu-item"><span class="mi-icon"><${Icon} name="village"/></span><span class="mi-label">Деревня</span><//>
         <${Link} to="/shop" className="menu-item"><span class="mi-icon"><${Icon} name="shop"/></span><span class="mi-label">Магазин</span><//>
         <${Link} to="/archive" className="menu-item"><span class="mi-icon"><${Icon} name="archive"/></span><span class="mi-label">Архив</span><//>
         <${Link} to="/trash" className="menu-item"><span class="mi-icon"><${Icon} name="trash"/></span>

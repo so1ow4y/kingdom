@@ -188,6 +188,9 @@ function TaskHeader({ onClose, taskId = null }) {
         <${Icon} name="close"/>
       </button>
       <span class="task-header-title">Задача</span>
+      ${taskId && store.data.tasks.get(taskId)?.status === 'active' && !store.data.tasks.get(taskId)?.trashedAt ? html`
+        <button class="icon-btn" onClick=${() => openSheet('focus', { taskId })} aria-label="Взяться за задачу" title="Взяться за задачу (фокус-таймер)">
+          <${Icon} name="focus"/></button>` : null}
       ${taskId ? html`<button class="icon-btn" onClick=${() => openSheet('taskMenu', { taskId })} aria-label="Действия" title="Действия">
         <${Icon} name="dots"/></button>` : null}
     </div>`;

@@ -5,7 +5,7 @@
 import { html } from './html.js';
 
 const ROUTES = {
-  today: 0, inbox: 0, lists: 0, list: 1, task: 1, archive: 0, trash: 0, settings: 0, more: 0, quick: 0, journal: 0, analytics: 0, shop: 0,
+  today: 0, inbox: 0, lists: 0, list: 1, task: 1, archive: 0, trash: 0, settings: 0, more: 0, quick: 0, journal: 0, analytics: 0, shop: 0, village: 0,
 };
 
 export function parseHash(hash = location.hash) {

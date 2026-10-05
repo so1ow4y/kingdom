@@ -78,6 +78,26 @@ function active() {
   return st.enabled && permission() === 'granted';
 }
 
+/** Простое уведомление без кнопок (например, «Фокус завершён»), если уведомления включены. */
+export async function notifyPlain(title, body, tag = 'lt-plain') {
+  if (!active()) return;
+  const opts = { body, tag, icon: 'icons/icon-192.png', badge: 'icons/icon-192.png', data: {} };
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration?.();
+    if (reg?.showNotification) {
+      await reg.showNotification(title, opts);
+      return;
+    }
+  } catch {
+    // ниже — обычное Notification
+  }
+  try {
+    new Notification(title, opts);
+  } catch (e) {
+    console.warn('notification', e);
+  }
+}
+
 async function show(item) {
   const task = store.data.tasks.get(item.taskId);
   if (!task) return;

@@ -1247,7 +1247,8 @@
               "type": {
                 "enum": [
                   "award",
-                  "purchase"
+                  "purchase",
+                  "focus"
                 ]
               },
               "amount": {
@@ -1282,6 +1283,16 @@
               },
               "at": {
                 "$ref": "#/$defs/isoTime"
+              },
+              "gems": {
+                "description": "0.7: изумруды (у focus — заработано, у покупки за изумруды — отрицательное число). Необязательное поле.",
+                "type": "integer"
+              },
+              "minutes": {
+                "description": "0.7: длительность фокус-сессии в минутах (только у type focus). Необязательное поле.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 1440
               }
             }
           }

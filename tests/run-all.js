@@ -22,4 +22,6 @@ await run([
   './migration3.test.js',
   './retention.test.js',
   './media.test.js',
+  './village.test.js',
+  './villageWorld.test.js',
 ]);

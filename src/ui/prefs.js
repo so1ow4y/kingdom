@@ -11,9 +11,13 @@ const DEFAULTS = {
   autoHide: false, // уезжает за край и выезжает у края
   hidden: false, // спрятан целиком: у края только квадрат с буквой
   listsCollapsed: false,
-  scene: null,
-  pet: null,
-  props: [],
+  // деревня (0.7): полоса на фоне, масштаб, смена дня и ночи, гости у экрана, выключенный свет, строгий фокус
+  villageBackdrop: true,
+  villageScale: 'small', // 'small' | 'large'
+  dayMode: 'theme', // 'theme' | 'cycle' (каждые 5 минут) | 'real' (по часам); cycle/real — после покупки «Смены дня и ночи»
+  visitors: true,
+  villageLightsOff: [],
+  focusStrict: false,
   decorMotion: true,
   achievementNotifications: true,
   scheme: 'indigo', // цветовая схема (косметика из магазина, п. 2.6)

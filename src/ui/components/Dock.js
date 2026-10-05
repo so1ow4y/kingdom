@@ -110,8 +110,9 @@ export function Dock({ route, counts, onAdd, phone }) {
           onClick=${() => { setPrefs({ listsCollapsed: !p.listsCollapsed }); navigate('/lists'); }}/>
         ${lists.length && !p.listsCollapsed ? html`<div class="dock-sub">${lists.map((l) => html`<${Item} key=${l.id} to=${'/list/' + l.id}
           label=${l.name} emoji=${l.emoji} color=${l.color} active=${is('list') && route.param === l.id} count=${counts.get(l.id)} mode=${mode}/>`)}</div>` : null}
-        ${compact ? html`<${Item} to="/more" icon="more" label="Ещё" active=${is('more', 'archive', 'trash', 'settings', 'analytics', 'shop', 'journal')} mode=${mode}/>` : html`
+        ${compact ? html`<${Item} to="/more" icon="more" label="Ещё" active=${is('more', 'archive', 'trash', 'settings', 'analytics', 'shop', 'journal', 'village')} mode=${mode}/>` : html`
           <${Item} to="/analytics" icon="chart" label="Аналитика" active=${is('analytics')} mode=${mode}/>
+          ${store.data.settings.gameEnabled ? html`<${Item} to="/village" icon="village" label="Деревня" active=${is('village')} mode=${mode}/>` : null}
           <${Item} to="/shop" icon="shop" label="Магазин" active=${is('shop')} mode=${mode}/>
           <${Item} to="/archive" icon="archive" label="Архив" active=${is('archive')} mode=${mode}/>
           <${Item} to="/trash" icon="trash" label="Корзина" active=${is('trash')} count=${trash} mode=${mode}/>

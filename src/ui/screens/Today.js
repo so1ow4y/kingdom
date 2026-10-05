@@ -13,10 +13,10 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { countLabel } from '../../core/plural.js';
 import { LIMITS } from '../../config.js';
-import { addDays, humanDate } from '../../core/dates.js';
 import { planningDate } from '../../core/planning.js';
 import { navigate } from '../router.js';
 import { DayContext } from '../dayContext.js';
+import { DayStrip } from '../components/DayStrip.js';
 
 export function TodayScreen({ query = {} }) {
   const today = planningDate(query.date, store.now.today);
@@ -55,14 +55,7 @@ export function TodayScreen({ query = {} }) {
   return html`
     <${DayContext.Provider} value=${today}>
     <${DragScope} className="screen today">
-      <div class="day-navigation card-block">
-        <button class="btn" aria-label="Предыдущий день" onClick=${() => go(addDays(today, -1))}>←</button>
-        <label class="field"><span>${humanDate(today, store.now.today)}</span><input type="date" aria-label="День планирования" value=${today}
-          onChange=${e => e.target.value && go(planningDate(e.target.value, store.now.today))}/></label>
-        <button class="btn" aria-label="Следующий день" onClick=${() => go(addDays(today, 1))}>→</button>
-        <button class="chip" onClick=${() => go(store.now.today)}>Сегодня</button>
-        <button class="chip" onClick=${() => go(addDays(store.now.today, 1))}>Завтра</button>
-      </div>
+      <${DayStrip} date=${today} onGo=${go}/>
       ${showYesterday ? html`
         <${Banner} tone="warn" onClose=${() => setDismissedOn(today)} actions=${html`
           <button class="btn small primary" onClick=${() => A.carryYesterdayFocus(v.yesterdayFocus.map((t) => t.id))}>Перенести на сегодня</button>

@@ -16,6 +16,7 @@ import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { liveNotes } from '../../core/model.js';
 import { ReminderSheet, MissedSheet } from './Reminders.js';
 import { RecorderSheet } from './Attachments.js';
+import { FocusStartSheet } from './Focus.js';
 
 function WhenSheet({ taskId, mode }) {
   const t = A.getTask(taskId);
@@ -173,6 +174,7 @@ function TaskMenuSheet({ taskId, date }) {
       ${t.status === 'done'
         ? html`<${MenuItem} icon="restore" label="Вернуть в работу" onClick=${run(() => A.reopenTask(taskId))}/>`
         : html`
+          <${MenuItem} icon="focus" label="Взяться за задачу" hint="фокус-таймер" onClick=${() => openSheet('focus', { taskId })}/>
           ${!parent || focused ? html`<${MenuItem} icon=${html`<${Icon} name="star" filled=${focused} size=${20}/>`}
             label=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(focusDate, today).toLowerCase()} onClick=${run(() => A.toggleFocus(taskId, focusDate))}/>` : null}
           <${MenuItem} icon="calendar" label="Когда…" hint=${t.scheduledDate ? humanDate(t.scheduledDate, today) : null}
@@ -246,6 +248,7 @@ export function SheetHost() {
     case 'missed': return html`<${MissedSheet}/>`;
     case 'recorder': return html`<${RecorderSheet} ...${s}/>`;
     case 'parentPicker': return html`<${ParentPickerSheet} ...${s}/>`;
+    case 'focus': return html`<${FocusStartSheet} ...${s}/>`;
     default: return null;
   }
 }
