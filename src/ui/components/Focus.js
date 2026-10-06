@@ -1,14 +1,18 @@
 // Фокус-сессия (обновление 0.7, как в приложении Forest): «Взяться за задачу» — таймер на этом устройстве.
 // Полоса фокуса закреплена под заголовком на всех экранах; по окончании — изумруды и вопрос «Задача выполнена?».
+// С 0.7.1: на что фокусироваться — любая из задач или свой фокус («Чтение»); сессии по задаче хранятся в самой задаче.
 
-import { html, useEffect, useState } from '../html.js';
+import { html, useEffect, useMemo, useState } from '../html.js';
 import { Icon } from '../icons.js';
 import { Sheet } from './Sheet.js';
-import { store, closeSheet, confirm } from '../../store/appState.js';
+import { store, closeSheet, confirm, openSheet } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
+import { focusTotal, liveFocusSessions } from '../../core/model.js';
+import { humanDate, formatMoment } from '../../core/dates.js';
 import { getFocus, setFocus, focusLeft } from '../../store/focus.js';
 import { FOCUS_PRESETS, gemsForFocus, levelAt } from '../../core/village.js';
 import { getPrefs } from '../prefs.js';
+import { readLocal, writeLocal } from '../hooks.js';
 import { notifyPlain } from '../notifier.js';
 
 const mmss = (ms) => {
@@ -16,29 +20,102 @@ const mmss = (ms) => {
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
 };
 
-/** Выбор длительности: пресеты и своё значение. taskId — необязательно. */
+/** 25 → «25 мин», 85 → «1 ч 25 мин», 120 → «2 ч». */
+export function formatMinutes(m) {
+  m = Math.round(m);
+  if (m < 60) return `${m} мин`;
+  const h = Math.floor(m / 60);
+  return m % 60 ? `${h} ч ${m % 60} мин` : `${h} ч`;
+}
+
+/** Задачи для выбора фокуса: «главное» на сегодня, на сегодня и просроченные, потом остальные (свежие сверху). */
+function focusCandidates(data, today) {
+  const rank = (t) => (t.focusDate === today ? 0 : (t.scheduledDate && t.scheduledDate <= today) || (t.deadlineDate && t.deadlineDate <= today) ? 1 : 2);
+  return [...data.tasks.values()]
+    .filter((t) => !t.deletedAt && !t.trashedAt && t.status === 'active')
+    .sort((a, b) => rank(a) - rank(b) || (a.updatedAt < b.updatedAt ? 1 : a.updatedAt > b.updatedAt ? -1 : 0));
+}
+
+/** «Взяться за задачу»: на что (задача из списка или свой фокус) и сколько минут. taskId — выбранная заранее задача. */
 export function FocusStartSheet({ taskId = null }) {
-  const t = taskId ? A.getTask(taskId) : null;
-  const [custom, setCustom] = useState('');
+  const today = store.now.today;
+  const [what, setWhat] = useState(taskId ? { kind: 'task', id: taskId } : { kind: 'pick' });
+  const [mode, setMode] = useState('task'); // 'task' | 'custom' — вкладка выбора, пока задача не выбрана
+  const [q, setQ] = useState('');
+  const [label, setLabel] = useState(() => readLocal('focusLabel', ''));
+  const [minutes, setMinutes] = useState(() => readLocal('focusMinutes', 25));
+  const [own, setOwn] = useState('');
   const game = store.data.settings.gameEnabled;
   const gemLevel = levelAt(store.data, 'gemmine');
-  const start = (m) => {
+  const all = useMemo(() => focusCandidates(store.data, today), [store.version, today]);
+  const needle = q.trim().toLowerCase();
+  const shown = (needle ? all.filter((t) => t.title.toLowerCase().includes(needle)) : all).slice(0, 40);
+  const task = what.kind === 'task' ? A.getTask(what.id) : null;
+  const m = +own >= 1 ? Math.min(240, Math.round(+own)) : minutes;
+  const ready = !!task || (mode === 'custom' && what.kind !== 'task');
+  const start = () => {
+    writeLocal('focusMinutes', m);
+    if (!task) writeLocal('focusLabel', label.trim());
     closeSheet();
-    A.startFocus({ taskId, minutes: m });
+    A.startFocus({ taskId: task?.id || null, minutes: m, title: task ? '' : label });
+  };
+  const hint = (t) => {
+    const parts = [];
+    if (t.focusDate === today) parts.push('★ главное');
+    if (t.scheduledDate) parts.push(humanDate(t.scheduledDate, today));
+    const fm = focusTotal(t).minutes;
+    if (fm) parts.push('◎ ' + formatMinutes(fm));
+    return parts.join(' · ');
   };
   return html`
     <${Sheet} title="Взяться за задачу" onClose=${closeSheet} className="focus-sheet">
-      ${t ? html`<p class="focus-task">🎯 ${t.title}</p>` : html`<p class="muted small">Таймер без задачи — просто время на глубокую работу.</p>`}
+      <div class="field-label">На что фокус</div>
+      ${task ? html`
+        <div class="focus-what">
+          <span>🎯</span><b>${task.title}</b>
+          <button class="link-btn" onClick=${() => setWhat({ kind: 'pick' })}>Сменить</button>
+        </div>` : html`
+        <div class="chip-row" role="tablist">
+          <button role="tab" aria-selected=${mode === 'task'} class=${'chip' + (mode === 'task' ? ' selected' : '')} onClick=${() => setMode('task')}>Задача</button>
+          <button role="tab" aria-selected=${mode === 'custom'} class=${'chip' + (mode === 'custom' ? ' selected' : '')} onClick=${() => setMode('custom')}>✏️ Свой фокус</button>
+        </div>
+        ${mode === 'task' ? html`
+          <input class="sheet-search" value=${q} placeholder="Найти задачу" onInput=${(e) => setQ(e.target.value)}/>
+          <div class="focus-pick">
+            ${shown.length ? shown.map((t) => html`<button class="focus-pick-item" key=${t.id} onClick=${() => setWhat({ kind: 'task', id: t.id })}>
+              <span class="fpi-title">${t.title}</span>${hint(t) ? html`<small>${hint(t)}</small>` : null}</button>`)
+              : html`<p class="muted small">${needle ? 'Ничего не нашлось.' : 'Активных задач нет — выбери «Свой фокус».'}</p>`}
+          </div>` : html`
+          <label class="field"><span>Название (необязательно)</span>
+            <input value=${label} maxLength="80" placeholder="Например: чтение, английский, уборка" onInput=${(e) => setLabel(e.target.value)}/></label>`}`}
+
+      <div class="field-label">Сколько</div>
       <div class="focus-presets">
-        ${FOCUS_PRESETS.map((m) => html`<button class="focus-preset" onClick=${() => start(m)}>
-          <b>${m}</b><span>мин</span>${game ? html`<small>+${gemsForFocus(m, gemLevel)} 💎</small>` : null}</button>`)}
+        ${FOCUS_PRESETS.map((x) => html`<button class=${'focus-preset' + (!own && minutes === x ? ' selected' : '')} onClick=${() => { setMinutes(x); setOwn(''); }}>
+          <b>${x}</b><span>мин</span>${game ? html`<small>+${gemsForFocus(x, gemLevel)} 💎</small>` : null}</button>`)}
       </div>
-      <form class="field-row focus-custom" onSubmit=${(e) => { e.preventDefault(); if (+custom >= 1) start(+custom); }}>
-        <label class="field"><span>Своё время, мин</span><input type="number" min="1" max="240" value=${custom} onInput=${(e) => setCustom(e.target.value)} placeholder="Например, 35"/></label>
-        <button class="btn primary" type="submit" disabled=${!(+custom >= 1)}>Начать</button>
-      </form>
-      <p class="muted small">Пока идёт фокус, строитель трудится в мастерской деревни. От 15 минут — изумруды${getPrefs().focusStrict ? '. Строгий режим: если уйти из приложения больше чем на 15 секунд, фокус прервётся' : ''}.</p>
+      <label class="field focus-own"><span>Своё время, мин</span>
+        <input type="number" min="1" max="240" value=${own} onInput=${(e) => setOwn(e.target.value)} placeholder="Например, 35"/></label>
+      <button class="btn primary focus-go" disabled=${!ready} onClick=${start}>
+        ${ready ? `Начать · ${formatMinutes(m)}${game && gemsForFocus(m, gemLevel) ? ` · +${gemsForFocus(m, gemLevel)} 💎` : ''}` : 'Выбери задачу или свой фокус'}</button>
+      <p class="muted small">Время по задаче сохраняется в ней самой. Пока идёт фокус, строитель трудится в мастерской деревни; от 15 минут — изумруды${getPrefs().focusStrict ? '. Строгий режим: уйдёшь из приложения дольше чем на 15 секунд — фокус прервётся' : ''}.</p>
     <//>`;
+}
+
+/** Блок «Фокус» в карточке задачи: сколько всего, последние сессии, «Взяться». */
+export function FocusSection({ task, locked = false }) {
+  const f = getFocus();
+  const total = focusTotal(task);
+  const recent = liveFocusSessions(task).slice(0, 5);
+  const tz = store.data.settings.timeZone;
+  const running = f && f.taskId === task.id;
+  return html`
+    <div class="focus-summary">
+      <span class="fs-total">${total.count ? html`◎ <b>${formatMinutes(total.minutes)}</b> · ${total.count} ${total.count === 1 ? 'сессия' : total.count < 5 ? 'сессии' : 'сессий'}` : html`<span class="muted">Ещё не было фокуса</span>`}</span>
+      ${running ? html`<span class="fs-running">идёт · осталось ${mmss(focusLeft(f))}</span>`
+        : html`<button class="btn small" disabled=${locked} onClick=${() => openSheet('focus', { taskId: task.id })}><${Icon} name="focus" size=${16}/> Взяться</button>`}
+    </div>
+    ${recent.length ? html`<ul class="focus-history">${recent.map((s) => html`<li key=${s.id}><span>${formatMoment(s.startedAt, tz)}</span><b>${formatMinutes(s.minutes)}</b></li>`)}</ul>` : null}`;
 }
 
 /** Полоса текущего фокуса: оставшееся время, «Готово» (засчитать прошедшее) и «Прервать». */

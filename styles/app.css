@@ -1125,12 +1125,12 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
 
 /* ---------- Деревня (обновление 0.7) ---------- */
 .app { isolation: isolate; }
-.village-backdrop {
-  position: fixed; left: var(--dock-left, 0px); right: var(--dock-right, 0px); bottom: var(--dock-bottom, 0px); z-index: -1;
-  height: clamp(130px, 22vh, 220px); overflow: hidden; pointer-events: none;
-  -webkit-mask-image: linear-gradient(to bottom, transparent 0, rgba(0, 0, 0, .35) 30%, #000 60%); mask-image: linear-gradient(to bottom, transparent 0, rgba(0, 0, 0, .35) 30%, #000 60%);
-}
-.village-backdrop canvas, .village-full canvas, .village-visitor canvas { display: block; image-rendering: crisp-edges; image-rendering: pixelated; }
+/* Деревня во весь экран за приложением (0.7.1); на вкладках приглушена слоем цвета фона */
+.village-bg { position: fixed; inset: 0; z-index: -1; overflow: hidden; pointer-events: none; background: var(--bg); }
+.village-bg canvas { position: absolute; left: 0; top: 0; }
+.village-bg.interactive canvas { pointer-events: auto; cursor: grab; touch-action: none; user-select: none; }
+.village-dim { position: absolute; inset: 0; background: var(--bg); pointer-events: none; transition: opacity .35s ease; }
+.village-bg canvas, .village-visitor canvas { display: block; image-rendering: crisp-edges; image-rendering: pixelated; }
 .village-layer { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .village-bubble {
   position: absolute; left: 0; top: 0; max-width: 190px; padding: 4px 9px; border-radius: 10px; background: var(--surface); color: var(--text);
@@ -1138,10 +1138,30 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
 }
 @keyframes bubble-in { from { opacity: 0; } }
 
-.village-stage { position: relative; margin: 12px 0; border-radius: var(--radius); overflow: hidden; background: #141826; box-shadow: var(--shadow); }
-.village-full { position: relative; height: clamp(260px, 52vh, 520px); overflow: hidden; cursor: pointer; touch-action: pan-y; user-select: none; }
-.village-style { position: absolute; left: 10px; top: 8px; padding: 2px 8px; border-radius: 10px; background: rgba(0, 0, 0, .4); color: #fff; font-size: 12px; pointer-events: none; }
-
+/* Экран «Деревня»: холст принимает нажатия, интерфейс — только панели */
+.app.village-mode .main-col { pointer-events: none; }
+.app.village-mode .topbar, .app.village-mode .banner, .app.village-mode .focus-bar,
+.app.village-mode .village-head, .app.village-mode .village-time, .app.village-mode .village-sel { pointer-events: auto; }
+/* Шапка поверх деревни: прозрачная, лёгкая дымка сверху (слабее затемнения фона), без полосы и рамки */
+.app.village-bg-on .topbar { background: transparent; border-bottom-color: transparent; -webkit-backdrop-filter: none; backdrop-filter: none; text-shadow: 0 1px 8px var(--bg); }
+.app.village-bg-on .topbar::before {
+  content: ''; position: absolute; inset: 0 0 -14px 0; z-index: -1; pointer-events: none;
+  background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 38%, transparent), color-mix(in srgb, var(--bg) 0%, transparent));
+  -webkit-backdrop-filter: blur(2px); backdrop-filter: blur(2px);
+  -webkit-mask-image: linear-gradient(to bottom, #000 45%, transparent); mask-image: linear-gradient(to bottom, #000 45%, transparent);
+}
+.app.village-bg-on .content { text-shadow: 0 1px 4px color-mix(in srgb, var(--bg) 85%, transparent); }
+.app.village-mode .topbar::before { background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 25%, transparent), transparent); }
+.village-head.hud { padding: 10px 14px; border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 82%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: var(--shadow); }
+.village-time, .village-sel { margin-top: 8px; padding: 8px 12px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 84%, transparent);
+  -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: var(--shadow); }
+.village-hint { margin: 10px 4px; font-size: 12.5px; color: var(--text); opacity: .75; text-shadow: 0 1px 4px var(--bg); }
+.vh-actions .btn.active { border-color: var(--accent); color: var(--accent); }
+.village-time { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; }
+.village-time .vl-slider { flex: 1 1 200px; flex-direction: row; align-items: center; margin: 0; }
+.village-time .vl-slider span { white-space: nowrap; font-size: 14px; }
+.village-dim-field input { width: 100%; accent-color: var(--accent); }
 .village-visitor { position: fixed; z-index: 35; bottom: calc(var(--dock-bottom, 0px) + var(--safe-b)); display: none; width: 180px; height: 240px; pointer-events: none; }
 .village-visitor[data-on] { display: block; }
 .village-visitor[data-side="left"] { left: var(--dock-left, 0px); }
@@ -1205,6 +1225,24 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
 .focus-preset span { font-size: 12px; color: var(--muted); }
 .focus-preset small { font-size: 11px; color: var(--accent); }
 .focus-custom { align-items: flex-end; }
+.focus-preset.selected { border-color: var(--accent); background: var(--accent-soft); }
+.focus-what { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-radius: 12px; background: var(--surface-2); margin-bottom: 4px; }
+.focus-what b { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.focus-pick { display: flex; flex-direction: column; max-height: min(34vh, 280px); overflow: auto; margin: 6px 0 4px; border: 1px solid var(--border); border-radius: 12px; }
+.focus-pick-item { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; padding: 8px 12px; border: 0; border-bottom: 1px solid var(--border); background: none; text-align: left; }
+.focus-pick-item:last-child { border-bottom: 0; }
+.focus-pick-item:hover { background: var(--surface-2); }
+.focus-pick-item small { color: var(--muted); font-size: 12px; }
+.fpi-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.focus-own { margin-top: 2px; }
+.focus-go { width: 100%; margin-top: 10px; padding: 12px; font-size: 15px; }
+.focus-summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.fs-running { color: var(--accent); font-weight: 600; font-variant-numeric: tabular-nums; }
+.focus-history { list-style: none; margin: 8px 0 0; padding: 0; font-size: 13px; color: var(--muted); }
+.focus-history li { display: flex; justify-content: space-between; padding: 3px 0; border-top: 1px dashed var(--border); }
+.focus-history b { color: var(--text); font-weight: 500; }
+.meta-focus { color: var(--accent); font-variant-numeric: tabular-nums; }
+.meta-focus.running { font-weight: 600; }
 
 /* ---------- Достижения ---------- */
 .cosmetic-description { min-height: 3em; line-height: 1.5; }
@@ -1225,5 +1263,5 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
   .achievement-filters { flex-wrap: wrap; }
   .focus-presets { grid-template-columns: repeat(3, 1fr); }
   .ds-day b { font-size: 16px; }
-  .village-full { height: clamp(240px, 48vh, 420px); }
+  .village-head.hud .vh-actions .btn { padding-inline: 10px; }
 }

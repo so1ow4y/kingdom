@@ -7,8 +7,9 @@
 import { canonicalJson, sameValue } from './canonical.js';
 
 const SERVICE = new Set(['id', 'createdAt', 'updatedAt', 'updatedBy', 'fieldTimes']);
-// Вложенные коллекции: массивы элементов с id, сливаются поэлементно (subtasks — только формат v1).
-export const NESTED_ARRAYS = ['subtasks', 'notes', 'attachments', 'reminders'];
+// Вложенные коллекции: массивы элементов с id, сливаются поэлементно (subtasks — только формат v1,
+// focusSessions — с 0.7.1: две сессии на разных устройствах не затирают друг друга).
+export const NESTED_ARRAYS = ['subtasks', 'notes', 'attachments', 'reminders', 'focusSessions'];
 // Словари «ключ → значение с меткой t», сливаются по ключу: экземпляры повторов и членство в списках (v2).
 export const KEYED_MAPS = ['occurrences', 'lists'];
 const STRUCTURAL = new Set([...SERVICE, ...NESTED_ARRAYS, ...KEYED_MAPS]);

@@ -1,5 +1,5 @@
 // Одна деревня на всё приложение (обновление 0.7): общий мир для фона, экрана «Деревня» и гостя у экрана,
-// один цикл анимации на все холсты (~30 кадров в секунду, на паузе, пока вкладка скрыта).
+// один цикл анимации на все холсты (~30 кадров в секунду, 20 — когда фон приглушён, на паузе, пока вкладка скрыта).
 
 import { World } from './world.js';
 import { dayPhase, nightness, villageStyle } from '../core/village.js';
@@ -10,7 +10,7 @@ export const world = new World();
 /** Окружение кадра: время суток, стиль, цвет флагов. Обновляет ui/components/VillageView.js (VillageHost). */
 export const env = {
   mode: 'theme', dark: false, motion: true, phaseOverride: null, phase: 0.5, n: 0,
-  style: villageStyle('indigo'), letter: '#3949ab', fullViews: 0, viewW: 320, backdropW: 320,
+  style: villageStyle('indigo'), letter: '#3949ab', dimmed: false, viewW: 320,
 };
 
 let cfg = null;
@@ -31,9 +31,8 @@ export function configureVillage(next) {
   world.configure({ ...cfg, viewW: env.viewW });
 }
 
-/** Холст сообщает свою ширину (в пикселях деревни). Пока открыт полный вид, фон ширину не меняет. */
-export function setViewWidth(w, full) {
-  if (!full && env.fullViews > 0) return;
+/** Холст фона сообщает свою ширину (в пикселях деревни) — от неё зависит раскладка. */
+export function setViewWidth(w) {
   env.viewW = w;
   if (cfg) world.configure({ ...cfg, viewW: w });
 }
@@ -50,7 +49,7 @@ function frame(ts) {
     return;
   }
   // деревни не видно и гостя нет — мир живёт, но редко (бережём батарею)
-  const gap = !env.motion ? 1000 : visible > 0 || world.visitor ? 1000 / 31 : 250;
+  const gap = !env.motion ? 1000 : visible > 0 || world.visitor ? 1000 / (env.dimmed && !world.visitor ? 20 : 31) : 250;
   if (last && ts - last < gap) return;
   const dt = last ? (ts - last) / 1000 : 0;
   last = ts;

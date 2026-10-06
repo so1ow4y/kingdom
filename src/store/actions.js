@@ -1006,7 +1006,8 @@ export async function buyVillageItem(itemId) {
 }
 
 /** Взяться за задачу: таймер фокуса на этом устройстве; в деревне в это время работает строитель. */
-export async function startFocus({ taskId = null, minutes = 25 } = {}) {
+/** Начать фокус: по задаче (taskId) или свой (title — например, «Чтение»). */
+export async function startFocus({ taskId = null, minutes = 25, title = '' } = {}) {
   const cur = getFocus();
   if (cur) {
     const ok = await confirm({ title: 'Уже идёт фокус', text: `«${cur.title}». Начать новый? Текущий не засчитается.`, confirmLabel: 'Начать новый' });
@@ -1016,7 +1017,8 @@ export async function startFocus({ taskId = null, minutes = 25 } = {}) {
   const t = taskId ? getTask(taskId) : null;
   const now = Date.now();
   const m = Math.max(1, Math.min(240, Math.round(minutes)));
-  setFocus({ taskId: t ? t.id : null, title: t?.title || 'Фокус без задачи', minutes: m, startedAt: now, endsAt: now + m * 60000 });
+  const label = t?.title || M.normalizeTitle(title) || 'Фокус';
+  setFocus({ taskId: t ? t.id : null, title: label, minutes: m, startedAt: now, endsAt: now + m * 60000 });
   emitVillage('focus-start');
   showSnackbar(`Фокус на ${m} мин. Деревня работает вместе с тобой`);
   return true;
@@ -1035,11 +1037,20 @@ export async function finishFocus({ early = false } = {}) {
     showSnackbar('Фокус отменён');
     return;
   }
-  let gems = 0;
-  if (store.data.settings.gameEnabled) {
-    const e = G.focusEvent(store.data, { minutes, taskId: f.taskId, title: f.title }, ctx());
-    if (await commit([{ coll: 'coinEvents', prev: undefined, next: e }])) gems = e.gems | 0;
+  // Сессия по задаче пишется в саму задачу (focusSessions — всегда, и без игры), изумруды — в журнал монет.
+  const c0 = ctx();
+  const changes = [];
+  const task0 = f.taskId ? getTask(f.taskId) : null;
+  if (task0 && !task0.deletedAt) {
+    changes.push(change('tasks', task0.id, (x) => M.addFocusSession(x, { startedAt: new Date(f.startedAt).toISOString(), minutes }, c0)));
   }
+  let e = null;
+  if (store.data.settings.gameEnabled) {
+    e = G.focusEvent(store.data, { minutes, taskId: f.taskId, title: f.title }, c0);
+    changes.push({ coll: 'coinEvents', prev: undefined, next: e });
+  }
+  const saved = changes.length ? await commit(changes) : false;
+  const gems = saved && e ? e.gems | 0 : 0;
   emitVillage('focus-done', { gems, minutes });
   const summary = `Фокус ${minutes} мин${gems ? ` · +${gems} 💎` : ''}`;
   const t = f.taskId ? getTask(f.taskId) : null;

@@ -19,10 +19,10 @@ import { ShopScreen } from './screens/Shop.js';
 import { StartScreen, RedirectingScreen } from './components/Sync.js';
 import { Dock } from './components/Dock.js';
 import { AchievementToast } from './components/Decorations.js';
-import { VillageHost } from './components/VillageView.js';
+import { VillageHost, villageOn } from './components/VillageView.js';
 import { FocusBar } from './components/Focus.js';
 import { VillageScreen } from './screens/Village.js';
-import { dockPosition } from './prefs.js';
+import { dockPosition, getPrefs } from './prefs.js';
 import { clearMissed } from './notifier.js';
 import { pull } from '../sync/syncEngine.js';
 import {
@@ -207,8 +207,10 @@ export function App() {
   }, []);
 
   return html`
-    <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + dockPosition(!desktop)}>
-      <${VillageHost}/><${AchievementToast}/><${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
+    <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + dockPosition(!desktop)
+      + (base.name === 'village' && villageOn() ? ' village-mode' : '')
+      + (villageOn() && (base.name === 'village' || getPrefs().villageBackdrop !== false) ? ' village-bg-on' : '')}>
+      <${VillageHost} route=${base}/><${AchievementToast}/><${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
       <div class="main-col">
         ${base.name !== 'task' ? html`<${TopBar} route=${base}/>` : null}
         <${FocusBar} sticky=${base.name !== 'task'}/>

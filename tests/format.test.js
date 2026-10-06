@@ -8,7 +8,7 @@ import { gzipJson, gunzipJson } from '../src/data/serialize.js';
 import { validateDb } from '../src/data/validate.js';
 import { migrateDb } from '../src/data/migrations/index.js';
 import { parseDbBytes } from '../src/sync/protocol.js';
-import { newTask, newList, newDevice, newReward, defaultLists, defaultSettings, defaultPriorities, tombstone, touch } from '../src/core/model.js';
+import { newTask, newList, newDevice, newReward, defaultLists, defaultSettings, defaultPriorities, tombstone, touch, addFocusSession } from '../src/core/model.js';
 import { purchaseEvent, focusEvent } from '../src/core/game.js';
 import { canonicalJson } from '../src/core/canonical.js';
 import { SCHEMA_VERSION } from '../src/version.js';
@@ -44,7 +44,8 @@ function appData() {
   const c = makeCtx();
   const deviceId = c.deviceId;
   const l = newList({ name: 'Спорт', color: '#43A047', emoji: '💪', order: 'a5' }, c);
-  const t1 = newTask({ title: 'Бег', listIds: [l.id], scheduledDate: '2026-10-03', scheduledTime: '07:30', priorityId: '00000000-0000-7000-8000-000000000202', notes: ['Кроссовки взять'], order: 'a0' }, c);
+  const t1 = addFocusSession(newTask({ title: 'Бег', listIds: [l.id], scheduledDate: '2026-10-03', scheduledTime: '07:30', priorityId: '00000000-0000-7000-8000-000000000202', notes: ['Кроссовки взять'], order: 'a0' }, c),
+    { startedAt: '2026-10-03T07:30:00.000Z', minutes: 25 }, c); // 0.7.1: фокус-сессия в задаче
   const t4 = newTask({ title: 'Разминка', parentId: t1.id, order: 'a0' }, c);
   const t2 = touch(newTask({ title: 'Главная', order: 'Zz' }, c), { focusDate: '2026-10-02', focusOrder: 'a0', status: 'done', completedAt: new Date(c.now).toISOString() }, c);
   const t3 = tombstone(newTask({ title: 'Удалить' }, c), c);

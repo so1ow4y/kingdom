@@ -1,12 +1,14 @@
-// Мир деревни (обновление 0.7): раскладка, рельеф, физика жителей, гость у экрана, отрисовка всех стилей.
+// Мир деревни (обновление 0.7, вид сверху — 0.7.1): карта, проходимость и поиск пути, жители, гость у экрана, отрисовка.
 
 import { test, assert } from './runner.js';
-import { World, layoutVillage, makeGround, residentsOf } from '../src/village/world.js';
-import { drawVillage, drawVisitor, skyColors } from '../src/village/draw.js';
+import { World, residentsOf } from '../src/village/world.js';
+import { buildMap, findPath, walkable, TILE, T, LOTS } from '../src/village/map.js';
+import { VillageRenderer, drawVisitor } from '../src/village/draw.js';
 import { VILLAGE_ITEMS, VILLAGE_STYLES, BASE_VILLAGE, nightness } from '../src/core/village.js';
 
 const ALL = new Set([...BASE_VILLAGE, ...VILLAGE_ITEMS.map((x) => x.id)]);
 const LEGACY = new Set(['scene:web', 'scene:stars', 'prop:lantern', 'prop:mushrooms', 'prop:crystal', 'prop:pickaxe']);
+const FLYING = new Set(['broom', 'float', 'flyhigh', 'climb']);
 
 function seeded(seed = 1) {
   let s = seed >>> 0;
@@ -16,28 +18,52 @@ function seeded(seed = 1) {
   };
 }
 
-test('раскладка: постройки не налезают друг на друга, детерминирована, фонари по покупкам', () => {
-  const base = layoutVillage(new Set(BASE_VILLAGE), new Set(), 300);
+const tileOf = (x, y) => [Math.floor(x / TILE), Math.floor(y / TILE)];
+
+test('карта: участки не пересекаются, к каждой двери можно дойти с площади, река — только по мосту', () => {
+  for (let i = 0; i < LOTS.length; i++) {
+    for (let j = i + 1; j < LOTS.length; j++) {
+      const a = LOTS[i];
+      const b = LOTS[j];
+      const cross = a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+      assert.ok(!cross, `${a.key} и ${b.key} пересекаются`);
+    }
+  }
+  for (const flavor of ['classic', 'sea', 'gothic']) {
+    const m = buildMap(ALL, LEGACY, flavor);
+    assert.equal(m.buildings.length, LOTS.length, 'все постройки на месте');
+    const plaza = tileOf(m.spots.plaza.x, m.spots.plaza.y);
+    for (const b of m.buildings) {
+      const d = tileOf(b.door.x, b.door.y);
+      assert.ok(walkable(m, d[0], d[1]), `${flavor}: перед дверью ${b.id} можно стоять`);
+      assert.ok(findPath(m, plaza, d), `${flavor}: путь к ${b.id}`);
+    }
+    const exit = tileOf(m.spots.southExit.x, m.spots.southExit.y);
+    assert.ok(findPath(m, plaza, exit), `${flavor}: тропинка к экрану`);
+    for (let ty = 8; ty < 28; ty++) {
+      const river = m.grid[ty * m.cols + m.river.x];
+      assert.ok(river === T.WATER || river === T.BRIDGE, 'река на месте');
+      if (river === T.WATER) assert.ok(!walkable(m, m.river.x, ty), 'по воде не ходят');
+    }
+    assert.ok(walkable(m, m.river.x + 1, 19), 'мост проходим');
+  }
+  const a = buildMap(ALL, LEGACY, 'classic');
+  const b = buildMap(new Set([...ALL].reverse()), LEGACY, 'classic');
+  assert.equal(a.key, b.key, 'раскладка не зависит от порядка покупок');
+  const base = buildMap(new Set(BASE_VILLAGE), new Set(), 'classic');
   assert.equal(base.buildings.length, 1);
-  assert.equal(base.lanterns.length, 0);
-  const a = layoutVillage(ALL, LEGACY, 300);
-  const b = layoutVillage(new Set([...ALL].reverse()), LEGACY, 300);
-  assert.deepEqual(a.buildings.map((x) => [x.id, x.x]), b.buildings.map((x) => [x.id, x.x]));
-  assert.equal(a.lanterns.length, 5, '4 фонаря + фонарь странника из 0.6');
-  const sorted = [...a.buildings].sort((p, q) => p.x - q.x);
-  for (let i = 1; i < sorted.length; i++) assert.ok(sorted[i].x >= sorted[i - 1].x + sorted[i - 1].w, 'наложение ' + sorted[i].id);
-  assert.ok(sorted.at(-1).x + sorted.at(-1).w <= a.W, 'в пределах мира');
-  // уровни шахт — одна постройка с максимальным уровнем
-  assert.equal(a.buildings.filter((x) => x.type === 'goldmine').length, 1);
-  assert.equal(a.buildings.find((x) => x.type === 'goldmine').level, 3);
-  assert.ok(a.W > 300, 'большая деревня шире экрана — её можно листать');
+  assert.ok(base.decor.some((d) => d.type === 'well'), 'без фонтана на площади колодец');
+  assert.ok(!base.fields, 'поля появляются вместе с мельницей');
 });
 
-test('рельеф: уступы не выше 2 пикселей, под постройками ровно', () => {
-  const L = layoutVillage(ALL, new Set(), 400);
-  const g = makeGround(L.W, L.buildings);
-  for (let x = 1; x < g.length; x++) assert.ok(Math.abs(g[x] - g[x - 1]) <= 2, `x=${x}`);
-  for (const b of L.buildings) for (let x = b.x; x <= b.x + b.w; x++) assert.equal(g[x], b.ground, b.id);
+test('поиск пути: дорожки дешевле травы, через постройки не проходит', () => {
+  const m = buildMap(ALL, LEGACY, 'classic');
+  const path = findPath(m, [4, 12], [37, 12]);
+  assert.ok(path && path.length >= 33);
+  const onRoad = path.filter(([x, y]) => m.grid[y * m.cols + x] === T.PATH || m.grid[y * m.cols + x] === T.PLAZA).length;
+  assert.ok(onRoad / path.length > 0.9, 'идут по улице');
+  for (const [x, y] of path) assert.ok(walkable(m, x, y));
+  assert.equal(findPath(m, [4, 12], [5, 10]), null, 'внутрь дома пути нет');
 });
 
 test('жители: по покупкам, старые питомцы 0.6 — тоже жители', () => {
@@ -46,51 +72,54 @@ test('жители: по покупкам, старые питомцы 0.6 — �
   assert.ok(r.find((x) => x.kind === 'dragon').big);
 });
 
-test('физика: жители ходят по земле, не проваливаются, не улетают; день и ночь без ошибок', () => {
+test('физика: жители ходят только по проходимым тайлам, прыгают и приземляются; день и ночь без ошибок', () => {
   const w = new World({ rand: seeded(7) });
-  w.configure({ owned: ALL, legacy: LEGACY, viewW: 320, mood: 60, visitors: true });
-  const night = (phase) => nightness(phase);
-  let visits = 0;
+  w.configure({ owned: ALL, legacy: LEGACY, flavor: 'classic', mood: 60, visitors: true });
+  let jumped = false;
   for (let i = 0; i < 6000; i++) {
     const phase = ((i / 6000) * 2 + 0.3) % 1; // два полных дня
-    w.step(0.05, { phase, night: night(phase) });
-    if (w.visitor && w.visitor.t === 0.05) visits++;
+    w.step(0.05, { phase, night: nightness(phase) });
     if (i === 1500) w.celebrate(20, 2);
     if (i === 2000) w.sendVisitor();
     for (const a of w.actors) {
-      assert.ok(Number.isFinite(a.x) && Number.isFinite(a.y), `${a.kind} NaN на шаге ${i}`);
-      assert.ok(a.x > -30 && a.x < w.W + 30, `${a.kind} ушёл за край: ${a.x}`);
-      if (a.onGround) assert.ok(Math.abs(a.y - w.groundAt(a.x)) < 0.01, `${a.kind} не на земле`);
-      else if (!a.hidden) assert.ok(a.y >= w.groundAt(a.x) - 0.01 || a.vy > 0 || a.thread != null, `${a.kind} под землёй`);
+      assert.ok(Number.isFinite(a.x) && Number.isFinite(a.y) && Number.isFinite(a.z), `${a.kind} NaN на шаге ${i}`);
+      assert.ok(a.z >= 0, `${a.kind} под землёй`);
+      if (a.z > 0) jumped = true;
+      if (a.hidden || a.z > 0 || FLYING.has(a.task?.type)) continue;
+      const [tx, ty] = tileOf(a.x, a.y);
+      assert.ok(walkable(w.map, tx, ty), `${a.kind} стоит на непроходимом тайле (${tx}, ${ty}), задача ${a.task?.type}`);
     }
   }
-  assert.ok(w.particles.length < 400);
-  assert.ok(!w.actors.some((a) => a.task?.type === 'away' && !w.visitor), 'гость вернулся в деревню');
+  assert.ok(jumped, 'кто-то прыгал');
+  assert.ok(w.particles.length <= 500);
 });
 
 test('праздник: жители подпрыгивают, из домика летят монеты, изумрудная шахта — изумруды', () => {
   const w = new World({ rand: seeded(3) });
-  w.configure({ owned: new Set([...BASE_VILLAGE, 'pet:cat', 'v:mine-gem:1']), viewW: 300, mood: 50 });
+  w.configure({ owned: new Set([...BASE_VILLAGE, 'pet:cat', 'v:mine-gem:1']), mood: 50 });
   for (let i = 0; i < 40; i++) w.step(0.05, { phase: 0.5, night: 0 });
   w.celebrate(12, 2);
   assert.ok(w.particles.some((p) => p.kind === 'coin') && w.particles.some((p) => p.kind === 'gem'));
   w.step(0.05, { phase: 0.5, night: 0 });
   w.step(0.05, { phase: 0.5, night: 0 });
-  assert.ok(w.actors.some((a) => !a.onGround), 'кто-то в прыжке');
+  assert.ok(w.actors.some((a) => a.z > 0), 'кто-то в прыжке');
 });
 
-test('клик: житель реагирует, гость у экрана проходит весь путь и уходит', () => {
+test('клик: житель реагирует; гость уходит по тропинке к экрану и возвращается', () => {
   const w = new World({ rand: seeded(5) });
-  w.configure({ owned: new Set([...BASE_VILLAGE, 'pet:fox']), viewW: 240, mood: 80 });
+  w.configure({ owned: new Set([...BASE_VILLAGE, 'pet:fox']), mood: 80 });
   for (let i = 0; i < 20; i++) w.step(0.05, { phase: 0.5, night: 0 });
   const fox = w.actors.find((a) => a.kind === 'fox');
-  const h = w.hit(fox.x, fox.y + 3);
+  fox.task = { type: 'pose', pose: 'idle', d: 99, t: 0 };
+  fox.queue = [];
+  const h = w.hit(fox.x, fox.y - 3);
   assert.equal(h?.actor, fox);
   w.poke(fox);
   assert.ok(fox.say && fox.emote);
+  for (let i = 0; i < 30; i++) w.step(0.05, { phase: 0.5, night: 0 });
   assert.ok(w.sendVisitor(fox));
   let seen = false;
-  for (let i = 0; i < 2000 && !(seen && !w.visitor); i++) {
+  for (let i = 0; i < 4000 && !(seen && !w.visitor); i++) {
     w.step(0.05, { phase: 0.5, night: 0 });
     if (w.visitor) {
       seen = true;
@@ -101,42 +130,38 @@ test('клик: житель реагирует, гость у экрана пр
   assert.equal(w.visitor, null, 'и ушёл');
   for (let i = 0; i < 400; i++) w.step(0.05, { phase: 0.5, night: 0 });
   assert.ok(!fox.hidden, 'лиса вернулась в деревню');
+  const house = w.buildings[0];
+  assert.equal(w.hit(house.x + house.w / 2, house.base - 20)?.building, house, 'по дому тоже можно нажать');
 });
 
-test('отрисовка: все стили днём, в сумерках и ночью рисуются без ошибок; ночью земля темнее', () => {
-  const w = new World({ rand: seeded(9) });
-  w.configure({ owned: ALL, legacy: LEGACY, viewW: 200, mood: 20, focus: true });
-  for (let i = 0; i < 30; i++) w.step(0.05, { phase: 0.5, night: 0 });
-  w.celebrate(25, 3);
-  w.sendVisitor();
-  for (let i = 0; i < 200; i++) w.step(0.05, { phase: 0.5, night: 0 });
-  const mk = () => {
-    const c = document.createElement('canvas');
-    c.width = 200;
-    c.height = 90;
-    return c;
-  };
-  const main = mk();
-  const land = mk();
+test('отрисовка: все стили днём, в сумерках и ночью рисуются без ошибок; ночью темнее', () => {
+  const main = document.createElement('canvas');
+  main.width = 260;
+  main.height = 200;
   const ctx = main.getContext('2d');
-  const lctx = land.getContext('2d');
-  const lum = (phase, style) => {
-    drawVillage(ctx, lctx, w, { W: 200, H: 90, camX: 10, baseY: 84, horizon: 69, phase, n: nightness(phase), style, letter: '#f2a900', mode: 'full' });
-    const d = ctx.getImageData(0, 80, 200, 4).data;
-    let s = 0;
-    for (let i = 0; i < d.length; i += 4) s += d[i] + d[i + 1] + d[i + 2];
-    return s;
-  };
-  for (const st of Object.values(VILLAGE_STYLES)) {
-    const day = lum(0.5, st);
-    lum(0.27, st);
-    const night = lum(0, st);
-    assert.ok(night < day, `${st.name}: ночь темнее дня`);
+  const renderer = new VillageRenderer();
+  for (const [key, st] of Object.entries(VILLAGE_STYLES)) {
+    const w = new World({ rand: seeded(9) });
+    const flavor = st.gothic ? 'gothic' : st.meadow ? 'meadow' : st.sea ? 'sea' : st.autumn ? 'autumn' : 'classic';
+    w.configure({ owned: ALL, legacy: LEGACY, flavor, mood: 20, focus: true });
+    for (let i = 0; i < 30; i++) w.step(0.05, { phase: 0.5, night: 0 });
+    w.celebrate(25, 3);
+    const lum = (phase) => {
+      renderer.render(ctx, w, { W: 260, H: 200, camX: 140, camY: 80, phase, n: nightness(phase), style: st, letter: '#f2a900' });
+      const d = ctx.getImageData(0, 0, 260, 200).data;
+      let s = 0;
+      for (let i = 0; i < d.length; i += 16) s += d[i] + d[i + 1] + d[i + 2];
+      return s;
+    };
+    const day = lum(0.5);
+    lum(0.27);
+    const night = lum(0);
+    assert.ok(night < day * (st.gothic ? 0.95 : 0.8), `${key}: ночь темнее дня`);
+    w.sendVisitor();
+    for (let i = 0; i < 400 && !w.visitor; i++) w.step(0.05, { phase: 0.5, night: 0 });
+    const vc = document.createElement('canvas');
+    vc.width = 30;
+    vc.height = 40;
+    if (w.visitor) assert.ok(drawVisitor(vc.getContext('2d'), w, { W: 30, H: 40, u: 1, n: 0, style: st }));
   }
-  const vc = document.createElement('canvas');
-  vc.width = 30;
-  vc.height = 40;
-  if (w.visitor) assert.ok(drawVisitor(vc.getContext('2d'), w, { W: 30, H: 40, u: 1, n: 0, style: VILLAGE_STYLES.lime }));
-  const s = skyColors('gothic', 0);
-  assert.ok(/^#[0-9a-f]{6}$/.test(s.top) && /^#[0-9a-f]{6}$/.test(s.bottom));
 });

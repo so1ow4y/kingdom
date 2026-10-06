@@ -7,7 +7,8 @@ import {
   happiness, dayPhase, nightness, villageStyle, focusMinutes,
 } from '../src/core/village.js';
 import { awardEvent, purchaseEvent, focusEvent, balance, experience } from '../src/core/game.js';
-import { mergeData } from '../src/core/merge.js';
+import { mergeData, mergeEntity } from '../src/core/merge.js';
+import { newTask, addFocusSession, focusTotal, liveFocusSessions, duplicateTask } from '../src/core/model.js';
 
 const HIGH = '00000000-0000-7000-8000-000000000203';
 const CRIT = '00000000-0000-7000-8000-000000000204';
@@ -93,6 +94,20 @@ test('покупки деревни и фокус-сессии сливаютс�
   assert.ok(ownedVillage(d).has('v:house:2'));
   assert.equal(gemBalance(d), 2);
   assert.equal(focusMinutes(d, 'Europe/Moscow', '2026-10-05'), 45);
+});
+
+test('фокус в задаче (0.7.1): сессии с двух устройств сливаются, считается сумма, копия задачи — без сессий', () => {
+  const c = makeCtx(NOW);
+  const t0 = newTask({ title: 'Отчёт' }, c);
+  assert.deepEqual(focusTotal(t0), { minutes: 0, count: 0 });
+  const a = addFocusSession(t0, { startedAt: '2026-10-05T10:00:00.000Z', minutes: 25 }, c);
+  const b = addFocusSession(t0, { startedAt: '2026-10-05T11:00:00.000Z', minutes: 45 }, { ...makeCtx(NOW + 5), deviceId: 'devB' });
+  const m = mergeEntity(a, b);
+  assert.deepEqual(focusTotal(m), { minutes: 70, count: 2 });
+  assert.equal(liveFocusSessions(m)[0].minutes, 45, 'свежая сессия первой');
+  assert.deepEqual(mergeEntity(b, a).focusSessions, m.focusSessions, 'слияние коммутативно');
+  assert.equal(focusTotal(duplicateTask(m, 'a1', c)).count, 0);
+  assert.equal(addFocusSession(t0, { startedAt: '2026-10-05T10:00:00.000Z', minutes: 9999 }, c).focusSessions[0].minutes, 1440);
 });
 
 test('настроение: выполненные важные задачи и фокус радуют, просроченные расстраивают', () => {

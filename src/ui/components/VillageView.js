@@ -1,17 +1,17 @@
-// Деревня на экране (обновление 0.7): холст низкого разрешения с пиксельными жителями.
-//  • VillageHost — всегда в приложении: передаёт деревне покупки, настроение, фокус и тему; празднует выполненные задачи;
-//    рисует деревню полосой на фоне (за карточками) и гостя, который иногда подходит к экрану и стучит.
-//  • VillageCanvas mode="full" — экран «Деревня»: смотреть, листать, кликать по жителям, домам и фонарям.
+// Деревня на экране (обновление 0.7, полный фон — 0.7.1): холст низкого разрешения во весь экран за приложением.
+//  • На вкладках деревня приглушена (затемнение настраивается), чтобы не отвлекала; по пустым местам можно нажимать.
+//  • На экране «Деревня» — без затемнения: смотреть, листать, нажимать на жителей, дома, фонари.
+//  • Гость у экрана: житель выходит из леса в нижнем углу и стучит по «стеклу».
 
 import { html, useEffect, useRef, useMemo } from '../html.js';
 import { store, notify } from '../../store/appState.js';
 import * as G from '../../core/game.js';
 import { ownedVillage, happiness, villageStyle, gemsEarned } from '../../core/village.js';
 import { world, env, setEnv, configureVillage, setViewWidth, attachView } from '../../village/runtime.js';
-import { drawVillage, drawVisitor } from '../../village/draw.js';
+import { VillageRenderer, drawVisitor, flavorOf } from '../../village/draw.js';
 import { charHeight } from '../../village/puppets.js';
 import { getPrefs, setPrefs, SCHEMES } from '../prefs.js';
-import { useMedia } from '../hooks.js';
+import { useMedia, readLocal } from '../hooks.js';
 import { getFocus } from '../../store/focus.js';
 
 const LEGACY = G.COSMETICS.filter((c) => c.legacy).map((c) => c.id);
@@ -25,7 +25,14 @@ export function legacyOwned(data) {
   return new Set(LEGACY.filter((id) => G.ownsItem(data, id)));
 }
 
-/** Клик по жителю, фонарю или дому: реакция в мире. Возвращает то, что под точкой. */
+/** Что выбрано нажатием на экране «Деревня» (житель, постройка, фонарь) — для карточки внизу. */
+export const villageSel = { current: null };
+export function selectInVillage(h) {
+  villageSel.current = h && h.type ? h : null;
+  notify();
+}
+
+/** Нажатие на жителя, фонарь или дом: реакция в мире. Возвращает то, что под точкой. */
 export function interact(h) {
   if (!h) return null;
   if (h.type === 'actor') world.poke(h.actor);
@@ -34,53 +41,54 @@ export function interact(h) {
     const b = h.building;
     if (b.type.startsWith('house') || b.type === 'tavern' || b.type === 'tower' || b.type === 'windmill') {
       if (env.n > 0.3) setPrefs({ villageLightsOff: world.toggleLight(b.id) });
-      world.burst(b.x + b.w - 7, b.ground + b.h, 'smoke', 4, 6);
-    } else if (b.type === 'fountain') world.burst(b.x + 10, b.ground + 10, 'drop', 18, 30);
-    else if (b.type.endsWith('mine')) world.burst(b.x + 14, b.ground + 6, b.type === 'gemmine' ? 'gem' : 'coin', 5, 24);
-    else if (b.type === 'forge') world.burst(b.x + 17, b.ground + 5, 'spark', 10, 22);
+      const c = world.chimney(b);
+      if (c) world.burst(c.x, c.y, c.z, 'smoke', 4, 6);
+    } else if (b.type === 'fountain') world.burst(b.x + b.w / 2, b.y + b.h * 0.6, 14, 'drop', 22, 34);
+    else if (b.type.endsWith('mine')) world.burst(b.door.x, b.door.y - 4, 8, b.type === 'gemmine' ? 'gem' : 'coin', 6, 26);
+    else if (b.type === 'forge') world.burst(b.x + b.w * 0.7, b.base - 2, 8, 'spark', 12, 24);
   }
   return h;
 }
 
-export function VillageCanvas({ mode = 'backdrop', onPick = null }) {
+/** Масштаб «пикселя» деревни: экран видит около 260 пикселей карты по высоте и не больше самой карты. */
+function pickScale(w, h, big) {
+  let s = clamp(Math.round(Math.min(h / 260, w / 200)), 2, 5) + (big ? 1 : 0);
+  while (s < 8 && (Math.ceil(w / s) > world.W || Math.ceil(h / s) > world.H)) s++;
+  return s;
+}
+
+/** Деревня во весь экран за приложением. interactive — экран «Деревня» (клики и прокрутка прямо по холсту). */
+export function VillageBackdrop({ interactive = false, dim = 0 }) {
   const wrap = useRef(null);
   const cv = useRef(null);
   const layer = useRef(null);
-  const geo = useRef({ scale: 3, W: 0, H: 0, baseY: 0, horizon: 0, camX: 0 });
-  const cam = useRef({ x: null, drag: null });
-  const pick = useRef(onPick);
-  pick.current = onPick;
-  const full = mode === 'full';
+  const geo = useRef({ scale: 3, W: 0, H: 0, camX: 0, camY: 0 });
+  const cam = useRef({ user: null, drag: null });
+  const mode = useRef(interactive);
+  mode.current = interactive;
   const scalePref = getPrefs().villageScale;
 
   useEffect(() => {
     const canvas = cv.current;
     const ctx = canvas.getContext('2d');
-    const land = document.createElement('canvas');
-    const lctx = land.getContext('2d');
-    if (full) {
-      env.fullViews++;
-      notify();
-    }
+    const renderer = new VillageRenderer();
     const resize = () => {
-      const r = wrap.current?.getBoundingClientRect();
-      if (!r || !r.width) return;
-      const big = getPrefs().villageScale === 'large';
-      // полный вид — около 125 «пикселей» деревни по высоте (на узком экране деревню листают пальцем)
-      const scale = (full ? Math.max(2, Math.round(r.height / 125)) : r.width < 600 ? 2 : 3) + (big ? 1 : 0);
-      const W = Math.max(60, Math.ceil(r.width / scale));
-      const H = Math.max(40, Math.ceil(r.height / scale));
-      const baseY = H - (full ? 12 : 6);
-      Object.assign(geo.current, { scale, W, H, baseY, horizon: baseY - (full ? 26 : 15) });
-      canvas.width = land.width = W;
-      canvas.height = land.height = H;
+      const iw = window.innerWidth;
+      const ih = window.innerHeight;
+      const scale = pickScale(iw, ih, getPrefs().villageScale === 'large');
+      const W = Math.ceil(iw / scale);
+      const H = Math.ceil(ih / scale);
+      const g = geo.current;
+      if (g.scale === scale && g.W === W && g.H === H) return;
+      Object.assign(g, { scale, W, H });
+      canvas.width = W;
+      canvas.height = H;
       canvas.style.width = W * scale + 'px';
       canvas.style.height = H * scale + 'px';
-      setViewWidth(W, full);
+      setViewWidth(W);
     };
     resize();
-    const ro = new ResizeObserver(resize);
-    ro.observe(wrap.current);
+    window.addEventListener('resize', resize);
     const bubbles = new Map();
     const updateBubbles = () => {
       const g = geo.current;
@@ -97,8 +105,8 @@ export function VillageCanvas({ mode = 'backdrop', onPick = null }) {
           bubbles.set(a.id, el);
         }
         if (el.textContent !== a.say) el.textContent = a.say;
-        const x = clamp((a.x - g.camX) * g.scale, 50, maxX - 50);
-        const y = Math.max(20, (g.baseY - a.y - charHeight(a.kind) * a.u - 6) * g.scale);
+        const x = clamp((a.x - g.camX) * g.scale, 60, maxX - 60);
+        const y = Math.max(24, (a.y - a.z - charHeight(a.kind) * a.u - 6 - g.camY) * g.scale);
         el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px) translate(-50%, -100%)`;
       }
       for (const [id, el] of bubbles) {
@@ -111,83 +119,111 @@ export function VillageCanvas({ mode = 'backdrop', onPick = null }) {
     const draw = () => {
       const g = geo.current;
       if (!g.W) return;
-      let camX = (world.W - g.W) / 2;
-      if (world.W > g.W) {
-        const span = world.W - g.W;
-        if (full) {
-          if (cam.current.x == null) cam.current.x = span / 2;
-          cam.current.x = clamp(cam.current.x, 0, span);
-          camX = cam.current.x;
-        } else camX = span * (0.5 + 0.5 * Math.sin((world.t * Math.PI * 2) / 160));
+      const spanX = world.W - g.W;
+      const spanY = world.H - g.H;
+      let camX;
+      let camY;
+      if (cam.current.user && mode.current) {
+        camX = clamp(cam.current.user.x, Math.min(0, spanX / 2), Math.max(0, spanX));
+        camY = clamp(cam.current.user.y, Math.min(0, spanY / 2), Math.max(0, spanY));
+        cam.current.user = { x: camX, y: camY };
+      } else {
+        // сама плавно гуляет вокруг площади, не уходя за жилую часть
+        const v = world.map.village;
+        const c = world.map.spots.plaza;
+        const rx = Math.max(0, (v.x1 - v.x0 - g.W) / 2);
+        const ry = Math.max(0, (v.y1 - v.y0 - g.H) / 2);
+        camX = c.x - g.W / 2 + Math.sin((world.t * Math.PI * 2) / 240) * rx;
+        camY = c.y - 18 - g.H / 2 + Math.sin((world.t * Math.PI * 2) / 330) * ry;
+        camX = spanX <= 0 ? spanX / 2 : clamp(camX, 0, spanX);
+        camY = spanY <= 0 ? spanY / 2 : clamp(camY, 0, spanY);
       }
       g.camX = Math.round(camX);
-      drawVillage(ctx, lctx, world, {
-        W: g.W, H: g.H, camX: g.camX, baseY: g.baseY, horizon: g.horizon, phase: env.phase, n: env.n, style: env.style, letter: env.letter, mode,
-      });
+      g.camY = Math.round(camY);
+      renderer.render(ctx, world, { W: g.W, H: g.H, camX: g.camX, camY: g.camY, phase: env.phase, n: env.n, style: env.style, letter: env.letter });
       updateBubbles();
     };
     const detach = attachView(draw);
     draw();
     const toWorld = (cx, cy) => {
-      const r = canvas.getBoundingClientRect();
       const g = geo.current;
-      return { wx: (cx - r.left) / g.scale + g.camX, wy: g.baseY - (cy - r.top) / g.scale, inside: cx >= r.left && cx <= r.right && cy >= r.top && cy <= r.bottom };
+      return { wx: cx / g.scale + g.camX, wy: cy / g.scale + g.camY };
     };
-    // Фон лежит под карточками: клики по пустому месту страницы долетают до жителей.
+    // На вкладках фон под карточками: клики по пустому месту страницы долетают до жителей.
     const onDocClick = (e) => {
-      if (full || e.defaultPrevented || !(e.target instanceof Element)) return;
-      if (e.target.closest('button, a, input, textarea, select, label, summary, [role], [contenteditable], .card-block, .sheet, .overlay, .dock-wrap, .topbar, li')) return;
+      if (mode.current || e.defaultPrevented || !(e.target instanceof Element)) return;
+      if (e.target.closest('button, a, input, textarea, select, label, summary, [role], [contenteditable], .card-block, .sheet, .overlay, .dock-wrap, .topbar, li, .task-row, .village-visitor')) return;
       const p = toWorld(e.clientX, e.clientY);
-      if (p.inside) interact(world.hit(p.wx, p.wy));
+      interact(world.hit(p.wx, p.wy));
     };
-    if (!full) document.addEventListener('click', onDocClick);
+    document.addEventListener('click', onDocClick);
+    // Экран «Деревня»: тянуть — двигать карту, нажать — житель/дом/фонарь, наведение — курсор-рука.
+    const down = (e) => {
+      if (!mode.current) return;
+      cam.current.drag = { x0: e.clientX, y0: e.clientY, cx: geo.current.camX, cy: geo.current.camY, moved: false, id: e.pointerId };
+    };
+    const move = (e) => {
+      if (!mode.current) return;
+      const d = cam.current.drag;
+      if (d && d.id === e.pointerId) {
+        const dx = (e.clientX - d.x0) / geo.current.scale;
+        const dy = (e.clientY - d.y0) / geo.current.scale;
+        if (Math.hypot(dx, dy) > 2 && !d.moved) {
+          d.moved = true;
+          canvas.setPointerCapture?.(e.pointerId);
+        }
+        if (d.moved) cam.current.user = { x: d.cx - dx, y: d.cy - dy };
+        return;
+      }
+      if (e.pointerType === 'mouse') {
+        const p = toWorld(e.clientX, e.clientY);
+        canvas.style.cursor = world.hit(p.wx, p.wy) ? 'pointer' : 'grab';
+      }
+    };
+    const up = (e) => {
+      const d = cam.current.drag;
+      cam.current.drag = null;
+      if (!mode.current || !d || d.moved) return;
+      const p = toWorld(e.clientX, e.clientY);
+      selectInVillage(interact(world.hit(p.wx, p.wy)));
+    };
+    const wheel = (e) => {
+      if (!mode.current) return;
+      const g = geo.current;
+      const cur = cam.current.user || { x: g.camX, y: g.camY };
+      const sx = e.shiftKey ? e.deltaY : e.deltaX;
+      const sy = e.shiftKey ? 0 : e.deltaY;
+      cam.current.user = { x: cur.x + sx / g.scale, y: cur.y + sy / g.scale };
+      e.preventDefault();
+    };
+    const cancel = () => {
+      cam.current.drag = null;
+    };
+    canvas.addEventListener('pointerdown', down);
+    canvas.addEventListener('pointermove', move);
+    canvas.addEventListener('pointerup', up);
+    canvas.addEventListener('pointercancel', cancel);
+    canvas.addEventListener('wheel', wheel, { passive: false });
     return () => {
       detach();
-      ro.disconnect();
-      if (!full) document.removeEventListener('click', onDocClick);
-      if (full) {
-        env.fullViews--;
-        notify();
-      }
+      window.removeEventListener('resize', resize);
+      document.removeEventListener('click', onDocClick);
       for (const el of bubbles.values()) el.remove();
     };
-  }, [mode, scalePref]);
+  }, [scalePref]);
 
-  if (!full) {
-    return html`<div class="village-backdrop" ref=${wrap} aria-hidden="true"><canvas ref=${cv}></canvas><div class="village-layer" ref=${layer}></div></div>`;
-  }
-  const down = (e) => {
-    cam.current.drag = { x0: e.clientX, cam0: cam.current.x ?? 0, moved: false, id: e.pointerId };
-  };
-  const move = (e) => {
-    const d = cam.current.drag;
-    if (!d || d.id !== e.pointerId) return;
-    const dx = (e.clientX - d.x0) / geo.current.scale;
-    if (Math.abs(dx) > 2 && !d.moved) {
-      d.moved = true;
-      cv.current.setPointerCapture?.(e.pointerId);
+  useEffect(() => {
+    if (!interactive) {
+      cam.current.user = null; // на вкладках камера снова гуляет сама
+      if (villageSel.current) villageSel.current = null;
     }
-    if (d.moved) cam.current.x = d.cam0 - dx;
-  };
-  const up = (e) => {
-    const d = cam.current.drag;
-    cam.current.drag = null;
-    if (!d || d.moved) return;
-    const r = cv.current.getBoundingClientRect();
-    const g = geo.current;
-    const h = interact(world.hit((e.clientX - r.left) / g.scale + g.camX, g.baseY - (e.clientY - r.top) / g.scale));
-    pick.current?.(h);
-  };
-  const wheel = (e) => {
-    if (Math.abs(e.deltaX) > Math.abs(e.deltaY) || e.shiftKey) {
-      cam.current.x = (cam.current.x ?? 0) + (e.deltaX || e.deltaY) / geo.current.scale;
-      e.preventDefault();
-    }
-  };
-  return html`<div class="village-full" ref=${wrap}>
-    <canvas ref=${cv} onPointerDown=${down} onPointerMove=${move} onPointerUp=${up} onPointerCancel=${() => { cam.current.drag = null; }} onWheel=${wheel}
-      aria-label="Деревня: нажми на жителя, дом или фонарь; потяни, чтобы прокрутить" role="img"></canvas>
+  }, [interactive]);
+
+  return html`<div class=${'village-bg' + (interactive ? ' interactive' : '')} ref=${wrap} aria-hidden=${interactive ? 'false' : 'true'}>
+    <canvas ref=${cv} role=${interactive ? 'img' : undefined}
+      aria-label=${interactive ? 'Деревня: нажми на жителя, дом или фонарь; потяни, чтобы прокрутить' : undefined}></canvas>
     <div class="village-layer" ref=${layer}></div>
+    <div class="village-dim" style=${{ opacity: dim }}></div>
   </div>`;
 }
 
@@ -241,8 +277,8 @@ export function VillageVisitor() {
   </div>`;
 }
 
-/** Деревня в каркасе приложения. route — текущий экран (на экране «Деревня» фон не нужен). */
-export function VillageHost() {
+/** Деревня в каркасе приложения. route — текущий экран (на «Деревне» без затемнения, в «Магазине → Деревня» — слабее). */
+export function VillageHost({ route }) {
   const p = getPrefs();
   const data = store.data;
   const on = villageOn();
@@ -262,13 +298,17 @@ export function VillageHost() {
   const daynight = owned.has('v:daynight');
   const mode = daynight ? p.dayMode || 'theme' : 'theme';
   const motion = p.decorMotion !== false && !reduced;
+  const full = route?.name === 'village';
+  const shopVillage = route?.name === 'shop' && readLocal('shopTab', 'rewards') === 'village';
+  const dimPref = Number.isFinite(p.villageDim) ? p.villageDim : 0.55;
+  const dim = full ? 0 : shopVillage ? Math.min(dimPref, 0.3) : dimPref;
 
   setEnv({
-    mode, dark, motion, style: villageStyle(scheme),
+    mode, dark, motion, dimmed: dim > 0.3, style: villageStyle(scheme),
     letter: p.letter || (dark ? SCHEMES[scheme].dark : SCHEMES[scheme].light),
   });
   useEffect(() => {
-    configureVillage({ owned, legacy, mood: mood.value, focus: !!focus, visitors: on && motion && p.visitors !== false, lightsOff: p.villageLightsOff || [] });
+    configureVillage({ owned, legacy, flavor: flavorOf(villageStyle(scheme)), mood: mood.value, focus: !!focus, visitors: on && motion && p.visitors !== false, lightsOff: p.villageLightsOff || [] });
   });
   // выполненная задача — праздник в деревне (и монетки из домика)
   useEffect(() => {
@@ -278,6 +318,6 @@ export function VillageHost() {
 
   if (!on) return null;
   return html`
-    ${p.villageBackdrop !== false && env.fullViews === 0 ? html`<${VillageCanvas} mode="backdrop"/>` : null}
+    ${full || p.villageBackdrop !== false ? html`<${VillageBackdrop} interactive=${full} dim=${dim}/>` : null}
     ${motion && p.visitors !== false ? html`<${VillageVisitor}/>` : null}`;
 }

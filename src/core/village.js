@@ -191,12 +191,28 @@ export function happiness(data, tz, today) {
 // ---------- Стиль деревни ----------
 
 /** Стиль по цветовой схеме приложения: фиолетовая — готика, лаймовая — сказочный луг и т. д. */
+// Палитры (0.7.1): тёмная насыщенная зелень, оранжевые черепичные крыши, голубая вода — в духе пиксельных RPG.
 export const VILLAGE_STYLES = {
-  indigo: { name: 'Классическая деревня', roof: '#b0473b', wall: '#e8d5b0', wood: '#7a4f2c', grass: '#4f9a4a', grass2: '#3c7d3a', hill: '#5aa654', far: '#6c8fb8', accent: '#3949ab' },
-  lavender: { name: 'Готическая деревня', roof: '#3b2d52', wall: '#8f86a3', wood: '#3a2a3f', grass: '#4b5d4a', grass2: '#394737', hill: '#55634f', far: '#5c4b7a', accent: '#9a6cf0', gothic: true },
-  lime: { name: 'Сказочный луг', roof: '#e07a3b', wall: '#fff2cf', wood: '#8a5a2b', grass: '#7cc44a', grass2: '#5fa83a', hill: '#8fd05a', far: '#86b8d8', accent: '#5b8c00', meadow: true },
-  ocean: { name: 'Приморская деревня', roof: '#2f7d9c', wall: '#f1ead8', wood: '#6b4e33', grass: '#5aa77a', grass2: '#468c63', hill: '#68b58a', far: '#5aa0c0', accent: '#00796b', sea: true },
-  sunset: { name: 'Осенняя деревня', roof: '#9c3b23', wall: '#f0d2a8', wood: '#6e3f22', grass: '#b8913e', grass2: '#9c7531', hill: '#c79d47', far: '#c97a5c', accent: '#d84315', autumn: true },
+  indigo: {
+    name: 'Классическая деревня', roof: '#cf6432', wall: '#efdfbd', wood: '#6b4a2b', grass: '#3b7436', grass2: '#2e6130', hill: '#447e3c',
+    far: '#6c8fb8', accent: '#3949ab', path: '#a9865a', stone: '#8c8a84', water: '#3a7db5', cliff: '#7b6a58',
+  },
+  lavender: {
+    name: 'Готическая деревня', roof: '#4b3768', wall: '#9c93ad', wood: '#3a2a3f', grass: '#35473a', grass2: '#2a3a30', hill: '#3c5040',
+    far: '#5c4b7a', accent: '#9a6cf0', path: '#6e6676', stone: '#625e6e', water: '#3b4f78', cliff: '#5a5266', gothic: true,
+  },
+  lime: {
+    name: 'Сказочный луг', roof: '#e07a3b', wall: '#fff2cf', wood: '#8a5a2b', grass: '#45863a', grass2: '#36702f', hill: '#57984a',
+    far: '#86b8d8', accent: '#5b8c00', path: '#b8925e', stone: '#9a978e', water: '#3f8fc8', cliff: '#86735c', meadow: true,
+  },
+  ocean: {
+    name: 'Приморская деревня', roof: '#2f7d9c', wall: '#f1ead8', wood: '#6b4e33', grass: '#3d7752', grass2: '#2f6346', hill: '#4a8a60',
+    far: '#5aa0c0', accent: '#00796b', path: '#c2a678', stone: '#9a9a94', water: '#2f86b8', cliff: '#7d7468', sand: '#d8c48e', sea: true,
+  },
+  sunset: {
+    name: 'Осенняя деревня', roof: '#9c3b23', wall: '#f0d2a8', wood: '#6e3f22', grass: '#66702f', grass2: '#535c28', hill: '#7a7a3a',
+    far: '#c97a5c', accent: '#d84315', path: '#a8865a', stone: '#958a7c', water: '#3a73a0', cliff: '#82705a', autumn: true,
+  },
 };
 
 export const villageStyle = (scheme) => VILLAGE_STYLES[scheme] || VILLAGE_STYLES.indigo;

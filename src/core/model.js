@@ -14,7 +14,8 @@ import { DEFAULT_PRIORITIES, PRIORITY_NONE_ID } from './priorities.js';
 
 export const SERVICE_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'updatedBy', 'fieldTimes']);
 // Вложенные массивы и словари с метками на уровне элементов — через touch не меняются.
-export const NESTED_ARRAYS = ['notes', 'attachments', 'reminders'];
+// focusSessions — с 0.7.1: фокус-сессии по задаче (необязательное поле, у новых задач его нет до первой сессии).
+export const NESTED_ARRAYS = ['notes', 'attachments', 'reminders', 'focusSessions'];
 export const KEYED_MAPS = ['occurrences', 'lists'];
 export const NESTED_FIELDS = new Set([...NESTED_ARRAYS, ...KEYED_MAPS, 'subtasks']);
 
@@ -22,6 +23,7 @@ export const TASK_FIELDS = ['title', 'priorityId', 'parentId', 'status', 'comple
   'scheduledDate', 'scheduledTime', 'deadlineDate', 'deadlineTime', 'focusDate', 'focusOrder', 'order',
   'repeat', 'nag', 'createdVia', 'deletedAt'];
 export const NOTE_FIELDS = ['text', 'order', 'deletedAt'];
+export const FOCUS_SESSION_FIELDS = ['startedAt', 'minutes', 'deletedAt'];
 export const LIST_FIELDS = ['name', 'color', 'emoji', 'order', 'archived', 'deletedAt'];
 export const PRIORITY_FIELDS = ['name', 'color', 'coins', 'order', 'archived', 'deletedAt'];
 export const REWARD_FIELDS = ['name', 'emoji', 'price', 'repeatable', 'order', 'archived', 'deletedAt'];
@@ -387,6 +389,32 @@ export function addReminder(task, r, ctx) {
   const fields = { kind: r.kind, at: r.at ?? null, offsetMinutes: r.offsetMinutes ?? null, anchor: r.anchor ?? null, time: r.time ?? null };
   const rem = nestedNew(fields, REMINDER_FIELDS, ctx);
   return withNested(task, 'reminders', [...(task.reminders || []), rem], ctx);
+}
+
+// ---------- Фокус-сессии (0.7.1) ----------
+
+/** Записать завершённую фокус-сессию в задачу: { startedAt: ISO, minutes }. Элементы сливаются по id, как заметки. */
+export function addFocusSession(task, { startedAt, minutes }, ctx) {
+  const m = Math.max(1, Math.min(1440, Math.round(minutes)));
+  const s = nestedNew({ startedAt, minutes: m }, FOCUS_SESSION_FIELDS, ctx);
+  delete s.updatedBy;
+  return withNested(task, 'focusSessions', [...(task.focusSessions || []), s], ctx);
+}
+
+export function liveFocusSessions(task) {
+  return (task?.focusSessions || []).filter((s) => !s.deletedAt).sort((a, b) => (a.startedAt < b.startedAt ? 1 : -1));
+}
+
+/** Сколько фокуса у задачи: { minutes, count }. */
+export function focusTotal(task) {
+  let minutes = 0;
+  let count = 0;
+  for (const s of task?.focusSessions || []) {
+    if (s.deletedAt) continue;
+    minutes += s.minutes | 0;
+    count++;
+  }
+  return { minutes, count };
 }
 
 export function duplicateTask(task, order, ctx) {

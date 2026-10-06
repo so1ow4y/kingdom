@@ -3,14 +3,14 @@
 
 import { html, useState } from '../html.js';
 import { Icon } from '../icons.js';
-import { store } from '../../store/appState.js';
+import { store, notify } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as G from '../../core/game.js';
 import { formatMoment } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { getPrefs, setPrefs, SCHEMES } from '../prefs.js';
 import { readLocal, writeLocal } from '../hooks.js';
-import { VillagePanel } from './Village.js';
+import { VillageShopPanel } from './Village.js';
 import { DecorationSettings } from '../components/Decorations.js';
 import { gemBalance } from '../../core/village.js';
 
@@ -196,6 +196,7 @@ export function ShopScreen() {
   const setTab = (t) => {
     setTabState(t);
     writeLocal('shopTab', t);
+    notify(); // деревня на фоне светлеет во вкладке «Деревня»
   };
   if (!store.data.settings.gameEnabled) {
     return html`<div class="screen">
@@ -214,7 +215,7 @@ export function ShopScreen() {
         ${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${'chip' + (tab === k ? ' selected' : '')} onClick=${() => setTab(k)}>${label}</button>`)}
       </div>
       ${tab === 'rewards' ? html`<${Rewards} bal=${st.balance}/>` : tab === 'cosmetics' ? html`<${Cosmetics} bal=${st.balance}/>`
-        : tab === 'village' ? html`<${VillagePanel}/>`
+        : tab === 'village' ? html`<${VillageShopPanel}/>`
         : tab === 'achievements' ? html`<${Achievements} st=${st}/>` : html`<${History}/>`}
     </div>`;
 }

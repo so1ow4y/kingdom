@@ -6,6 +6,7 @@ import { Icon } from '../icons.js';
 import { Banner } from '../components/Overlays.js';
 import { NotesEditor, SubtasksEditor } from '../components/ItemLists.js';
 import { RemindersEditor } from '../components/Reminders.js';
+import { FocusSection } from '../components/Focus.js';
 import { closeTask, navigate, openTask } from '../router.js';
 import { store, openSheet, showSnackbar, registerFlusher } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
@@ -167,6 +168,11 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
       <section class="card-section">
         <div class="field-label">Напоминания</div>
         <${RemindersEditor} taskId=${taskId} locked=${locked || done}/>
+      </section>
+
+      <section class="card-section">
+        <div class="field-label">Фокус</div>
+        <${FocusSection} task=${t} locked=${locked || done}/>
       </section>
 
       <section class="card-section">

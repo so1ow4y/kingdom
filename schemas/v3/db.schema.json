@@ -864,6 +864,13 @@
                   "$ref": "#/$defs/note"
                 }
               },
+              "focusSessions": {
+                "description": "0.7.1: фокус-сессии по задаче (необязательное поле, сливается поэлементно)",
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/focusSession"
+                }
+              },
               "lists": {
                 "type": "object",
                 "propertyNames": {
@@ -1035,6 +1042,34 @@
               },
               "lastPushAt": {
                 "$ref": "#/$defs/isoTimeOrNull"
+              }
+            }
+          }
+        }
+      ]
+    },
+    "focusSession": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/nestedBase"
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "startedAt",
+              "minutes"
+            ],
+            "properties": {
+              "startedAt": {
+                "$ref": "#/$defs/isoTime"
+              },
+              "minutes": {
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 1440
               }
             }
           }

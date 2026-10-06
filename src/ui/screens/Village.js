@@ -1,6 +1,6 @@
-// Экран «Деревня» (обновление 0.7): вся деревня крупно, настроение жителей, монеты и изумруды, магазин построек,
-// жителей, света и декора, настройки (фон, масштаб, смена дня и ночи, гости у экрана, строгий фокус).
-// Тот же вид — во вкладке «Деревня» магазина.
+// Экран «Деревня» (обновление 0.7, полноэкранный вид — 0.7.1): деревня во весь экран без затемнения, сверху —
+// компактная панель (настроение, монеты и изумруды, фокус, «Позвать», магазин), снизу — время суток и карточка того,
+// на что нажали. Покупки и настройки — во вкладке «🏡 Деревня» магазина (VillageShopPanel).
 
 import { html, useEffect, useState } from '../html.js';
 import { Icon } from '../icons.js';
@@ -8,12 +8,13 @@ import { store, openSheet } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as G from '../../core/game.js';
 import * as V from '../../core/village.js';
-import { VillageCanvas, villageOn } from '../components/VillageView.js';
+import { villageOn, villageSel, selectInVillage } from '../components/VillageView.js';
 import { DecorationSettings } from '../components/Decorations.js';
 import { world, env, setEnv } from '../../village/runtime.js';
 import { getPrefs, setPrefs } from '../prefs.js';
 import { readLocal, writeLocal } from '../hooks.js';
 import { getFocus } from '../../store/focus.js';
+import { navigate } from '../router.js';
 
 const TABS = [['building', 'Постройки'], ['char', 'Жители'], ['light', 'Свет и небо'], ['decor', 'Декор']];
 const BASE_INFO = {
@@ -24,10 +25,15 @@ const BASE_INFO = {
 const infoOf = (id) => BASE_INFO[id] || V.villageItem(id);
 const price = (it) => (it.gems ? `${it.gems} 💎` : `${it.coins} 🪙`);
 
-function Mood({ mood, bal, gems }) {
+export function openVillageShop() {
+  writeLocal('shopTab', 'village');
+  navigate('/shop');
+}
+
+function Mood({ mood, bal, gems, compact = false, onLight = null, lightOpen = false }) {
   const f = getFocus();
   return html`
-    <div class="village-head card-block">
+    <div class=${'village-head' + (compact ? ' hud' : ' card-block')}>
       <div class="vh-mood" title=${`Выполнено за 3 дня: ${mood.parts.done} · фокус сегодня: ${mood.parts.focus} · просрочено: ${mood.parts.overdue}`}>
         <span class="vh-emoji">${mood.emoji}</span>
         <div><b>Жители: ${mood.label.toLowerCase()}</b>
@@ -38,45 +44,49 @@ function Mood({ mood, bal, gems }) {
       <div class="vh-actions">
         <button class="btn small primary" onClick=${() => openSheet('focus', {})} disabled=${!!f}><${Icon} name="focus" size=${16}/> ${f ? 'Фокус идёт' : 'Фокус'}</button>
         <button class="btn small" onClick=${() => world.sendVisitor()} title="Кто-нибудь подойдёт к экрану">👋 Позвать</button>
+        ${onLight ? html`<button class=${'btn small' + (lightOpen ? ' active' : '')} onClick=${onLight} aria-pressed=${lightOpen} title="Время суток и свет">☀️ Свет</button>` : null}
+        ${compact ? html`<button class="btn small" onClick=${openVillageShop}><${Icon} name="shop" size=${16}/> Магазин деревни</button>`
+          : html`<button class="btn small" onClick=${() => navigate('/village')}><${Icon} name="village" size=${16}/> Смотреть деревню</button>`}
       </div>
     </div>`;
 }
 
-function Selected({ sel, onClose, bal }) {
+function Selected({ sel, bal }) {
   if (!sel) return null;
   const readOnly = !!store.ui.readOnly;
+  const close = html`<button class="icon-btn small" onClick=${() => selectInVillage(null)} aria-label="Закрыть"><${Icon} name="close" size=${16}/></button>`;
   if (sel.type === 'actor') {
     const a = sel.actor;
     const it = infoOf(a.id) || BASE_INFO['base:wanderer'];
-    return html`<div class="village-sel card-block">
+    return html`<div class="village-sel">
       <span class="vs-emoji">${it.emoji}</span>
       <div class="vs-main"><b>${it.name}</b><p class="muted small">${it.desc || ''}</p></div>
       <div class="vs-actions">
         <button class="btn small" onClick=${() => world.poke(a)}>Погладить</button>
         <button class="btn small" onClick=${() => world.sendVisitor(a)}>К экрану</button>
-        <button class="icon-btn small" onClick=${onClose} aria-label="Закрыть"><${Icon} name="close" size=${16}/></button>
+        ${close}
       </div></div>`;
   }
   if (sel.type === 'lantern') {
     const on = world.lightOn(sel.lantern.id);
-    return html`<div class="village-sel card-block">
+    return html`<div class="village-sel">
       <span class="vs-emoji">🏮</span>
-      <div class="vs-main"><b>Фонарь</b><p class="muted small">${on ? 'Горит в темноте' : 'Выключен'}</p></div>
-      <div class="vs-actions"><button class="icon-btn small" onClick=${onClose} aria-label="Закрыть"><${Icon} name="close" size=${16}/></button></div></div>`;
+      <div class="vs-main"><b>Фонарь</b><p class="muted small">${on ? 'Горит в темноте. Нажми ещё раз — погаснет.' : 'Выключен. Нажми — зажжётся.'}</p></div>
+      <div class="vs-actions">${close}</div></div>`;
   }
   const b = sel.building;
   const it = infoOf(b.id) || { name: b.type, emoji: '🏠', desc: '' };
   const next = V.VILLAGE_ITEMS.find((x) => x.requires === b.id);
   const check = next ? V.canBuy(store.data, next, bal) : null;
   const lights = b.type.startsWith('house') || ['tavern', 'tower', 'windmill'].includes(b.type);
-  return html`<div class="village-sel card-block">
+  return html`<div class="village-sel">
     <span class="vs-emoji">${it.emoji}</span>
     <div class="vs-main"><b>${it.name}</b><p class="muted small">${it.desc || ''}</p>
       ${next ? html`<p class="small">Дальше: ${next.emoji} ${next.name} — ${next.desc || ''}</p>` : null}</div>
     <div class="vs-actions">
       ${lights ? html`<button class="btn small" onClick=${() => setPrefs({ villageLightsOff: world.toggleLight(b.id) })}>${world.lightOn(b.id) ? 'Погасить свет' : 'Зажечь свет'}</button>` : null}
       ${next ? html`<button class="btn small primary" disabled=${!check.ok || readOnly} title=${check.reason} onClick=${() => A.buyVillageItem(next.id)}>${price(next)}</button>` : null}
-      <button class="icon-btn small" onClick=${onClose} aria-label="Закрыть"><${Icon} name="close" size=${16}/></button>
+      ${close}
     </div></div>`;
 }
 
@@ -90,18 +100,17 @@ function LightControls() {
     setEnv({ phaseOverride: v == null ? null : v / 24 });
   };
   const lightsOff = getPrefs().villageLightsOff || [];
-  return html`<div class="village-light card-block">
-    <label class="vl-slider"><span>☀️ Время в деревне: <b>${h == null ? 'как сейчас' : label}</b></span>
+  return html`<div class="village-time">
+    <label class="vl-slider"><span>☀️ <b>${h == null ? 'как сейчас' : label}</b></span>
       <input type="range" min="0" max="24" step="0.25" value=${cur} onInput=${(e) => set(+e.target.value)} aria-label="Время суток в деревне"/></label>
-    <div class="chip-row wrap">
-      <button class="chip" onClick=${() => set(12)}>🌞 День</button>
-      <button class="chip" onClick=${() => set(18.25)}>🌇 Закат</button>
-      <button class="chip" onClick=${() => set(23)}>🌙 Ночь</button>
-      <button class=${'chip' + (h == null ? ' selected' : '')} onClick=${() => set(null)}>Как сейчас</button>
-      <button class="chip" onClick=${() => setPrefs({ villageLightsOff: lightsOff.length ? [] : [...world.lanterns.map((l) => l.id), ...world.buildings.map((b) => b.id)] })}>
-        💡 ${lightsOff.length ? 'Зажечь всё' : 'Погасить всё'}</button>
+    <div class="chip-row">
+      <button class="chip" onClick=${() => set(12)} title="День">🌞</button>
+      <button class="chip" onClick=${() => set(18.25)} title="Закат">🌇</button>
+      <button class="chip" onClick=${() => set(23)} title="Ночь">🌙</button>
+      <button class=${'chip' + (h == null ? ' selected' : '')} onClick=${() => set(null)}>Сейчас</button>
+      <button class="chip" title=${lightsOff.length ? 'Зажечь весь свет' : 'Погасить весь свет'}
+        onClick=${() => setPrefs({ villageLightsOff: lightsOff.length ? [] : [...world.lanterns.map((l) => l.id), ...world.buildings.map((b) => b.id)] })}>💡</button>
     </div>
-    <p class="muted small">Это просто поиграть со светом — после выхода с экрана время вернётся. Нажми на дом или фонарь, чтобы погасить или зажечь его.</p>
   </div>`;
 }
 
@@ -140,9 +149,12 @@ export function VillageSettings() {
   const p = getPrefs();
   const daynight = V.ownedVillage(store.data).has('v:daynight');
   const mode = daynight ? p.dayMode || 'theme' : 'theme';
+  const dim = Number.isFinite(p.villageDim) ? p.villageDim : 0.55;
   return html`<div class="village-settings">
     <label class="toggle-row compact"><input type="checkbox" checked=${p.villageBackdrop !== false} onChange=${(e) => setPrefs({ villageBackdrop: e.target.checked })}/>
-      <span>Деревня на фоне<small>Полоса деревни внизу экрана, за карточками. Жителей можно нажимать в пустых местах</small></span></label>
+      <span>Деревня на фоне вкладок<small>Во весь экран за карточками, приглушённая. На экране «Деревня» видна всегда</small></span></label>
+    <label class="field village-dim-field"><span>Затемнение на вкладках: ${Math.round(dim * 100)} %</span>
+      <input type="range" min="0" max="0.9" step="0.05" value=${dim} onInput=${(e) => setPrefs({ villageDim: +e.target.value })} aria-label="Затемнение деревни на вкладках"/></label>
     <label class="toggle-row compact"><input type="checkbox" checked=${p.visitors !== false} onChange=${(e) => setPrefs({ visitors: e.target.checked })}/>
       <span>Жители подходят к экрану<small>Иногда кто-нибудь выходит из леса и стучит по «стеклу»</small></span></label>
     <${DecorationSettings}/>
@@ -162,25 +174,24 @@ export function VillageSettings() {
   </div>`;
 }
 
-export function VillagePanel() {
+function useVillageNumbers() {
   const tz = store.data.settings.timeZone;
-  const [sel, setSel] = useState(null);
-  const bal = G.balance(store.data);
-  const gems = V.gemBalance(store.data);
-  const mood = V.happiness(store.data, tz, store.now.today);
-  const style = env.style;
+  return {
+    bal: G.balance(store.data),
+    gems: V.gemBalance(store.data),
+    mood: V.happiness(store.data, tz, store.now.today),
+  };
+}
+
+/** Вкладка «🏡 Деревня» в магазине: покупки и настройки (деревня видна за карточками, затемнение слабее). */
+export function VillageShopPanel() {
+  const { bal, gems, mood } = useVillageNumbers();
   return html`
     <div class="village-panel">
       <${Mood} mood=${mood} bal=${bal} gems=${gems}/>
-      <div class="village-stage">
-        <${VillageCanvas} mode="full" onPick=${(h) => setSel(h && h.type ? h : null)}/>
-        <span class="village-style">${style.name}</span>
-      </div>
-      <${Selected} sel=${sel} bal=${bal} onClose=${() => setSel(null)}/>
-      <${LightControls}/>
       <h2 class="block-title">Магазин деревни</h2>
       <${ShopGrid} bal=${bal}/>
-      <details class="card-block village-more">
+      <details class="card-block village-more" open>
         <summary>Настройки деревни</summary>
         <${VillageSettings}/>
       </details>
@@ -191,9 +202,9 @@ export function VillagePanel() {
           <li>Изумруды 💎 — вторая валюта. Их добывает изумрудная шахта (за важные и критичные задачи) и дают фокус-сессии от 15 минут.</li>
           <li>Золотая шахта увеличивает монеты за каждую задачу: +10 / 20 / 30 % по уровню.</li>
           <li>Настроение жителей зависит от выполненных задач за 3 дня (чем важнее, тем больше радости), фокуса сегодня и просроченных задач.</li>
-          <li>«Взяться за задачу» — фокус-сессия: таймер, строитель трудится в мастерской, в конце — фейерверк и изумруды.</li>
+          <li>«Взяться за задачу» — фокус-сессия: таймер, строитель трудится в мастерской, в конце — фейерверк и изумруды. Время по задаче сохраняется в ней самой.</li>
           <li>Стиль деревни следует цветовой схеме (Lavender — готика, Lime — сказочный луг, «Океан» — море с маяком, «Закат» — осень), флаги — цвету квадрата с буквой.</li>
-          <li>Покупку можно вернуть в «Магазине → История», если на ней не держится следующий уровень и её изумруды не потрачены.</li>
+          <li>Покупку можно вернуть в «Магазин → История», если на ней не держится следующий уровень и её изумруды не потрачены.</li>
         </ul>
       </details>
     </div>`;
@@ -209,5 +220,16 @@ export function VillageScreen() {
       </div>
     </div>`;
   }
-  return html`<div class="screen village"><${VillagePanel}/></div>`;
+  const { bal, gems, mood } = useVillageNumbers();
+  const [light, setLight] = useState(() => readLocal('villageLightOpen', false));
+  const toggle = () => {
+    writeLocal('villageLightOpen', !light);
+    setLight(!light);
+  };
+  return html`<div class="screen village-screen">
+    <${Mood} mood=${mood} bal=${bal} gems=${gems} compact onLight=${toggle} lightOpen=${light}/>
+    ${light ? html`<${LightControls}/>` : null}
+    <${Selected} sel=${villageSel.current} bal=${bal}/>
+    <p class="village-hint">Нажми на жителя, дом или фонарь. Потяни, чтобы прокрутить деревню.</p>
+  </div>`;
 }

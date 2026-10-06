@@ -8,7 +8,9 @@ import { store, openSheet } from '../../store/appState.js';
 import { toggleComplete, toggleFocus } from '../../store/actions.js';
 import { humanDate } from '../../core/dates.js';
 import * as S from '../../core/selectors.js';
-import { liveNotes } from '../../core/model.js';
+import { liveNotes, focusTotal } from '../../core/model.js';
+import { getFocus } from '../../store/focus.js';
+import { formatMinutes } from './Focus.js';
 import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { TIMINGS } from '../../config.js';
 import { DragHandle } from './Sortable.js';
@@ -60,6 +62,9 @@ export function TaskMeta({ task, showList, showParent = false, index = null }) {
   const notes = liveNotes(task).length;
   if (notes) parts.push(html`<span class="meta-note" title="Заметки">≡${notes > 1 ? ' ' + notes : ''}</span>`);
   if ((task.reminders || []).some((r) => !r.deletedAt)) parts.push(html`<span class="meta-note" title="Есть напоминания">🔔</span>`);
+  const running = getFocus()?.taskId === task.id;
+  const fm = focusTotal(task).minutes;
+  if (running || fm) parts.push(html`<span class=${'meta-focus' + (running ? ' running' : '')} title=${running ? 'Сейчас идёт фокус' : 'Фокус по задаче'}>◎ ${running ? 'фокус' : formatMinutes(fm)}</span>`);
   return parts.length ? html`<div class="task-meta">${parts}</div>` : null;
 }
 
