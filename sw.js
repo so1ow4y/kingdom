@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.8.0';
+const VERSION = '0.9.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -28,6 +28,7 @@ const PRECACHE = [
   './src/core/plural.js',
   './src/core/priorities.js',
   './src/core/reminders.js',
+  './src/core/repeat.js',
   './src/core/retention.js',
   './src/core/selectors.js',
   './src/core/sessions.js',
@@ -76,6 +77,7 @@ const PRECACHE = [
   './src/ui/components/PrioritiesEditor.js',
   './src/ui/components/QuickAdd.js',
   './src/ui/components/Reminders.js',
+  './src/ui/components/Repeat.js',
   './src/ui/components/Section.js',
   './src/ui/components/Sheet.js',
   './src/ui/components/Sheets.js',
@@ -108,10 +110,12 @@ const PRECACHE = [
   './src/version.js',
   './src/village/bus.js',
   './src/village/chibi.js',
+  './src/village/critters.js',
   './src/village/dialogs.js',
   './src/village/draw.js',
   './src/village/keepers.js',
   './src/village/map.js',
+  './src/village/portrait96.js',
   './src/village/portraits.js',
   './src/village/puppets.js',
   './src/village/runtime.js',

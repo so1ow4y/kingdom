@@ -75,7 +75,7 @@ export function residentsOf(owned, keepers = []) {
     const it = villageItem(id);
     if (it?.kind === 'char') out.push({ id, kind: it.char, big: !!it.big, name: it.name });
   }
-  for (const k of keepers) if (k) out.push({ id: k.id, kind: 'keeper', big: false, name: k.name, look: k.look, listId: k.listId, gender: k.gender });
+  for (const k of keepers) if (k) out.push({ id: k.id, kind: 'keeper', big: false, name: k.name, look: k.look, listId: k.listId, listName: k.listName, gender: k.gender });
   return out;
 }
 
@@ -139,6 +139,8 @@ export class World {
     this.mood = mood;
     this.focus = focus;
     this.visitors = visitors;
+    // невыполненные задачи хранителей (0.9): «!» над головой, к экрану стучат только они
+    this.alerts = new Map(keepers.filter(Boolean).map((k) => [k.id, k.alert | 0]));
     if (lightsOff) this.lightsOff = new Set(lightsOff);
     const list = [...objects];
     if (owned.has('v:char:archer')) list.push({ key: 'virtual:target', place: 'target', x: null, y: null, virtual: true, level: 1 });
@@ -173,6 +175,7 @@ export class World {
           old.look = r.look; // хранитель повзрослел или список перекрасили
           old.lk = null;
           old.name = r.name;
+          old.listName = r.listName;
         }
         if (old.talking) return old; // идёт разговор — не трогаем
         if (old.task?.type === 'away') return old; // сейчас у экрана — вернётся сам
@@ -194,6 +197,7 @@ export class World {
       if (r.look) {
         a.look = r.look;
         a.listId = r.listId;
+        a.listName = r.listName;
         a.gender = r.gender;
       }
       if (this.t > 1) {
@@ -202,6 +206,17 @@ export class World {
       }
       return a;
     });
+    // у каждого жителя свой дом (по кругу); звери тоже иногда ночуют дома
+    const homes = this.houses();
+    let hi = 0;
+    for (const a of this.actors) {
+      if (!homes.length || !(KINDS[a.kind]?.human || KINDS[a.kind]?.beast) || a.kind === 'witch' || a.kind === 'knight') {
+        a.homeKey = null;
+        continue;
+      }
+      if (!homes.some((h) => h.key === a.homeKey)) a.homeKey = homes[hi % homes.length].key;
+      hi++;
+    }
     if (owned.has('v:fireflies') && !this.fireflies.length) {
       for (let i = 0; i < 22; i++) {
         const near = i % 3 === 0 ? this.map.spots.pond : plaza;
@@ -361,8 +376,158 @@ export class World {
     this.say(a, this.pick([...(PHRASES[a.kind] || PHRASES.wanderer), ...mood]));
   }
 
+  /** Сколько невыполненных задач у хранителя (0.9). */
+  alertOf(a) {
+    return a && this.alerts ? this.alerts.get(a.id) || 0 : 0;
+  }
+
+  /** Дом жителя (или null). */
+  homeOf(a) {
+    return (a.homeKey && this.houses().find((h) => h.key === a.homeKey)) || null;
+  }
+
+  /** Жители дома b. */
+  residentsOf(b) {
+    return this.actors.filter((a) => a.homeKey && a.homeKey === b.key);
+  }
+
+  /**
+   * Горит ли свет в постройке (0.9). Дом: светится, пока внутри кто-то не спит; когда последний житель вошёл
+   * ночью — через пару секунд свет гаснет сам. Выключенный вручную — не горит. Остальные постройки — как раньше.
+   */
+  buildingLit(b) {
+    if (!this.lightOn(b.id)) return false;
+    if (!b.type.startsWith('house')) return true;
+    const inside = this.actors.some((a) => a.task?.type === 'inside' && a.task.b === b && a.hidden);
+    if (!inside) return false;
+    return !(b.sleepAt && this.t >= b.sleepAt);
+  }
+
+  onEnter(a, b) {
+    if (!b.type.startsWith('house') || this.night < 0.6) return;
+    const res = this.residentsOf(b).filter((x) => KINDS[x.kind]?.human);
+    const all = res.every((x) => x === a || (x.task?.type === 'inside' && x.task.b === b) || x.hidden);
+    if (all && !b.sleepAt) b.sleepAt = this.t + 2 + this.rand() * 2.5;
+  }
+
+  /** Нажали на дом: жители выбегают — «Что происходит?!», свет снова горит. */
+  disturb(b) {
+    if (!b?.type?.startsWith('house')) return 0;
+    b.sleepAt = null;
+    let n = 0;
+    const lines = (x) => ['Что происходит?!', 'Кто там?', x.gender === 'm' ? 'Я же спал…' : x.gender === 'f' ? 'Я же спала…' : 'Я же спал(а)…', 'Землетрясение?!', 'А? Что? Где?', 'Кто стучит?'];
+    for (const x of this.residentsOf(b)) {
+      if (x.talking || x.held) continue;
+      const inside = x.task?.type === 'inside' && x.task.b === b;
+      x.queue = [];
+      x.path = null;
+      if (inside) {
+        x.hidden = false;
+        x.alpha = 1;
+        x.x = b.door.x + (this.rand() - 0.5) * 14;
+        x.y = b.door.y + 2 + this.rand() * 6;
+        this.placeNear(x, x.x, x.y);
+        x.task = { type: 'pose', pose: 'idle', d: 2.5 + this.rand() * 2, t: 0, face: b.door.x };
+        if (x.z <= 0) x.vz = 70;
+      } else {
+        x.task = { type: 'go', x: b.door.x + (this.rand() - 0.5) * 20, y: b.door.y + 6, run: true, t: 0 };
+        x.queue = [{ type: 'pose', pose: 'idle', d: 2, face: b.door.x }];
+      }
+      this.emote(x, '!', 1.8);
+      setTimeoutSafe(() => this.say(x, this.pick(lines(x)), 2.6), n * 250);
+      n++;
+    }
+    return n;
+  }
+
+  /** Дело у объекта рядом (0.9): [идти, дело] или null. */
+  chore(a) {
+    const M = this.map;
+    const opts = ['fish', 'gather'];
+    const pet = this.actors.find((o) => KINDS[o.kind]?.beast && !o.hidden && !o.held && !o.talking && !['inside', 'leave', 'away'].includes(o.task?.type) && Math.hypot(o.x - a.x, o.y - a.y) < 220);
+    if (pet) opts.push('pet', 'pet');
+    const well = M.decor.find((d) => d.type === 'well') || M.buildings.find((b) => b.place === 'fountain');
+    if (well) opts.push('bucket');
+    const fields = M.buildings.filter((b) => b.place === 'field');
+    if (fields.length) opts.push('water', 'water');
+    const act = opts[Math.floor(this.rand() * opts.length)];
+    const near = (x, y, rad = 1) => {
+      const [tx, ty] = randomSpot(M, this.rand, { x, y }, rad);
+      return { x: (tx + 0.5) * TILE, y: (ty + 0.5) * TILE };
+    };
+    if (act === 'pet') {
+      const p = near(pet.x + (a.x < pet.x ? -10 : 10), pet.y, 1);
+      pet.queue = [];
+      pet.path = null;
+      pet.task = { type: 'pose', pose: 'sit', d: 9, t: 0, face: p.x };
+      return [this.go(p.x, p.y), { type: 'chore', act: 'pet', d: 4, face: pet.x, who: pet }];
+    }
+    if (act === 'bucket') {
+      const x = well.door ? well.door.x : well.x;
+      const y = well.door ? well.door.y : well.y + 6;
+      const p = near(x + 12, y + 2, 1);
+      return [this.go(p.x, p.y), { type: 'chore', act: 'bucket', d: 3.5, face: x }];
+    }
+    if (act === 'fish') {
+      const pd = M.spots.pond;
+      const p = near(pd.x + (this.rand() - 0.5) * 40, pd.y, 1);
+      return [this.go(p.x, p.y), { type: 'chore', act: 'fish', d: 6 + this.rand() * 5, face: (M.pond.x + M.pond.w / 2) * TILE }];
+    }
+    if (act === 'gather') {
+      const v = M.village;
+      const p = near(v.x0 + this.rand() * (v.x1 - v.x0), v.y1 + TILE * 1.5, 2);
+      return [this.go(p.x, p.y), { type: 'chore', act: 'gather', d: 4 }];
+    }
+    if (act === 'water') {
+      const f = fields[Math.floor(this.rand() * fields.length)];
+      const p = near(f.x + f.w + 6, f.base - 8, 1);
+      return [this.go(p.x, p.y), { type: 'chore', act: 'water', d: 4.5, face: f.x + f.w / 2, field: f }];
+    }
+    return null;
+  }
+
+  /** Взять жителя «рукой» (0.9). */
+  grab(a) {
+    if (!a || a.hidden) return false;
+    this.release(a);
+    a.held = true;
+    a.queue = [];
+    a.path = null;
+    a.thread = null;
+    a.say = null;
+    a.task = { type: 'held', t: 0 };
+    this.emote(a, '!', 1.2);
+    return true;
+  }
+
+  /** Держим за макушку в точке (wx, wy) карты: житель висит чуть ниже руки, тень — на земле. */
+  holdAt(a, wx, wy) {
+    if (!a?.held) return;
+    const lift = 14;
+    a.dir = wx > a.x + 0.5 ? 1 : wx < a.x - 0.5 ? -1 : a.dir;
+    a.x = wx;
+    a.z = lift;
+    a.y = wy + 2 + charHeight(a.kind) * a.u + lift;
+  }
+
+  /** Отпустили — падает с высоты, приземляется с пылью. */
+  drop(a) {
+    if (!a?.held) return;
+    a.held = false;
+    a.vz = 10;
+    a.task = { type: 'fall', t: 0 };
+  }
+
   /** Разговор (0.8): житель останавливается и смотрит на нас, пока открыто окно диалога. */
   talkTo(a) {
+    if (this.visitor && this.visitor.actor === a) {
+      // гость у экрана ждёт, пока говорим
+      this.visitor.stage = 'talk';
+      this.visitor.t = 0;
+      this.visitor.say = null;
+      a.talking = true;
+      return true;
+    }
     if (!a || a.hidden) return false;
     for (const o of this.actors) if (o.talking && o !== a) this.release(o);
     a.talking = true;
@@ -379,6 +544,12 @@ export class World {
     if (!a) return;
     a.talking = false;
     if (a.task?.talk) a.task = null;
+    const v = this.visitor;
+    if (v && v.actor === a && v.stage === 'talk') {
+      v.stage = 'wave';
+      v.t = 0;
+      v.stay = 1;
+    }
   }
 
   /** Жест в разговоре: помахать, подпрыгнуть, радость. */
@@ -429,8 +600,31 @@ export class World {
     }
     const tx = Math.floor(wx / TILE);
     const ty = Math.floor(wy / TILE);
+    // окружение (0.9): колодец, деревья, вода
+    const well = this.decor.find((d) => d.type === 'well' && Math.abs(wx - d.x) <= 9 && wy >= d.y - 22 && wy <= d.y + 2);
+    if (well) return { type: 'scenery', what: 'well', x: well.x, y: well.y };
+    for (const t of [...this.trees].sort((p, q) => q.y - p.y)) {
+      if (Math.abs(wx - t.x) <= 9 * t.size && wy >= t.y - 34 * t.size && wy <= t.y + 2) return { type: 'scenery', what: 'tree', x: t.x, y: t.y, tree: t };
+    }
+    const tile = this.map.grid[ty * this.map.cols + tx];
+    if (tile === 3 || tile === 10) return { type: 'scenery', what: 'water', x: wx, y: wy };
     if (buildable(this.map, tx, ty)) return { type: 'tile', tx, ty };
     return null;
+  }
+
+  /** Нажали на окружение: вода плещется, с дерева летят листья, колодец брызжет; ближайший житель отзывается. */
+  touchScenery(h) {
+    if (h.what === 'water') {
+      this.burst(h.x, h.y, 2, 'drop', 12, 24);
+      if (this.rand() < 0.35) this.particles.push({ x: h.x, y: h.y, z: 2, vx: (this.rand() - 0.5) * 20, vy: 0, vz: 70, life: 1.1, kind: 'fish', c: this.rand() });
+    } else if (h.what === 'tree') this.burst(h.x, h.y, 22 * (h.tree?.size || 1), 'leaf', 10, 26);
+    else if (h.what === 'well') this.burst(h.x, h.y - 4, 8, 'drop', 14, 22);
+    const near = this.actors.filter((a) => !a.hidden && !a.held && !a.talking && KINDS[a.kind]?.human && Math.hypot(a.x - h.x, a.y - h.y) < 80);
+    const a = near[0];
+    if (a) {
+      a.dir = h.x > a.x ? 1 : -1;
+      this.say(a, this.pick(h.what === 'water' ? ['Не пугай рыбу!', 'Плюх!', 'Вода холодная!'] : h.what === 'tree' ? ['Ой, листья!', 'Шишка упала!', 'Красивое дерево.'] : ['Вода свежая!', 'Отличный колодец.']), 2.2);
+    }
   }
 
   toggleLight(id) {
@@ -571,14 +765,19 @@ export class World {
       }
       if (tavern && KINDS[k]?.human) return q.push(this.go(tavern.door.x, tavern.door.y), { type: 'inside', b: tavern, d: 10 + r * 10 });
     }
-    // ночь: люди по домам, звери спят
+    // ночь: люди по домам, звери — то дома, то на улице
     if (night > 0.68) {
-      if (k === 'cat') {
-        const l = M.lanterns.find((x) => this.lightOn(x.id));
-        if (l) return q.push(this.go(l.x + 8, l.y + 4), { type: 'pose', pose: 'sleep', d: 20 });
+      const home = this.homeOf(a);
+      if (KINDS[k]?.beast) {
+        if (home && r < 0.5) return q.push(this.go(home.door.x, home.door.y), { type: 'inside', b: home, d: 30 + r * 30 });
+        if (k === 'cat') {
+          const l = M.lanterns.find((x) => this.lightOn(x.id));
+          if (l) return q.push(this.go(l.x + 8, l.y + 4), { type: 'pose', pose: 'sleep', d: 20 });
+        }
+        return q.push({ type: 'pose', pose: 'sleep', d: 15 + r * 10 });
       }
       if (KINDS[k]?.human && homes.length && k !== 'witch' && k !== 'knight') {
-        const h = homes[a.n % homes.length];
+        const h = home || homes[a.n % homes.length];
         const fire = M.spots.bonfire;
         if (fire && r < 0.25) return q.push(this.go(fire.x + (a.n % 2 ? 12 : -12), fire.y + a.oy), { type: 'pose', pose: 'sit', d: 12, face: fire.x });
         return q.push(this.go(h.door.x, h.door.y), { type: 'inside', b: h, d: 25 + r * 30 });
@@ -593,6 +792,11 @@ export class World {
     }
     // настроение низкое — грустят
     if (this.mood < 25 && r < 0.25) return q.push({ type: 'pose', pose: 'sit', d: 5, emote: 'sad' });
+    // дела вокруг (0.9): погладить котика, набрать воды из колодца, порыбачить, сходить в лес, полить огород
+    if (KINDS[k]?.human && night < 0.45 && this.rand() < 0.3) {
+      const job = this.chore(a);
+      if (job) return q.push(...job);
+    }
     const pr = this.rand();
     if (pr < 0.22) {
       if (k === 'miner') {
@@ -798,12 +1002,19 @@ export class World {
       }
       case 'inside': {
         if (T.t < 0.4) a.alpha = Math.max(0, 1 - T.t / 0.4);
-        else a.hidden = true;
+        else {
+          a.hidden = true;
+          if (!T.entered) {
+            T.entered = true;
+            this.onEnter(a, T.b);
+          }
+        }
         const home = T.b.type.startsWith('house');
         if (this.night < 0.6 && home && T.t > 4) T.d = Math.min(T.d, T.t);
         if (T.t > T.d && !(home && this.night > 0.6 && T.t < 200)) {
           a.hidden = false;
           a.alpha = 1;
+          T.b.sleepAt = null;
           if (T.loot) {
             this.burst(a.x, a.y, 10, T.loot, 5, 25);
             this.emote(a, T.loot, 2);
@@ -961,6 +1172,53 @@ export class World {
         if (T.t > 90) done = true;
         break;
       }
+      case 'held':
+        // висит в «руке»: болтает ногами
+        flying = true;
+        state = 'held';
+        a.vz = 0;
+        break;
+      case 'fall':
+        state = 'fall';
+        if (KINDS[a.kind]?.floater) a.z = Math.max(0, a.z - dt * 40);
+        if (T.t > 0.05 && a.z <= 0) {
+          const [tx, ty] = this.tileOf(a.x, a.y);
+          if (!walkable(this.map, tx, ty)) this.placeNear(a, a.x, a.y);
+          this.burst(a.x, a.y, 0, 'dust', 8, 16);
+          a.squash = 0.7;
+          this.emote(a, this.rand() < 0.5 ? '!' : 'star', 1.4);
+          this.say(a, this.pick(['Ой!', 'Уф!', 'Ещё разок!', 'Голова кружится…', 'Мягкая посадка!', 'Предупреждать надо!']), 2.2);
+          a.task = { type: 'pose', pose: 'idle', d: 1.2, t: 0 };
+          return;
+        }
+        break;
+      case 'chore': {
+        // дело у объекта: колодец, вода, лес, огород, котик
+        state = T.act;
+        if (T.face != null) a.dir = T.face > a.x ? 1 : -1;
+        const beat = Math.floor(T.t * 2) !== Math.floor((T.t - dt) * 2);
+        if (beat && (T.act === 'bucket' || T.act === 'water')) this.burst(a.x + a.dir * 6, a.y, T.act === 'water' ? 6 : 3, 'drop', 3, 14);
+        if (beat && T.act === 'pet' && T.who && !T.who.hidden) {
+          this.emote(T.who, 'heart', 1.2);
+          if (Math.floor(T.t) % 2 === 0) this.emote(a, 'heart', 1.2);
+        }
+        if (T.act === 'fish' && !T.bite && T.t > T.d * 0.7 && this.rand() < 0.5) {
+          T.bite = true;
+          this.say(a, this.pick(['Клюёт!', 'Попалась!', 'Ух ты, рыбка!']), 2);
+          this.burst(a.x + a.dir * 14, a.y - 4, 4, 'drop', 8, 20);
+          this.particles.push({ x: a.x + a.dir * 14, y: a.y - 4, z: 4, vx: -a.dir * 10, vy: 0, vz: 60, life: 1.2, kind: 'fish', c: this.rand() });
+        }
+        if (T.t > T.d) {
+          if (T.act === 'gather') {
+            this.emote(a, 'star', 2);
+            this.say(a, this.pick(['Грибы!', 'Сколько ягод!', 'Лес сегодня щедрый.', 'Нашла шишку!'].map((s) => (a.gender === 'm' ? s.replace('Нашла', 'Нашёл') : s))), 2.4);
+          }
+          if (T.act === 'water' && T.field) T.field.watered = this.t;
+          if (T.who) T.who.task = null;
+          done = true;
+        }
+        break;
+      }
       case 'away':
         state = 'idle';
         if (!this.visitor || this.visitor.actor !== a) {
@@ -995,16 +1253,18 @@ export class World {
         }
       }
     }
-    a.state = a.z > 0.5 && !flying && T.type !== 'celebrate' ? 'jump' : state;
+    a.state = a.z > 0.5 && !flying && T.type !== 'celebrate' && T.type !== 'fall' ? 'jump' : state;
     if (moving) a.phase = (a.phase + (dt * speed) / (8 * a.u)) % 1;
   }
 
   // ---------- Гость у экрана ----------
 
   /** Отправить жителя к экрану (по тропинке в лес на юг). Можно вызвать вручную; иначе — само раз в несколько минут. */
-  sendVisitor(who = null) {
+  sendVisitor(who = null, auto = false) {
     if (this.visitor || this.actors.some((x) => x.task?.type === 'leave')) return false;
-    const pool = this.actors.filter((a) => !a.hidden && (!a.talking || a === who) && !['inside', 'leave', 'away'].includes(a.task?.type) && a.kind !== 'ghost' && a.kind !== 'spider');
+    let pool = this.actors.filter((a) => !a.hidden && !a.held && (!a.talking || a === who) && !['inside', 'leave', 'away'].includes(a.task?.type) && a.kind !== 'ghost' && a.kind !== 'spider');
+    // сами стучат только хранители, у чьих списков есть невыполненные задачи
+    if (auto) pool = pool.filter((a) => this.alertOf(a) > 0);
     if (!pool.length) return false;
     const grounded = pool.filter((x) => x.z <= 0);
     const a = who && pool.includes(who) ? who : this.pick(grounded.length ? grounded : pool);
@@ -1029,7 +1289,7 @@ export class World {
       this.nextVisit -= dt;
       if (this.nextVisit <= 0) {
         this.nextVisit = 150 + this.rand() * 210;
-        this.sendVisitor();
+        this.sendVisitor(null, true);
       }
       return;
     }
@@ -1059,8 +1319,10 @@ export class World {
       if (v.t > 1.2) {
         v.stage = 'knock';
         v.t = 0;
-        v.say = this.pick(this.mood < 30 ? ['Тук-тук… Мы скучаем', 'Эй! Задачки ждут', ...KNOCK] : KNOCK);
-        v.sayT = 3;
+        const n = this.alertOf(v.actor);
+        v.say = n && v.actor.listName ? `Тук-тук! «${v.actor.listName}»: ждут ${n}` : this.pick(this.mood < 30 ? ['Тук-тук… Мы скучаем', 'Эй! Задачки ждут', ...KNOCK] : KNOCK);
+        v.sayT = 3.5;
+        v.stay = n ? 7 : 1.6; // с делами — подольше: можно нажать и поговорить
       }
     } else if (v.stage === 'knock') {
       v.state = 'knock';
@@ -1085,6 +1347,8 @@ export class World {
       v.phase = (v.anim * 1.8) % 1;
       v.x -= dt * sp * 1.6;
       if (v.x <= 0) this.visitor = null;
+    } else if (v.stage === 'talk') {
+      v.state = 'idle';
     } else if (v.stage === 'poked') {
       v.state = v.y > 0 ? 'jump' : 'wave';
       if (v.t > 1.8) {

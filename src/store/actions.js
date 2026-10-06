@@ -24,6 +24,7 @@ import { tokenValid } from '../google/auth.js';
 import { planningDate } from '../core/planning.js';
 import * as V from '../core/village.js';
 import * as SK from '../core/skills.js';
+import * as RP from '../core/repeat.js';
 import { getFocus, setFocus, claimFocus, focusElapsed } from './focus.js';
 import { buildMap, suggestPlace } from '../village/map.js';
 import { emitVillage } from '../village/bus.js';
@@ -294,6 +295,7 @@ export async function toggleComplete(id) {
   const t = getTask(id);
   if (!t) return;
   const c0 = ctx();
+  if (t.repeat && t.status !== 'done') return closeRepeat(t, 'done');
   if (t.status === 'done') {
     await commit([change('tasks', id, (x) => M.reopenTask(x, c0)), ...coinChanges(t, false, c0)]);
     return;
@@ -326,6 +328,66 @@ export async function toggleComplete(id) {
     const game = store.data.settings.gameEnabled;
     offerUndo(game ? ['Выполнено', coins ? `+${coins} 🪙` : '', xp ? `+${xp} опыта` : ''].filter(Boolean).join(' · ') : 'Выполнено', changes);
   }
+}
+
+/**
+ * Повторяющаяся задача (0.9): «выполнить» закрывает текущий экземпляр (DATA_FORMAT §5.4), а не всю задачу.
+ * Подзадачи снова открываются для следующего раза; монеты — за экземпляр (id начисления с ключом экземпляра).
+ * Если после этого экземпляров не осталось (правило закончилось) — задача выполнена целиком.
+ */
+async function closeRepeat(t, state) {
+  const c0 = ctx();
+  const tz = store.data.settings.timeZone;
+  const today = store.now.today;
+  const key = RP.currentKey(t, today, tz);
+  if (!key) return;
+  let next = RP.closeOccurrence(t, key, c0, state);
+  const after = RP.currentKey(next, today, tz);
+  if (!after) next = M.completeTask(next, c0);
+  const changes = [{ coll: 'tasks', prev: t, next }];
+  if (state === 'done' && next.repeat.resetSubtasks !== false) {
+    for (const k of S.descendants(store.data, t.id)) if (k.status === 'done') changes.push(change('tasks', k.id, (x) => M.reopenTask(x, c0)));
+  }
+  if (state === 'done' && store.data.settings.gameEnabled) {
+    const e = G.awardEvent(store.data, t, key, c0);
+    if (e) changes.push({ coll: 'coinEvents', prev: store.data.coinEvents.get(e.id), next: e });
+  }
+  if (!(await commit(changes))) return;
+  const coins = changes.filter((c) => c.coll === 'coinEvents').reduce((s, c) => s + (c.next.amount | 0), 0);
+  const xp = state === 'done' ? SK.xpOfPriority(store.data.priorities.get(t.priorityId)) * M.taskListIds(t).length : 0;
+  const nextText = after ? `дальше — ${humanDate(RP.effDate(next, after), today).toLowerCase()}` : 'повтор закончился';
+  const game = store.data.settings.gameEnabled;
+  const head = state === 'done' ? 'Выполнено' : 'Пропущено';
+  offerUndo([head, game && coins ? `+${coins} 🪙` : '', game && xp ? `+${xp} опыта` : '', nextText].filter(Boolean).join(' · '), changes);
+}
+
+/** Пропустить текущий экземпляр повтора (без монет и опыта). */
+export async function skipOccurrence(id) {
+  const t = getTask(id);
+  if (t?.repeat && t.status !== 'done') await closeRepeat(t, 'skipped');
+}
+
+/**
+ * Повтор задачи (0.9): rule — правило (core/repeat.js makeRule) или null. С повтором своя дата и дедлайн
+ * задачи снимаются (дата — из правила), время остаётся. Без повтора задача получает дату текущего экземпляра.
+ */
+export async function setRepeat(id, rule, time = undefined) {
+  const t = getTask(id);
+  if (!t) return false;
+  const today = store.now.today;
+  const tz = store.data.settings.timeZone;
+  const c0 = ctx();
+  let changes;
+  if (rule) {
+    changes = { repeat: rule, scheduledDate: null, deadlineDate: null, deadlineTime: null, scheduledTime: time === undefined ? t.scheduledTime : time };
+    if (t.status === 'done') Object.assign(changes, { status: 'active', completedAt: null });
+  } else {
+    const due = t.repeat ? RP.dueDate(t, today, tz) : null;
+    changes = { repeat: null, scheduledDate: due, scheduledTime: due ? (time === undefined ? t.scheduledTime : time) : null };
+  }
+  const ok = await commit([change('tasks', id, (x) => M.touch(x, changes, c0))]);
+  if (ok) showSnackbar(rule ? `Повтор: ${RP.describeRule(rule)}` : 'Повтор снят');
+  return ok;
 }
 
 export async function reopenTask(id) {

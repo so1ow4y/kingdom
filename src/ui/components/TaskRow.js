@@ -7,6 +7,7 @@ import { openTask, currentTaskId } from '../router.js';
 import { store, openSheet } from '../../store/appState.js';
 import { toggleComplete, toggleFocus } from '../../store/actions.js';
 import { humanDate } from '../../core/dates.js';
+import * as RP from '../../core/repeat.js';
 import * as S from '../../core/selectors.js';
 import { liveNotes, focusTotal } from '../../core/model.js';
 import { getFocus } from '../../store/focus.js';
@@ -38,6 +39,13 @@ export function TaskMeta({ task, showList, showParent = false, index = null }) {
   if (showList) {
     const chips = html`<${ListChips} task=${task}/>`;
     if (S.taskLists(store.data, task).length || S.hasMissingList(store.data, task)) parts.push(chips);
+  }
+  if (task.repeat) {
+    // повтор: правило и дата текущего раза
+    const due = task.status === 'active' ? RP.dueDate(task, today, store.data.settings.timeZone) : null;
+    const late = !!due && due < today;
+    parts.push(html`<span class=${'meta-date meta-repeat' + (late ? ' late' : '')} title=${'Повтор: ' + RP.describeRule(task.repeat)}>
+      <${Icon} name="repeat" size=${13}/>${RP.describeRule(task.repeat)}${due ? ' · ' + humanDate(due, today).toLowerCase() : ''}${task.scheduledTime ? ' ' + task.scheduledTime : ''}</span>`);
   }
   if (task.scheduledDate) {
     const late = task.status === 'active' && task.scheduledDate < today;

@@ -63,6 +63,7 @@ export function openTalk(actor) {
     ...info,
     mood: happiness(store.data, store.data.settings.timeZone, store.now.today).value,
     night: env.n, focus: !!getFocus(), seed: Math.floor(Date.now() / 60000) + (actor.n || 0),
+    knock: world.visitor?.actor === actor, // 0.9: разговор с гостем у экрана
   };
   const tree = talkTree(ctx);
   world.talkTo(actor);
@@ -154,10 +155,16 @@ export function VillageDialog() {
   // портрет с эмоцией
   useEffect(() => {
     if (!t || !cv.current) return;
-    const c = cv.current.getContext('2d');
-    c.clearRect(0, 0, 64, 64);
+    const p = portrait(t.who, line?.e || 'neutral');
+    const el = cv.current;
+    if (el.width !== p.width) {
+      el.width = p.width;
+      el.height = p.height;
+    }
+    const c = el.getContext('2d');
+    c.clearRect(0, 0, el.width, el.height);
     c.imageSmoothingEnabled = false;
-    c.drawImage(portrait(t.who, line?.e || 'neutral'), 0, 0);
+    c.drawImage(p, 0, 0);
   }, [t?.who, line?.e]);
   // клавиатура: Enter/пробел — дальше, цифры — ответ, Esc — закрыть
   useEffect(() => {
@@ -187,7 +194,7 @@ export function VillageDialog() {
   const w = t.who;
   const aff = t.ctx.affinity;
   return html`<div class="vn-dialog" role="dialog" aria-label=${`Разговор: ${w.name}`} style=${{ '--vn-color': w.color || 'var(--accent)' }}>
-    <div class="vn-portrait" aria-hidden="true"><canvas ref=${cv} width="64" height="64"></canvas></div>
+    <div class="vn-portrait" aria-hidden="true"><canvas ref=${cv} width="96" height="96"></canvas></div>
     <div class="vn-box">
       <div class="vn-name">
         <b>${w.name}</b><small>${whoTitle(w)}</small>

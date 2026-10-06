@@ -13,6 +13,7 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { normalizeTitle } from '../../core/model.js';
 import { humanDate, formatMoment } from '../../core/dates.js';
+import * as RP from '../../core/repeat.js';
 import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { LIMITS, TIMINGS } from '../../config.js';
 
@@ -142,13 +143,18 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
       <div class="chip-row wrap task-chips">
         <${Chip} icon=${html`<${Icon} name=${lists.length ? 'lists' : 'inbox'} size=${16}/>`} label=${listLabel} active=${lists.length > 0}
           onClick=${(e) => openSheet('listPicker', { taskId, anchor: anchorOf(e) })} disabled=${locked}/>
-        <${Chip} icon=${html`<${Icon} name="calendar" size=${16}/>`} active=${!!t.scheduledDate}
-          tone=${!done && t.scheduledDate && t.scheduledDate < today ? 'late' : ''}
-          label=${t.scheduledDate ? humanDate(t.scheduledDate, today) + (t.scheduledTime ? ' ' + t.scheduledTime : '') : 'Когда'}
-          onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })} disabled=${locked}/>
-        <${Chip} icon=${html`<${Icon} name="flag" size=${16}/>`} active=${!!t.deadlineDate}
-          label=${t.deadlineDate ? 'Дедлайн ' + humanDate(t.deadlineDate, today) + (t.deadlineTime ? ' ' + t.deadlineTime : '') : 'Дедлайн'}
-          onClick=${() => openSheet('when', { taskId, mode: 'deadline' })} disabled=${locked}/>
+        ${t.repeat ? null : html`
+          <${Chip} icon=${html`<${Icon} name="calendar" size=${16}/>`} active=${!!t.scheduledDate}
+            tone=${!done && t.scheduledDate && t.scheduledDate < today ? 'late' : ''}
+            label=${t.scheduledDate ? humanDate(t.scheduledDate, today) + (t.scheduledTime ? ' ' + t.scheduledTime : '') : 'Когда'}
+            onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })} disabled=${locked}/>
+          <${Chip} icon=${html`<${Icon} name="flag" size=${16}/>`} active=${!!t.deadlineDate}
+            label=${t.deadlineDate ? 'Дедлайн ' + humanDate(t.deadlineDate, today) + (t.deadlineTime ? ' ' + t.deadlineTime : '') : 'Дедлайн'}
+            onClick=${() => openSheet('when', { taskId, mode: 'deadline' })} disabled=${locked}/>`}
+        <${Chip} icon=${html`<${Icon} name="repeat" size=${16}/>`} active=${!!t.repeat}
+          tone=${t.repeat && !done && S.isOverdue(t, today, store.now.time) ? 'late' : ''}
+          label=${t.repeat ? `${RP.describeRule(t.repeat)}${t.status === 'done' ? '' : ' · ' + (humanDate(RP.dueDate(t, today, tz) || today, today).toLowerCase())}${t.scheduledTime ? ' ' + t.scheduledTime : ''}` : 'Повтор'}
+          onClick=${() => openSheet('repeat', { taskId })} disabled=${locked}/>
         <${Chip} icon=${html`<i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i>`}
           active=${prio && prio.id !== PRIORITY_NONE_ID} label=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : 'Приоритет'}
           onClick=${(e) => openSheet('priority', { taskId, anchor: anchorOf(e) })} disabled=${locked}/>

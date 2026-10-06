@@ -25,4 +25,5 @@ await run([
   './village.test.js',
   './villageWorld.test.js',
   './skills.test.js',
+  './repeat.test.js',
 ]);

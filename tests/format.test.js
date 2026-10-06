@@ -10,6 +10,7 @@ import { migrateDb } from '../src/data/migrations/index.js';
 import { parseDbBytes } from '../src/sync/protocol.js';
 import { newTask, newList, newDevice, newReward, defaultLists, defaultSettings, defaultPriorities, tombstone, touch, addFocusSession } from '../src/core/model.js';
 import { purchaseEvent, focusEvent } from '../src/core/game.js';
+import { closeOccurrence, makeRule } from '../src/core/repeat.js';
 import { canonicalJson } from '../src/core/canonical.js';
 import { SCHEMA_VERSION } from '../src/version.js';
 
@@ -49,12 +50,14 @@ function appData() {
   const t4 = newTask({ title: 'Разминка', parentId: t1.id, order: 'a0' }, c);
   const t2 = touch(newTask({ title: 'Главная', order: 'Zz' }, c), { focusDate: '2026-10-02', focusOrder: 'a0', status: 'done', completedAt: new Date(c.now).toISOString() }, c);
   const t3 = tombstone(newTask({ title: 'Удалить' }, c), c);
+  // 0.9: повторяющаяся задача с закрытым экземпляром
+  const t5 = closeOccurrence(newTask({ title: 'Зарядка', repeat: makeRule({ kind: 'weekly', weekdays: [1, 3, 5] }, '2026-09-28'), scheduledTime: '08:00', order: 'a1' }, c), '2026-09-30', c);
   return {
     deviceId,
     data: {
       settings: [defaultSettings('Europe/Moscow')],
       lists: [...defaultLists().map((x, i) => (i === 1 ? touch(x, { prestige: 2, prestigeXp: 22000 }, c) : x)), l], // 0.8: престиж навыка
-      tasks: [t1, t2, t3, t4],
+      tasks: [t1, t2, t3, t4, t5],
       priorities: defaultPriorities().map((p, i) => (i === 2 ? touch(p, { xp: 25 }, c) : p)), // 0.8: опыт навыка
       rewards: [newReward({ name: 'Пицца', emoji: '🍕', price: 300, repeatable: true, order: 'a0' }, c)],
       coinEvents: [

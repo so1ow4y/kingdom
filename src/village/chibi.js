@@ -77,8 +77,9 @@ export function drawChibi(c, o, pose) {
   const st = pose.state || 'idle';
   const f = pose.frame | 0;
   const D = DIM[Math.max(0, Math.min(4, o.stage ?? 1))];
-  const sit = st === 'sit' || st === 'sleep' || st === 'fly';
-  const walk = st === 'walk' || st === 'run';
+  const sit = st === 'sit' || st === 'sleep' || st === 'fly' || st === 'pet' || st === 'fish' || st === 'gather';
+  const walk = st === 'walk' || st === 'run' || st === 'held';
+  const up = st === 'held' || st === 'fall'; // руки вверх: держат «рукой» или падает
   const bob = walk ? (f % 2) : st === 'idle' ? (f % 2) * 0 : 0;
   const lift = sit ? D.leg - 1 : 0; // сидя тело ниже
   const B = -(D.leg + D.body) + lift - bob; // верх туловища
@@ -140,9 +141,9 @@ export function drawChibi(c, o, pose) {
       px(-17, -3, '#e0be66');
     }
   } else {
-    const jump = st === 'jump';
-    const liftL = walk && f === 1 ? 1 : 0;
-    const liftR = walk && f === 3 ? 1 : 0;
+    const jump = st === 'jump' || st === 'fall';
+    const liftL = st === 'held' ? f % 2 : walk && f === 1 ? 1 : 0;
+    const liftR = st === 'held' ? 1 - (f % 2) : walk && f === 3 ? 1 : 0;
     const legs = [[-3, liftL], [1, liftR]];
     for (const [x, up] of legs) {
       const top = -D.leg;
@@ -229,7 +230,10 @@ export function drawChibi(c, o, pose) {
   const swing = walk ? (f === 1 ? 1 : f === 3 ? -1 : 0) : 0;
   const t2 = f % 2;
   // левая (дальняя) рука
-  if (st === 'jump' || st === 'dance') {
+  if (up) {
+    r(hl - 2, armY - 6 - (f % 2), 2, 6, sleeve);
+    r(hl - 2, armY - 8 - (f % 2), 2, 2, P.skin);
+  } else if (st === 'jump' || st === 'dance') {
     const up = st === 'dance' ? t2 : 1;
     r(hl - 2, armY - 3 - up * 2, 2, 4, sleeve);
     r(hl - 2, armY - 5 - up * 2, 2, 2, P.skin);
@@ -278,6 +282,11 @@ export function drawChibi(c, o, pose) {
     px(5, Fy + 9, P.blush);
   }
   if (st === 'sleep') px(0, Fy + 10, '#b0605a');
+  else if (up) {
+    r(0, Fy + 10, 2, 2, '#7a2a3a');
+  } else if (st === 'fish' || st === 'gather' || st === 'bucket') {
+    r(0, Fy + 10, 2, 1, '#a0504a');
+  }
   else if (pose.happy || st === 'wave' || st === 'greet' || st === 'dance' || st === 'jump') {
     r(0, Fy + 10, 2, 1, '#8a2a3a');
     r(0, Fy + 11, 2, 1, '#e87a8a');
@@ -367,7 +376,16 @@ export function drawChibi(c, o, pose) {
 
   // ---- правая (ближняя) рука и предмет ----
   const RX = hr + 1;
-  if (st === 'wave' || st === 'greet') {
+  if (up) {
+    r(RX, armY - 6 - (1 - (f % 2)), 2, 6, sleeve);
+    r(RX, armY - 8 - (1 - (f % 2)), 2, 2, P.skin);
+  } else if (st === 'pet') {
+    r(RX, armY + 2, 4, 2, sleeve);
+    r(RX + 4, armY + 2 + t2, 2, 2, P.skin);
+  } else if (st === 'fish') {
+    r(RX, armY, 3, 2, sleeve);
+    r(RX + 3, armY - 1, 2, 2, P.skin);
+  } else if (st === 'wave' || st === 'greet') {
     r(RX, armY - 4, 2, 5, sleeve);
     r(RX + t2, armY - 7, 2, 3, P.skin);
   } else if (st === 'knock') {
@@ -385,11 +403,49 @@ export function drawChibi(c, o, pose) {
     r(RX, armY + armL - swing, 2, 2, P.skin);
   }
   const hand = st === 'work' ? { x: RX, y: armY - (t2 ? 5 : -4) } : { x: RX, y: armY + armL - swing };
-  if (!sit || st === 'fly') item(r, px, o, P, hand, st, t2, armY, hl, B, D);
+  if (['fish', 'bucket', 'water', 'gather'].includes(st)) choreItem(r, px, st, t2, { x: RX, y: armY }, hl, B, D);
+  else if ((!sit || st === 'fly') && !up && st !== 'pet') item(r, px, o, P, hand, st, t2, armY, hl, B, D);
   if (o.shield && !sit) {
     r(hl - 5, B + 2, 4, 6, o.shield);
     r(hl - 5, B + 2, 4, 1, tint(o.shield, 0.3));
     r(hl - 4, B + 4, 2, 2, '#e8c050');
+  }
+}
+
+/** Вещи для дел у объектов (0.9): удочка, ведро, лейка, корзинка. */
+function choreItem(r, px, st, t2, h, hl, B, D) {
+  const wood = '#7a5230';
+  if (st === 'fish') {
+    // удочка вперёд, леска вниз к поплавку
+    for (let i = 0; i < 12; i++) px(h.x + 4 + i, h.y - 2 - Math.floor(i * 0.7), wood);
+    const tipX = h.x + 15;
+    const tipY = h.y - 10;
+    for (let i = 1; i < 14; i++) px(tipX + Math.floor(i / 5), tipY + i, '#dfe6ee');
+    r(tipX + 2, tipY + 14 + t2, 2, 2, '#e04a4a');
+    px(tipX + 2, tipY + 14 + t2, '#ffffff');
+  } else if (st === 'bucket') {
+    // тянет ведро за верёвку
+    r(h.x, h.y + (t2 ? 0 : 3), 2, 5, '#c8b89a');
+    r(h.x - 1, h.y + (t2 ? 5 : 8), 5, 4, '#8a8f96');
+    r(h.x - 1, h.y + (t2 ? 5 : 8), 5, 1, '#b8c0c8');
+    px(h.x + 1, h.y + (t2 ? 6 : 9), '#7ad0ff');
+  } else if (st === 'water') {
+    // лейка наклонена, из носика капли
+    r(h.x, h.y + 3, 5, 4, '#3f9a7a');
+    r(h.x, h.y + 3, 5, 1, '#6ac8a0');
+    for (let i = 0; i < 4; i++) px(h.x + 5 + i, h.y + 4 - Math.floor(i / 2), '#3f9a7a');
+    px(h.x + 10, h.y + 4 + t2, '#7ad0ff');
+    px(h.x + 11, h.y + 6 - t2, '#7ad0ff');
+    r(h.x + 1, h.y + 1, 3, 2, '#2f7a5a');
+  } else if (st === 'gather') {
+    // корзинка рядом
+    r(h.x + 1, -6, 7, 5, '#a8783a');
+    r(h.x + 1, -6, 7, 1, '#c89a5a');
+    for (let x = h.x + 2; x < h.x + 8; x += 2) px(x, -4, '#7a5228');
+    px(h.x + 3, -7, '#d84a3a');
+    px(h.x + 5, -7, '#e8c040');
+    px(h.x + 6, -8, '#d84a3a');
+    for (let i = 0; i < 5; i++) px(h.x + 1 + i + (i > 2 ? 1 : 0), -7 - Math.round(Math.sin((i / 4) * Math.PI) * 4), '#8a5a2a');
   }
 }
 
@@ -592,12 +648,18 @@ export const lookKey = (o) => JSON.stringify(o);
  * key — lookKey(look), pose — { state, frame, blink, happy, sad, night }.
  */
 export function chibiSprite(look, key, pose, dir = 1) {
-  const k = `${key}|${pose.state}|${pose.frame | 0}|${pose.blink ? 1 : 0}|${pose.happy ? 1 : 0}|${pose.sad ? 1 : 0}|${pose.night ? 1 : 0}|${dir < 0 ? 'L' : 'R'}`;
+  const k = `${key}|${pose.state}|${pose.frame | 0}|${pose.blink ? 1 : 0}|${pose.happy ? 1 : 0}|${pose.sad ? 1 : 0}|${pose.night ? 1 : 0}`;
+  return outlined(k, (c) => drawChibi(c, look, pose), dir);
+}
+
+/** Спрайт с обводкой по силуэту из функции рисования draw(ctx) (0.9: общий для чиби и зверей), с кэшем по ключу. */
+export function outlined(key, draw, dir = 1) {
+  const k = `${key}|${dir < 0 ? 'L' : 'R'}`;
   let s = cache.get(k);
   if (s) return s;
-  if (cache.size > 900) cache.clear();
+  if (cache.size > 1400) cache.clear();
   const base = canvas(CW, CH);
-  drawChibi(base.getContext('2d'), look, pose);
+  draw(base.getContext('2d'));
   const out = canvas(CW, CH);
   const c = out.getContext('2d');
   if (dir < 0) {
@@ -628,6 +690,8 @@ export function poseOf(a, night) {
   let frame = 0;
   if (st === 'walk' || st === 'run') frame = Math.floor((a.phase || 0) * 4) % 4;
   else if (['wave', 'greet', 'knock', 'dance', 'work'].includes(st)) frame = Math.floor(t * 5) % 2;
+  else if (st === 'held') frame = Math.floor(t * 6) % 2;
+  else if (['pet', 'fish', 'bucket', 'water', 'gather'].includes(st)) frame = Math.floor(t * 2.5) % 2;
   const blink = st !== 'sleep' && (t + (a.n || 0) * 1.7) % 4.2 < 0.14;
   return { state: st, frame, blink, happy: !!a.happy, sad: !!a.sad, night: night > 0.5 };
 }

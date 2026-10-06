@@ -7,6 +7,7 @@
 
 import { painter, drawCharacter, drawEmote, charHeight } from './puppets.js';
 import { chibiSprite, lookKey, poseOf, LOOKS, CW, CH } from './chibi.js';
+import { critterSprite, critterPose, CRITTERS } from './critters.js';
 import { TILE, T, rnd } from './map.js';
 import { SPRITE_H } from './world.js';
 
@@ -1089,6 +1090,8 @@ function drawParticles(c, world) {
       case 'star': P(c, x, y, p.c > 0.5 ? '#fff6c0' : '#c8a6ff'); break;
       case 'arrow': R(c, x - 2, y, 4, 1, '#7a5230'); P(c, x + (p.c > 0 ? 2 : -2), y, '#d0d0d0'); break;
       case 'fw': P(c, x, y, FW[Math.floor(p.c * FW.length)]); break;
+      case 'leaf': R(c, x, y, 2, 1, p.c > 0.5 ? '#5aa04a' : '#3f8a3a'); break;
+      case 'fish': R(c, x - 1, y, 3, 1, '#7ab8e8'); P(c, x + (p.c > 0.5 ? 2 : -2), y, '#5a90c8'); P(c, x, y - 1, '#c8e8ff'); break;
       default: P(c, x, y, '#fff');
     }
   }
@@ -1215,7 +1218,7 @@ export class VillageRenderer {
         ctx.drawImage(s.cv, ox, oy);
         if (!it.ghost) {
           animatedParts(ctx, b, world, K);
-          lit.push({ s, ox, oy, id: b.id });
+          lit.push({ s, ox, oy, id: b.id, b });
         }
       } else if (it.t) {
         const t = it.t;
@@ -1250,7 +1253,16 @@ export class VillageRenderer {
           ctx.globalAlpha = 1;
         }
         const look = a.look || LOOKS[a.kind];
-        if (look) {
+        if (CRITTERS.has(a.kind)) {
+          // звери (0.9): спрайт в той же плотности пикселей, что и чиби
+          const s = critterSprite(a.kind, critterPose(a), a.dir);
+          const fs = 0.5 * a.u;
+          ctx.globalAlpha = a.alpha;
+          ctx.imageSmoothingEnabled = RES * fs < 1;
+          ctx.drawImage(s.cv, Math.round(a.x / fs) * fs - s.ax * fs, Math.round((a.y - a.z) / fs) * fs - s.ay * fs, CW * fs, CH * fs);
+          ctx.imageSmoothingEnabled = false;
+          ctx.globalAlpha = 1;
+        } else if (look) {
           // чиби: спрайт в кэше, «пиксель» — половина пикселя деревни (у больших — целый)
           if (!a.lk) a.lk = lookKey(look);
           const s = chibiSprite(look, a.lk, poseOf(a, v.n), a.dir);
@@ -1299,9 +1311,12 @@ export class VillageRenderer {
     }
     drawParticles(ctx, world);
     for (const a of world.actors) {
-      if (a.hidden || !a.emote) continue;
-      drawEmote(ctx, Math.round(a.x), Math.round(a.y - a.z - charHeight(a.kind) * a.u - 4), a.emote, 1);
+      if (a.hidden) continue;
+      const top = Math.round(a.y - a.z - charHeight(a.kind) * a.u - 4);
+      if (a.emote) drawEmote(ctx, Math.round(a.x), top, a.emote, 1);
+      else if (world.alertOf(a) > 0 && !a.held) alertMark(ctx, Math.round(a.x), top - 1 + Math.round(Math.sin(world.t * 4 + (a.n || 0)) * 1.2));
     }
+    if (v.hand) drawHand(ctx, Math.round(v.hand.x), Math.round(v.hand.y), !!v.hand.closed);
     if (v.pointer) {
       // стрелка над выбранным объектом
       const px = Math.round(v.pointer.x);
@@ -1419,7 +1434,7 @@ export class VillageRenderer {
     const cores = [];
     for (const it of lit) {
       const { s, ox, oy } = it;
-      const on = it.id === 'decor' || world.lightOn(it.id);
+      const on = it.b ? world.buildingLit(it.b) : it.id === 'decor' || world.lightOn(it.id);
       for (const g of s.glows) glow(ox + g.x, oy + g.y, g.r, Math.max(g.base || 0, glowA), g.warm);
       if (on && glowA > 0) {
         for (const w of s.wins) {
@@ -1539,6 +1554,37 @@ export class VillageRenderer {
   }
 }
 
+/** Знак «!» над хранителем, у чьего списка есть невыполненные задачи (0.9): белое облачко с оранжевым «!». */
+function alertMark(c, x, y) {
+  R(c, x - 3, y - 9, 7, 9, '#2a1e2a');
+  R(c, x - 2, y - 10, 5, 11, '#2a1e2a');
+  R(c, x - 2, y - 9, 5, 9, '#fff8e8');
+  P(c, x, y + 1, '#2a1e2a');
+  R(c, x, y - 8, 1, 4, '#ff8a1a');
+  R(c, x, y - 3, 1, 1, '#ff8a1a');
+}
+
+/** Рука, которая держит жителя (0.9): белая перчатка; closed — пальцы сжаты. */
+function drawHand(c, x, y, closed) {
+  const o = '#2a1e2a';
+  const w = '#ffffff';
+  const s = '#d8dcea';
+  R(c, x - 4, y - 10, 9, 9, o);
+  R(c, x - 3, y - 9, 7, 7, w);
+  R(c, x + 2, y - 9, 2, 7, s);
+  // пальцы
+  for (let i = 0; i < 3; i++) {
+    R(c, x - 3 + i * 2, y - (closed ? 2 : 1), 2, closed ? 2 : 4, o);
+    R(c, x - 3 + i * 2, y - (closed ? 2 : 1), 1, closed ? 1 : 3, w);
+  }
+  // большой палец
+  R(c, x - 6, y - 6, 3, 3, o);
+  R(c, x - 5, y - 5, 2, 1, w);
+  // манжета
+  R(c, x - 4, y - 13, 9, 3, o);
+  R(c, x - 3, y - 12, 7, 1, '#ffd23a');
+}
+
 /**
  * Гость у экрана: крупный житель на своём маленьком холсте поверх приложения.
  * v: { W, H, u, n, style }, world.visitor — состояние.
@@ -1563,7 +1609,12 @@ export function drawVisitor(c, world, v) {
   const y = v.H - 3 - Math.round(vis.y / 6);
   const dir = vis.stage === 'out' ? vis.side : -vis.side;
   const look = vis.actor?.look || LOOKS[vis.kind];
-  if (look) {
+  if (CRITTERS.has(vis.kind)) {
+    const a = { state: vis.state, phase: vis.phase || 0, anim: vis.anim || 0, happy: vis.stage === 'poked' || vis.stage === 'talk' };
+    const s = critterSprite(vis.kind, critterPose(a), dir);
+    const fs = 0.5 * v.u;
+    c.drawImage(s.cv, Math.round(x / fs) * fs - s.ax * fs, Math.round(y / fs) * fs - s.ay * fs, CW * fs, CH * fs);
+  } else if (look) {
     const a = { state: vis.state, phase: vis.phase || 0, anim: vis.anim || 0, happy: vis.stage === 'poked', n: 0 };
     const s = chibiSprite(look, lookKey(look), poseOf(a, v.n), dir);
     const fs = 0.5 * v.u;
@@ -1574,6 +1625,7 @@ export function drawVisitor(c, world, v) {
   }
   const hTop = y - charHeight(vis.kind) * v.u;
   if (vis.emote) drawEmote(c, x, hTop - 6, vis.emote, Math.max(1, v.u - 1));
+  else if (world.alertOf(vis.actor) > 0 && vis.stage !== 'talk') alertMark(c, x, hTop - 4 + Math.round(Math.sin((vis.anim || 0) * 4) * 1.2));
   const kx = x + dir * 6 * v.u;
   const ky = y - 9 * v.u;
   for (const r of vis.ripples) {

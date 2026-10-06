@@ -15,6 +15,8 @@ import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { addDays, isoWeekday, WEEKDAY_SHORT } from '../../core/dates.js';
 import { readLocal, writeLocal } from '../hooks.js';
 import { LIMITS } from '../../config.js';
+import { RepeatEditor } from './Repeat.js';
+import { describeRule } from '../../core/repeat.js';
 
 function QuickAddSheet({ ctx }) {
   const today = store.now.today;
@@ -27,6 +29,7 @@ function QuickAddSheet({ ctx }) {
   const [listIds, setListIds] = useState(ctx.listId ? [ctx.listId] : []);
   const [priorityId, setPriorityId] = useState(PRIORITY_NONE_ID);
   const [focus, setFocus] = useState(false);
+  const [repeat, setRepeat] = useState(null);
   const [open, setOpen] = useState({ lists: false, subtasks: false, notes: false, reminders: false });
   const [newList, setNewList] = useState('');
   const [added, setAdded] = useState(0);
@@ -45,7 +48,7 @@ function QuickAddSheet({ ctx }) {
     const t = normalizeTitle(title);
     if (!t || readOnly) return;
     const r = await createTask({
-      title: t, listIds, priorityId, scheduledDate: date, scheduledTime: date ? time : null, focus, focusDate: date || today,
+      title: t, listIds, priorityId, scheduledDate: repeat ? null : date, scheduledTime: date || repeat ? time : null, focus, focusDate: date || today, repeat,
       reminders: reminders ?? undefined,
       notes: notes.filter((n) => n.trim()), subtasks: subtasks.filter((s) => s.trim()),
     });
@@ -127,6 +130,8 @@ function QuickAddSheet({ ctx }) {
           <button type="button" class=${'chip' + (priorityId !== PRIORITY_NONE_ID ? ' selected' : '')}
             onClick=${(e) => openSheet('priority', { anchor: e.currentTarget.getBoundingClientRect(), current: priorityId, onPick: setPriorityId })}>
             <i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i> ${priorityId !== PRIORITY_NONE_ID ? prio?.name : 'Приоритет'}</button>
+          <button type="button" class=${'chip' + (open.repeat || repeat ? ' selected' : '')} onClick=${() => flip('repeat')}
+            aria-expanded=${!!open.repeat}><${Icon} name="repeat" size=${16}/> ${repeat ? describeRule(repeat) : 'Повтор'}</button>
           <button type="button" class=${'chip' + (open.subtasks ? ' selected' : '')} onClick=${() => { flip('subtasks'); if (!subtasks.length) setSubtasks(['']); }}
             aria-expanded=${open.subtasks}><${Icon} name="list" size=${16}/> Подзадачи${subtasks.filter((s) => s.trim()).length ? ' · ' + subtasks.filter((s) => s.trim()).length : ''}</button>
           <button type="button" class=${'chip' + (open.notes ? ' selected' : '')} onClick=${() => { flip('notes'); if (!notes.length) setNotes(['']); }}
@@ -146,6 +151,10 @@ function QuickAddSheet({ ctx }) {
           </div>` : null}
         ${open.reminders && date ? html`<div class="qa-panel"><div class="field-label">Напоминания</div>
           <${DraftReminders} draft=${{ scheduledDate: date, scheduledTime: time, deadlineDate: null }} value=${reminders} setValue=${setReminders} onSetTime=${setTime}/></div>` : null}
+        ${open.repeat ? html`<div class="qa-panel"><div class="field-label">Повтор</div>
+          <${RepeatEditor} value=${repeat} onChange=${setRepeat} startDate=${date || today}/>
+          ${repeat ? html`<div class="chip-row wrap"><span class=${'chip chip-timebox' + (time ? ' selected' : '')}><${Icon} name="clock" size=${16}/>
+            <${TimeInput} value=${time} onChange=${setTime} label="Время"/></span></div>` : null}</div>` : null}
         ${open.subtasks ? html`<div class="qa-panel"><div class="field-label">Подзадачи</div>
           <${DraftList} items=${subtasks} setItems=${setSubtasks} placeholder="Подзадача" addLabel="Добавить подзадачу"/></div>` : null}
         ${open.notes ? html`<div class="qa-panel"><div class="field-label">Заметки</div>

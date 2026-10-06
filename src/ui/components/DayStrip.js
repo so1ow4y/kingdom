@@ -8,6 +8,7 @@ import { store } from '../../store/appState.js';
 import { addDays, mondayOf, weekDates, WEEKDAY_SHORT, localDateOf } from '../../core/dates.js';
 import { planningDate } from '../../core/planning.js';
 import { countLabel } from '../../core/plural.js';
+import * as RP from '../../core/repeat.js';
 
 const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
@@ -17,7 +18,10 @@ export function weekStats(data, tz, dates) {
   const out = new Map(dates.map((d) => [d, { planned: 0, done: 0 }]));
   for (const t of data.tasks.values()) {
     if (t.deletedAt || t.trashedAt) continue;
-    if (t.status === 'active') {
+    if (t.status === 'active' && t.repeat) {
+      // повтор (0.9): точка в те дни недели, где есть незакрытый экземпляр по правилу
+      for (const d of dates) if (RP.matches(t.repeat, d) && !['done', 'skipped'].includes(t.occurrences?.[d]?.state)) out.get(d).planned++;
+    } else if (t.status === 'active') {
       for (const d of new Set([t.scheduledDate, t.deadlineDate, t.focusDate])) if (set.has(d)) out.get(d).planned++;
     } else if (t.status === 'done' && t.completedAt) {
       const d = localDateOf(t.completedAt, tz);

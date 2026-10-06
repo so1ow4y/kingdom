@@ -1362,3 +1362,24 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
   .vn-choice { gap: 6px; padding: 7px 8px; font-size: 13.5px; line-height: 1.25; }
   .vn-num { width: 18px; height: 18px; font-size: 11px; }
 }
+/* ---------- Повторяющиеся задачи (обновление 0.9) ---------- */
+.repeat-editor { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.weekday-chips .day-chip { min-width: 44px; justify-content: center; }
+.inline-field { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.inline-field input { width: 80px; }
+.inline-field small { flex: 1 1 100%; }
+.repeat-preview { margin: 2px 0 0; }
+.sheet-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+.meta-repeat { color: var(--accent); }
+.meta-repeat.late { color: var(--danger); }
+.inbox-tabs { margin: 4px 0 10px; }
+.inbox-tabs .chip { gap: 6px; }
+.repeating-list { display: flex; flex-direction: column; gap: 8px; }
+.repeat-item { border-radius: var(--radius-sm); background: color-mix(in srgb, var(--surface) 92%, transparent); box-shadow: var(--shadow); overflow: hidden; }
+.repeat-item .task-row { box-shadow: none; }
+.repeat-actions { display: flex; flex-wrap: wrap; gap: 6px; padding: 0 12px 10px 52px; }
+.danger-link { display: block; margin: 14px auto 0; color: var(--danger); }
+
+/* Разговор поверх других вкладок (гость у экрана, 0.9) */
+.village-talk-global { z-index: 60; }
+.village-talk-global > .vn-dialog { pointer-events: auto; }

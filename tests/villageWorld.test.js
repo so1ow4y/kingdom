@@ -10,7 +10,8 @@ import { VILLAGE_ITEMS, VILLAGE_STYLES, BASE_VILLAGE, nightness } from '../src/c
 const CHARS = VILLAGE_ITEMS.filter((x) => x.kind === 'char').map((x) => x.id);
 const OWNED = new Set([...BASE_VILLAGE, ...CHARS, 'v:fireflies', 'v:aurora', 'v:flowers', 'v:daynight']);
 const LEGACY = new Set(['scene:web', 'scene:stars', 'prop:lantern', 'prop:mushrooms', 'prop:crystal', 'prop:pickaxe']);
-const FLYING = new Set(['broom', 'float', 'flyhigh', 'climb']);
+const FLYING = new Set(['broom', 'float', 'flyhigh', 'climb', 'held', 'fall']);
+const KINDS_HUMAN = new Set(['wanderer', 'keeper', 'miner', 'builder', 'archer', 'neko']);
 
 const obj = (key, place, extra = {}) => ({ key, itemId: 'v:' + place, place, level: 1, x: null, y: null, ...extra });
 /** Всё, что можно поставить, + повторы. */
@@ -275,4 +276,98 @@ test('отрисовка: все стили днём, в сумерках и н�
     vc.height = 40;
     if (w.visitor) assert.ok(drawVisitor(vc.getContext('2d'), w, { W: 30, H: 40, u: w.visitor.u, n: 0, style: st }));
   }
+});
+
+test('0.9: в экран стучат только хранители с делами; «рука» и падение; дом, свет и пробуждение; дела у объектов', async () => {
+  const { LOOKS } = await import('../src/village/chibi.js');
+  const w = new World({ rand: seeded(21) });
+  const keepers = (alertA, alertB) => [
+    { id: 'keeper:a', listId: 'a', listName: 'Универ', name: 'Сора', gender: 'f', look: { ...LOOKS.neko, ears: false }, alert: alertA },
+    { id: 'keeper:b', listId: 'b', listName: 'Дом', name: 'Рэн', gender: 'm', look: { ...LOOKS.wanderer }, alert: alertB },
+  ];
+  const cfg = (a, b) => ({ owned: new Set([...BASE_VILLAGE, 'pet:cat']), objects: [obj('fi', 'field')], keepers: keepers(a, b), mood: 60, visitors: true });
+  w.configure(cfg(2, 0));
+  for (let i = 0; i < 20; i++) w.step(0.05, { phase: 0.5, night: 0 });
+  assert.ok(w.sendVisitor(null, true));
+  assert.equal(w.actors.find((a) => a.task?.type === 'leave').name, 'Сора', 'пошла та, у кого дела');
+  const sora = w.actors.find((a) => a.name === 'Сора');
+  sora.task = null;
+  w.configure(cfg(0, 0));
+  assert.equal(w.sendVisitor(null, true), false, 'без дел сами не стучат');
+  assert.ok(w.sendVisitor(), '«Позвать» — кто угодно');
+  for (const a of w.actors) if (a.task?.type === 'leave') a.task = null;
+  // «рука»: взять, подержать, отпустить — падает и встаёт на проходимую клетку
+  const ren = w.actors.find((a) => a.name === 'Рэн');
+  assert.ok(w.grab(ren));
+  w.holdAt(ren, w.map.spots.plaza.x + 40, w.map.spots.plaza.y - 30);
+  assert.ok(ren.held && ren.z === 14);
+  for (let i = 0; i < 5; i++) w.step(0.05, { phase: 0.5, night: 0 });
+  assert.equal(ren.state, 'held');
+  w.drop(ren);
+  for (let i = 0; i < 40; i++) w.step(0.05, { phase: 0.5, night: 0 });
+  assert.equal(ren.z, 0);
+  assert.ok(walkable(w.map, ...tileOf(ren.x, ren.y)), 'приземлился на проходимое');
+  // дом: ночью все уходят, свет горит, потом гаснет; нажали — выбежали
+  const home = w.houses()[0];
+  assert.ok(w.residentsOf(home).length >= 3, 'у каждого свой дом');
+  let wasLit = false;
+  for (let i = 0; i < 1500; i++) {
+    w.step(0.1, { phase: 0.02, night: 1 });
+    if (w.buildingLit(home)) wasLit = true;
+  }
+  const people = w.residentsOf(home).filter((a) => KINDS_HUMAN.has(a.kind));
+  assert.ok(people.every((a) => a.hidden), 'все люди дома');
+  assert.ok(wasLit, 'пока укладывались — свет горел');
+  assert.ok(!w.buildingLit(home), 'все легли — свет погас');
+  assert.ok(w.disturb(home) >= people.length, 'потревожили — выбежали');
+  assert.ok(people.every((a) => !a.hidden));
+  // днём — дела у объектов: котик, огород, колодец, пруд, лес
+  const seen = new Set();
+  for (let i = 0; i < 8000 && seen.size < 4; i++) {
+    w.step(0.1, { phase: 0.5, night: 0 });
+    for (const a of w.actors) if (a.task?.type === 'chore') seen.add(a.task.act);
+  }
+  assert.ok(seen.size >= 4, 'разные дела: ' + [...seen].join(', '));
+  // нажатия на окружение
+  const well = w.decor.find((d) => d.type === 'well');
+  assert.equal(w.hit(well.x, well.y - 6)?.what, 'well');
+  const pond = w.map.pond;
+  const water = w.hit((pond.x + 2.5) * TILE, (pond.y + 1.5) * TILE);
+  assert.equal(water?.what, 'water');
+  w.touchScenery(water);
+  assert.ok(w.particles.some((p) => p.kind === 'drop'));
+});
+
+test('0.9: звери и портреты 96 × 96 рисуются во всех позах и головных уборах', async () => {
+  const { critterSprite } = await import('../src/village/critters.js');
+  const { drawPortrait96, N } = await import('../src/village/portrait96.js');
+  const { LOOKS } = await import('../src/village/chibi.js');
+  const painted = (cv) => {
+    const px = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
+    let n = 0;
+    for (let i = 3; i < px.length; i += 4) if (px[i] > 0) n++;
+    return n;
+  };
+  for (const kind of ['cat', 'kitten', 'fox', 'slime', 'shroom', 'ghost', 'spider', 'dragon']) {
+    for (const state of ['idle', 'walk', 'run', 'sit', 'sleep', 'jump', 'held', 'fall', 'fly', 'work']) {
+      for (const frame of [0, 1, 3]) {
+        const n = painted(critterSprite(kind, { state, frame, happy: frame === 1, squash: false, fire: kind === 'dragon' }, frame ? -1 : 1).cv);
+        assert.ok(n > 60, `${kind} ${state}: ${n}`);
+      }
+    }
+  }
+  const hats = ['bow', 'gradcap', 'bandana', 'beret', 'headphones', 'headband', 'nursecap', 'straw', 'helmet', 'hardhat', 'hood', 'witch', 'helmetK', null];
+  const styles = ['short', 'spiky', 'messy', 'bob', 'long', 'twintails', 'ponytail', 'bun', 'side'];
+  const cv = document.createElement('canvas');
+  cv.width = N;
+  cv.height = N;
+  hats.forEach((hat, i) => {
+    const look = { ...LOOKS.neko, hat, ears: i === 0, style: styles[i % styles.length], gender: i % 2 ? 'm' : 'f', glasses: i % 3 === 0, stage: i % 5, tie: i === 4, apron: i === 5 };
+    for (const e of ['neutral', 'smile', 'grin', 'surprised', 'sad', 'blush', 'closed']) {
+      const c = cv.getContext('2d');
+      c.clearRect(0, 0, N, N);
+      drawPortrait96(c, look, e);
+      assert.ok(painted(cv) > 3000, `портрет ${hat} ${e}`);
+    }
+  });
 });

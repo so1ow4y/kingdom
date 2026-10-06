@@ -117,7 +117,9 @@ export function revert(current, prev, ctx) {
     for (const key of new Set([...Object.keys(a), ...Object.keys(b)])) {
       if (sameValue(a[key], b[key])) continue;
       next ??= { ...a };
-      next[key] = { ...(b[key] || a[key]), ...(b[key] ? {} : { in: false }), t: ctx.stamp(), by: ctx.deviceId };
+      // ключа раньше не было: у списков — «не в списке», у экземпляров повтора — снова открыт
+      const gone = k === 'occurrences' ? { state: 'open', doneAt: null } : { in: false };
+      next[key] = { ...(b[key] || a[key]), ...(b[key] ? {} : gone), t: ctx.stamp(), by: ctx.deviceId };
     }
     if (next) out = { ...bumped(out, ctx), [k]: next };
   }
@@ -222,14 +224,15 @@ export function newTask(input, ctx) {
     status: 'active',
     completedAt: null,
     trashedAt: null,
-    scheduledDate: input.scheduledDate ?? null,
-    scheduledTime: input.scheduledDate ? (input.scheduledTime ?? null) : null,
+    // у повторяющейся задачи своей даты нет — она вычисляется из правила (core/repeat.js), время — общее
+    scheduledDate: input.repeat ? null : input.scheduledDate ?? null,
+    scheduledTime: input.scheduledDate || input.repeat ? (input.scheduledTime ?? null) : null,
     deadlineDate: input.deadlineDate ?? null,
     deadlineTime: input.deadlineDate ? (input.deadlineTime ?? null) : null,
     focusDate: input.focusDate ?? null,
     focusOrder: input.focusDate ? (input.focusOrder ?? null) : null,
     order: input.order ?? 'a0',
-    repeat: null,
+    repeat: input.repeat ?? null,
     nag: { enabled: false, intervalMinutes: 15 },
     createdVia: input.createdVia ?? 'app',
     notes: [],

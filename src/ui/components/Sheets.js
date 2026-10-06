@@ -17,6 +17,8 @@ import { liveNotes } from '../../core/model.js';
 import { ReminderSheet, MissedSheet } from './Reminders.js';
 import { RecorderSheet } from './Attachments.js';
 import { FocusStartSheet } from './Focus.js';
+import { RepeatSheet } from './Repeat.js';
+import { describeRule } from '../../core/repeat.js';
 
 function WhenSheet({ taskId, mode }) {
   const t = A.getTask(taskId);
@@ -177,10 +179,14 @@ function TaskMenuSheet({ taskId, date }) {
           <${MenuItem} icon="focus" label="Взяться за задачу" hint="фокус-таймер" onClick=${() => openSheet('focus', { taskId })}/>
           ${!parent || focused ? html`<${MenuItem} icon=${html`<${Icon} name="star" filled=${focused} size=${20}/>`}
             label=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(focusDate, today).toLowerCase()} onClick=${run(() => A.toggleFocus(taskId, focusDate))}/>` : null}
-          <${MenuItem} icon="calendar" label="Когда…" hint=${t.scheduledDate ? humanDate(t.scheduledDate, today) : null}
-            onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })}/>
-          <${MenuItem} icon="flag" label="Дедлайн…" hint=${t.deadlineDate ? humanDate(t.deadlineDate, today) : null}
-            onClick=${() => openSheet('when', { taskId, mode: 'deadline' })}/>`}
+          ${t.repeat ? html`
+            <${MenuItem} icon="up" label="Пропустить этот раз" hint="без монет и опыта" onClick=${run(() => A.skipOccurrence(taskId))}/>` : html`
+            <${MenuItem} icon="calendar" label="Когда…" hint=${t.scheduledDate ? humanDate(t.scheduledDate, today) : null}
+              onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })}/>
+            <${MenuItem} icon="flag" label="Дедлайн…" hint=${t.deadlineDate ? humanDate(t.deadlineDate, today) : null}
+              onClick=${() => openSheet('when', { taskId, mode: 'deadline' })}/>`}
+          <${MenuItem} icon="repeat" label="Повтор…" hint=${t.repeat ? describeRule(t.repeat) : null}
+            onClick=${() => openSheet('repeat', { taskId })}/>`}
       <${MenuItem} icon="lists" label="Списки…" hint=${S.taskLists(store.data, t).map((l) => l.name).join(', ') || null}
         onClick=${() => openSheet('listPicker', { taskId })}/>
       <${MenuItem} icon="flag" label="Приоритет…" hint=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : null}
@@ -201,7 +207,7 @@ function TaskMenuSheet({ taskId, date }) {
           showSnackbar('Не удалось скопировать');
         }
       })}/>
-      <${MenuItem} icon="trash" label="В корзину" danger onClick=${run(() => A.trashTask(taskId))}/>
+      <${MenuItem} icon="trash" label=${t.repeat ? 'Удалить повторяющуюся задачу' : 'В корзину'} danger onClick=${run(() => A.trashTask(taskId))}/>
     <//>`;
 }
 
@@ -249,6 +255,7 @@ export function SheetHost() {
     case 'recorder': return html`<${RecorderSheet} ...${s}/>`;
     case 'parentPicker': return html`<${ParentPickerSheet} ...${s}/>`;
     case 'focus': return html`<${FocusStartSheet} ...${s}/>`;
+    case 'repeat': return html`<${RepeatSheet} ...${s}/>`;
     default: return null;
   }
 }

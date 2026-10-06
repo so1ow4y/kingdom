@@ -102,6 +102,10 @@ export function talkTree(ctx) {
     ];
     hello.push({ t: greet[tier], e: tier === 0 ? 'neutral' : tier >= 3 ? 'grin' : 'smile' });
   }
+  if (ctx.knock && w.keeper && ctx.tasks?.open) {
+    // постучал в экран сам: пришёл напомнить про невыполненное
+    hello.unshift({ t: `Тук-тук! Это я, ${w.name}. ${g('Пришёл', 'Пришла')} напомнить: в «${list}» ещё ${countLabel(ctx.tasks.open, ['задача', 'задачи', 'задач'])}${ctx.tasks.overdue ? `, просрочено ${ctx.tasks.overdue}` : ''}.`, e: ctx.tasks.overdue ? 'sad' : 'smile' });
+  } else if (ctx.knock) hello.unshift({ t: beast ? `*${w.name} стучит лапкой по стеклу.*` : `Тук-тук! ${g('Решил', 'Решила')} заглянуть к тебе.`, e: 'grin' });
   if (ctx.night > 0.6 && !beast) hello.push({ t: 'Уже поздно… Не засиживайся, ладно? Отдых — тоже часть плана.', e: 'neutral' });
   if (w.keeper && ctx.tasks?.overdue) hello.push({ t: `Кстати, в «${list}» ${countLabel(ctx.tasks.overdue, ['задача просрочена', 'задачи просрочены', 'задач просрочено'])}. Может, начнём с них?`, e: 'sad' });
 

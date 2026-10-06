@@ -19,7 +19,9 @@ import { useMedia, readLocal } from '../hooks.js';
 import { getFocus } from '../../store/focus.js';
 import { keepersOf } from '../../village/keepers.js';
 import { skillsNow } from './Skills.js';
-import { openTalk, closeTalk, talk } from './VillageDialog.js';
+import { openTalk, closeTalk, talk, VillageDialog } from './VillageDialog.js';
+import * as S from '../../core/selectors.js';
+import * as M from '../../core/model.js';
 
 const LEGACY = G.COSMETICS.filter((c) => c.legacy).map((c) => c.id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -44,13 +46,20 @@ export function interact(h) {
   if (!h) return null;
   if (h.type === 'actor') world.poke(h.actor);
   else if (h.type === 'lantern') setPrefs({ villageLightsOff: world.toggleLight(h.lantern.id) });
-  else if (h.type === 'building') {
+  else if (h.type === 'scenery') {
+    world.touchScenery(h);
+    return null;
+  } else if (h.type === 'building') {
     const b = h.building;
-    if (b.type.startsWith('house') || b.type === 'tavern' || b.type === 'tower' || b.type === 'windmill') {
-      if (env.n > 0.3) setPrefs({ villageLightsOff: world.toggleLight(b.id) });
+    if (b.type.startsWith('house')) {
+      // 0.9: потревожили дом — жители выбегают
+      world.disturb(b);
       const c = world.chimney(b);
       if (c) world.burst(c.x, c.y, c.z, 'smoke', 4, 6);
+    } else if (b.type === 'tavern' || b.type === 'tower' || b.type === 'windmill') {
+      if (env.n > 0.3) setPrefs({ villageLightsOff: world.toggleLight(b.id) });
     } else if (b.type === 'fountain') world.burst(b.x + b.w / 2, b.y + b.h * 0.6, 14, 'drop', 22, 34);
+    else if (b.type === 'field') world.burst(b.x + b.w / 2, b.y + b.h / 2, 6, 'star', 10, 20);
     else if (b.type.endsWith('mine')) world.burst(b.door.x, b.door.y - 4, 8, b.type === 'gemmine' ? 'gem' : 'coin', 6, 26);
     else if (b.type === 'forge') world.burst(b.x + b.w * 0.7, b.base - 2, 8, 'spark', 12, 24);
   } else if (h.type === 'object') {
@@ -230,7 +239,7 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
       let camX;
       let camY;
       const d = cam.current.drag;
-      if (d && d.ghost && d.moved && cam.current.last && mode.current) {
+      if (d && (d.ghost || d.grabbed) && d.moved && cam.current.last && mode.current) {
         // тянем объект к краю экрана — карта сама едет следом
         const { x, y } = cam.current.last;
         const edge = 48;
@@ -240,9 +249,16 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
           const cur = cam.current.user || { x: g.camX, y: g.camY };
           cam.current.user = { x: cur.x + sx * 4, y: cur.y + sy * 4 };
           const p = toWorld(x, y);
-          setGhost(Math.floor(p.wx / TILE) - d.ghost.ox, Math.floor(p.wy / TILE) - d.ghost.oy);
+          if (d.ghost) setGhost(Math.floor(p.wx / TILE) - d.ghost.ox, Math.floor(p.wy / TILE) - d.ghost.oy);
         }
       }
+      // житель в «руке»: держим под пальцем/курсором и при движении камеры у края
+      const dd = cam.current.drag;
+      if (dd?.grabbed && cam.current.last) {
+        const p = toWorld(cam.current.last.x, cam.current.last.y);
+        world.holdAt(dd.actor, p.wx, p.wy);
+        g.hand = { x: p.wx, y: p.wy, closed: true };
+      } else g.hand = null;
       const tk = mode.current ? talk.current : null;
       if (tk && !tk.actor.hidden) {
         // разговор: камера плавно подъезжает к жителю (он — в верхней половине экрана, над окном диалога)
@@ -277,7 +293,7 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
       }
       const move = mode.current ? villageMove.current : null;
       renderer.render(ctx, world, {
-        W: g.W, H: g.H, R: g.R, camX: g.camX, camY: g.camY, phase: env.phase, n: env.n, style: env.style, letter: env.letter, marks, pointer, ghost: move,
+        W: g.W, H: g.H, R: g.R, camX: g.camX, camY: g.camY, phase: env.phase, n: env.n, style: env.style, letter: env.letter, marks, pointer, ghost: move, hand: g.hand,
       });
       updateBubbles();
     };
@@ -311,6 +327,13 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
     };
     // Экран «Деревня»: тянуть — двигать карту (или объект при перестановке), нажать — выбрать, два пальца — приближение.
     const ps = cam.current.pointers;
+    const capture = (id) => {
+      try {
+        canvas.setPointerCapture?.(id);
+      } catch {
+        // указатель уже отпущен — не страшно
+      }
+    };
     const down = (e) => {
       if (!mode.current) return;
       ps.set(e.pointerId, { x: e.clientX, y: e.clientY });
@@ -329,8 +352,32 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
         const top = m.ty + m.th - spriteTiles(m);
         if (tx >= m.tx - 1 && tx <= m.tx + m.tw && ty >= top && ty < m.ty + m.th + 1) ghost = { ox: tx - m.tx, oy: ty - m.ty };
       }
-      cam.current.drag = { x0: e.clientX, y0: e.clientY, cx: g.camX, cy: g.camY, moved: false, id: e.pointerId, ghost };
+      // житель под пальцем: потянуть или подержать — взять «рукой» (0.9)
+      let actor = null;
+      if (!m) {
+        const p = toWorld(e.clientX, e.clientY);
+        const h = world.hit(p.wx, p.wy);
+        if (h?.type === 'actor') actor = h.actor;
+      }
+      const d = { x0: e.clientX, y0: e.clientY, cx: g.camX, cy: g.camY, moved: false, id: e.pointerId, ghost, actor, grabbed: false };
+      cam.current.drag = d;
       cam.current.last = { x: e.clientX, y: e.clientY };
+      if (actor) {
+        clearTimeout(grabTimer);
+        grabTimer = setTimeout(() => {
+          if (cam.current.drag === d && !d.moved && !d.grabbed) grabActor(d, e.pointerId);
+        }, 380);
+      }
+    };
+    let grabTimer = 0;
+    const grabActor = (d, pointerId) => {
+      if (talk.current?.actor === d.actor) closeTalk();
+      if (!world.grab(d.actor)) return;
+      d.grabbed = true;
+      d.moved = true;
+      capture(pointerId);
+      canvas.style.cursor = 'none';
+      selectInVillage(null);
     };
     const move = (e) => {
       if (!mode.current) return;
@@ -347,10 +394,16 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
         const dx = (e.clientX - d.x0) / g.z;
         const dy = (e.clientY - d.y0) / g.z;
         if (Math.hypot(e.clientX - d.x0, e.clientY - d.y0) > 6 && !d.moved) {
-          d.moved = true;
-          canvas.setPointerCapture?.(e.pointerId);
+          if (d.actor) {
+            clearTimeout(grabTimer);
+            grabActor(d, e.pointerId);
+          } else {
+            d.moved = true;
+            capture(e.pointerId);
+          }
         }
         if (!d.moved) return;
+        if (d.grabbed) return; // держим — позицию обновляет кадр
         if (d.ghost) {
           const p = toWorld(e.clientX, e.clientY);
           setGhost(Math.floor(p.wx / TILE) - d.ghost.ox, Math.floor(p.wy / TILE) - d.ghost.oy);
@@ -360,7 +413,7 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
       if (e.pointerType === 'mouse') {
         const p = toWorld(e.clientX, e.clientY);
         const h = world.hit(p.wx, p.wy);
-        canvas.style.cursor = villageMove.current ? 'crosshair' : h && h.type !== 'tile' ? 'pointer' : 'grab';
+        canvas.style.cursor = villageMove.current ? 'crosshair' : h?.type === 'actor' ? 'grab' : h && h.type !== 'tile' ? 'pointer' : 'default';
       }
     };
     const up = (e) => {
@@ -376,6 +429,14 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
       const d = cam.current.drag;
       cam.current.drag = null;
       cam.current.last = null;
+      clearTimeout(grabTimer);
+      if (d?.grabbed) {
+        // отпустили — житель падает
+        world.drop(d.actor);
+        g.hand = null;
+        canvas.style.cursor = 'grab';
+        return;
+      }
       if (!mode.current || !d || d.moved) return;
       const p = toWorld(e.clientX, e.clientY);
       const m = villageMove.current;
@@ -407,6 +468,10 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
     };
     const cancel = (e) => {
       ps.delete(e.pointerId);
+      const d = cam.current.drag;
+      if (d?.grabbed) world.drop(d.actor);
+      g.hand = null;
+      clearTimeout(grabTimer);
       cam.current.drag = null;
       cam.current.pinch = null;
     };
@@ -488,7 +553,8 @@ export function VillageVisitor() {
   return html`<div class="village-visitor" ref=${box}>
     <canvas ref=${cv} aria-hidden="true"></canvas>
     <div class="village-bubble visitor-bubble" ref=${bubble} hidden></div>
-    <button class="visitor-hit" ref=${hit} aria-label="Погладить гостя" onClick=${() => world.pokeVisitor()}></button>
+    <button class="visitor-hit" ref=${hit} aria-label="Поговорить с гостем"
+      onClick=${() => (world.visitor?.actor ? openTalk(world.visitor.actor) : world.pokeVisitor())}></button>
   </div>`;
 }
 
@@ -502,7 +568,11 @@ export function VillageHost({ route }) {
   const tz = data.settings?.timeZone || 'UTC';
   const owned = useMemo(() => ownedVillage(data), [store.version]);
   const objects = useMemo(() => villageObjects(data), [store.version]);
-  const keepers = useMemo(() => keepersOf(data, skillsNow()), [store.version]);
+  // хранители и их невыполненные задачи (на сегодня и просроченные) — «!» над головой, стучат в экран только они
+  const keepers = useMemo(() => {
+    const alerts = listAlerts(data, store.now.today, store.now.time);
+    return keepersOf(data, skillsNow()).map((k) => ({ ...k, alert: alerts.get(k.listId) || 0 }));
+  }, [store.version, store.now.today, store.now.time]);
   const legacy = useMemo(() => legacyOwned(data), [store.version]);
   const mood = useMemo(() => happiness(data, tz, store.now.today), [store.version, store.now.today]);
   const exp = useMemo(() => G.experience(data), [store.version]);
@@ -539,5 +609,18 @@ export function VillageHost({ route }) {
   if (!on) return null;
   return html`
     ${full || p.villageBackdrop !== false ? html`<${VillageBackdrop} interactive=${full} dim=${dim}/>` : null}
-    ${motion && p.visitors !== false ? html`<${VillageVisitor}/>` : null}`;
+    ${motion && p.visitors !== false ? html`<${VillageVisitor}/>` : null}
+    ${!full && talk.current ? html`<div class="village-bottom talking village-talk-global"><${VillageDialog}/></div>` : null}`;
+}
+
+/** Невыполненные задачи по спискам: на сегодня (дата, дедлайн, «главное», повтор) и просроченные. */
+export function listAlerts(data, today, time) {
+  const out = new Map();
+  for (const t of data.tasks.values()) {
+    if (t.deletedAt || t.trashedAt || t.status !== 'active') continue;
+    const due = S.isOverdue(t, today, time) || S.plannedDate(t, today) === today || t.deadlineDate === today || t.focusDate === today;
+    if (!due) continue;
+    for (const id of M.taskListIds(t)) out.set(id, (out.get(id) || 0) + 1);
+  }
+  return out;
 }

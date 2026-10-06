@@ -4,6 +4,7 @@
 
 import { byOrder } from './order.js';
 import { daysBetween, localDateOf } from './dates.js';
+import * as RP from './repeat.js';
 import { SOON_DEADLINE_DAYS, LIMITS } from '../config.js';
 
 export const MAX_DEPTH = LIMITS.maxDepth; // уровней вложенности: задача → подзадача → … (4 уровня всего)
@@ -148,10 +149,19 @@ export function deadlinePassed(t, today, time) {
   return t.deadlineDate === today && !!t.deadlineTime && t.deadlineTime <= time;
 }
 
-/** Просрочена (TZ §7.7). Повторы появятся на этапе 4. */
+/** Просрочена (TZ §7.7). Повторяющаяся — если её текущий экземпляр раньше сегодняшнего дня (DATA_FORMAT §5.4). */
 export function isOverdue(t, today, time) {
-  if (!isActive(t) || t.repeat) return false;
+  if (!isActive(t)) return false;
+  if (t.repeat) {
+    const d = RP.dueDate(t, today);
+    return !!d && d < today;
+  }
   return deadlinePassed(t, today, time) || (!!t.scheduledDate && t.scheduledDate < today);
+}
+
+/** Дата, на которую задача запланирована: своя дата, а у повторяющейся — текущий экземпляр. */
+export function plannedDate(t, today) {
+  return t.repeat ? RP.dueDate(t, today) : t.scheduledDate || null;
 }
 
 const prioRank = (data, t) => {
@@ -204,8 +214,17 @@ export function todayView(data, today, time, nowMs = Date.now(), exactDay = fals
       continue;
     }
     if (t.focusDate && t.focusDate < today) v.yesterdayFocus.push(t);
-    const overdue = !exactDay && isOverdue(t, today, time);
-    const forToday = t.scheduledDate === today || t.deadlineDate === today;
+    let overdue;
+    let forToday;
+    if (t.repeat) {
+      // повтор: экземпляр на этот день (на другом дне недели — по правилу), просрочен — если текущий раньше сегодня
+      const due = exactDay ? null : RP.dueDate(t, today, tz);
+      overdue = !exactDay && !!due && due < today;
+      forToday = exactDay ? RP.matches(t.repeat, today) && !['done', 'skipped'].includes(t.occurrences?.[today]?.state) : due === today;
+    } else {
+      overdue = !exactDay && isOverdue(t, today, time);
+      forToday = t.scheduledDate === today || t.deadlineDate === today;
+    }
     if (isChore(data, t)) {
       if (overdue || forToday) v.chores.push(t);
     } else if (overdue) {
@@ -280,8 +299,15 @@ export const isInboxRoot = (data, t) => isRoot(data, t) && taskLists(data, t).le
 /** «Входящие»: активные корневые задачи без списков. Подзадачи показываются деревом под родителем. */
 export function inboxView(data) {
   const r = [];
-  for (const t of data.tasks.values()) if (isActive(t) && isInboxRoot(data, t)) r.push(t);
+  for (const t of data.tasks.values()) if (isActive(t) && !t.repeat && isInboxRoot(data, t)) r.push(t);
   return r.sort(byOrder);
+}
+
+/** Вкладка «Повторяющиеся» во «Входящих» (0.9): все живые повторяющиеся задачи из любых списков — по ближайшей дате. */
+export function repeatingView(data, today) {
+  const r = [];
+  for (const t of data.tasks.values()) if (isAlive(t) && !t.trashedAt && t.repeat) r.push({ t, d: t.status === 'done' ? '9999' : RP.dueDate(t, today, data.settings.timeZone) || '9998' });
+  return r.sort((a, b) => (a.d < b.d ? -1 : a.d > b.d ? 1 : a.t.title.localeCompare(b.t.title, 'ru'))).map((x) => x.t);
 }
 
 /** Корни дерева в списке: члены списка, чей родитель не состоит в этом же списке. */
