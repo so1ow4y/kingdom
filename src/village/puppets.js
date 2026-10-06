@@ -340,7 +340,7 @@ export function drawCharacter(g, kind, pose) {
 }
 
 /** Высота персонажа в «пикселях» (для пузырей и попадания кликом). */
-export const charHeight = (kind) => ({ cat: 9, kitten: 8, fox: 9, slime: 6, shroom: 8, ghost: 11, spider: 5, dragon: 14, witch: 21 }[kind] || 15);
+export const charHeight = (kind) => ({ cat: 9, kitten: 8, fox: 9, slime: 6, shroom: 8, ghost: 11, spider: 5, dragon: 14, witch: 22 }[kind] || 16);
 
 /** Эмоция над головой: сердце, «!», нота, звезда, «Z», монета, изумруд. */
 export function drawEmote(ctx, x, y, kind, u = 1) {

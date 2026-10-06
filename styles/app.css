@@ -1301,3 +1301,64 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
   .ds-day b { font-size: 16px; }
   .village-head.hud .vh-actions .btn { padding-inline: 10px; }
 }
+
+/* ---------- Навыки списков (обновление 0.8) ---------- */
+.skill-badge { display: inline-flex; align-items: center; gap: 4px; flex: none; padding: 1px 8px; border-radius: 999px; border: 1px solid color-mix(in srgb, var(--accent) 32%, transparent);
+  background: color-mix(in srgb, var(--accent) 12%, var(--surface)); color: var(--accent); font-size: 12px; font-weight: 700; line-height: 18px; font-variant-numeric: tabular-nums; vertical-align: middle; white-space: nowrap; }
+.skill-badge b { font-family: Georgia, "Times New Roman", serif; font-weight: 700; color: #c8901a; letter-spacing: .03em; }
+.skill-badge.prestige b + span::before { content: '·'; margin-right: 4px; opacity: .6; }
+.skill-badge.max { border-color: #e8b440; background: linear-gradient(135deg, #fff1c8, #f6d270); color: #6a4a00; }
+.skill-badge.max b { color: #8a5a00; }
+:root[data-theme="dark"] .skill-badge b { color: #f2c84a; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .skill-badge b { color: #f2c84a; } }
+.skill-badge.in-title { margin-left: 6px; font-size: 13px; vertical-align: 3px; }
+.list-row .skill-badge { margin-left: 8px; }
+.skill-bar { margin: 0 0 10px; padding: 10px 12px; border-radius: 12px; border: 1px solid color-mix(in srgb, var(--list-color, var(--accent)) 28%, transparent);
+  background: color-mix(in srgb, var(--list-color, var(--accent)) 8%, var(--surface)); }
+.list-expanded .skill-bar { margin: 4px 0 10px; }
+.sb-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 14px; }
+.sb-title { display: inline-flex; align-items: center; gap: 6px; font-weight: 600; }
+.sb-next { color: var(--muted); font-size: 13px; text-align: right; }
+.sb-track { height: 8px; margin: 7px 0 5px; border-radius: 4px; overflow: hidden; background: color-mix(in srgb, var(--list-color, var(--accent)) 14%, var(--surface-2)); }
+.sb-track i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, color-mix(in srgb, var(--list-color, var(--accent)) 55%, #fff), var(--list-color, var(--accent))); transition: width .5s ease; }
+.skill-bar.max .sb-track i { background: linear-gradient(90deg, #f6d270, #e8a020); }
+.sb-foot { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 6px 10px; }
+.sb-prestige { box-shadow: 0 0 0 2px #f2c84a55; }
+.skill-toast { top: calc(var(--dock-top, 0px) + 160px); }
+.prio-xp { width: 64px; }
+
+/* ---------- Разговор «как в новелле» (обновление 0.8) ---------- */
+.village-bottom.talking { max-width: 860px; }
+.app.village-mode .village-bottom > .vn-dialog { pointer-events: auto; }
+.vn-dialog { position: relative; display: flex; align-items: flex-end; }
+.vn-portrait { position: relative; z-index: 1; flex: none; width: 176px; height: 176px; margin-right: -22px; filter: drop-shadow(0 8px 16px rgba(0, 0, 0, .35)); animation: vn-bob 3.2s ease-in-out infinite; }
+.vn-portrait canvas { display: block; width: 100%; height: 100%; image-rendering: crisp-edges; image-rendering: pixelated; }
+.vn-box { position: relative; flex: 1; min-width: 0; padding: 18px 16px 12px 34px; border-radius: 16px; border: 2px solid color-mix(in srgb, var(--vn-color) 60%, transparent);
+  background: color-mix(in srgb, var(--surface) 93%, transparent); box-shadow: var(--shadow-lg); -webkit-backdrop-filter: blur(8px); backdrop-filter: blur(8px); }
+.vn-name { position: absolute; top: -15px; left: 26px; display: flex; align-items: center; gap: 8px; max-width: calc(100% - 80px); padding: 4px 12px; border-radius: 10px;
+  background: var(--vn-color); color: #fff; font-size: 15px; box-shadow: var(--shadow); text-shadow: 0 1px 2px rgba(0, 0, 0, .35); }
+.vn-name small { overflow: hidden; font-size: 12px; opacity: .9; white-space: nowrap; text-overflow: ellipsis; }
+.vn-hearts { flex: none; color: #ffd6e0; font-size: 12px; letter-spacing: 1px; }
+.vn-name .skill-badge { border-color: rgba(255, 255, 255, .4); background: rgba(255, 255, 255, .18); color: #fff; text-shadow: none; }
+.vn-name .skill-badge b { color: #ffe08a; }
+.vn-close { position: absolute; top: 4px; right: 4px; }
+.vn-text { min-height: 3.2em; margin: 8px 28px 8px 0; font-size: 16px; line-height: 1.5; white-space: pre-wrap; cursor: pointer; }
+.vn-more { display: inline-block; margin-left: 6px; color: var(--vn-color); font-size: 12px; animation: vn-blink 1s steps(2) infinite; }
+.vn-choices { display: grid; grid-template-columns: repeat(auto-fill, minmax(210px, 1fr)); gap: 6px; }
+.vn-choice { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); font-size: 14.5px; text-align: left; transition: border-color .15s, transform .15s; }
+.vn-choice:hover, .vn-choice:focus-visible { border-color: var(--vn-color); transform: translateX(3px); }
+.vn-num { display: grid; flex: none; place-items: center; width: 22px; height: 22px; border-radius: 6px; background: color-mix(in srgb, var(--vn-color) 22%, transparent); color: var(--vn-color); font-size: 12px; font-weight: 700; }
+.vn-next { display: block; margin-left: auto; padding: 4px 10px; border: 0; background: none; color: var(--muted); font-size: 13px; }
+@keyframes vn-bob { 50% { transform: translateY(-4px); } }
+@keyframes vn-blink { 50% { opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .vn-portrait, .vn-more { animation: none; } }
+@media (max-width: 600px) {
+  .vn-dialog { padding-top: 96px; }
+  .vn-portrait { position: absolute; left: 0; bottom: calc(100% - 118px); width: 128px; height: 128px; margin: 0; }
+  .vn-box { padding: 22px 12px 10px 12px; }
+  .vn-name { left: 120px; max-width: calc(100% - 126px); flex-wrap: wrap; row-gap: 0; font-size: 14px; }
+  .vn-text { font-size: 15px; margin-right: 0; }
+  .vn-choices { grid-template-columns: 1fr 1fr; gap: 5px; }
+  .vn-choice { gap: 6px; padding: 7px 8px; font-size: 13.5px; line-height: 1.25; }
+  .vn-num { width: 18px; height: 18px; font-size: 11px; }
+}

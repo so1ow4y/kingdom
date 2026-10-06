@@ -14,6 +14,7 @@ import { useLocal } from '../hooks.js';
 import { store, openSheet } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
+import { SkillBadge, SkillBar } from '../components/Skills.js';
 
 const SECTIONS = [
   ['scheduled', 'Запланировано', 'Порядок здесь по дате — можно вложить или вынести'],
@@ -42,6 +43,7 @@ function ListRow({ list, count, handle = null, reorder = false, onUp, onDown, op
         <i class="list-color" style=${{ background: list ? list.color : 'var(--muted)' }}></i>
         <span class="list-emoji">${list ? list.emoji || '•' : '📥'}</span>
         <span class="list-name">${list ? list.name : 'Входящие'}</span>
+        ${list ? html`<${SkillBadge} listId=${list.id}/>` : null}
         <span class="list-count">${count || ''}</span>
       <//>
       ${list && !reorder ? html`<button class="icon-btn" title="Изменить список" aria-label=${'Изменить список ' + list.name}
@@ -81,6 +83,7 @@ function ExpandedList({ listId }) {
   const name = inbox ? 'Входящие' : list?.name || '';
   return html`
     <div class="list-expanded">
+      ${list ? html`<${SkillBar} list=${list}/>` : null}
       ${total ? parts : html`<${EmptyDrop} zone=${'exp:' + listId + ':empty'}
         cfg=${inbox ? { ...INBOX_ZONE, crossList: true, manual: false } : { manual: false, listId, crossList: true, accepts: () => false }}
         text=${inbox ? 'Входящие пусты — перетащи сюда задачу из списка' : 'Задач нет — перетащи сюда задачу из другого списка'}/>`}
@@ -155,6 +158,7 @@ export function ListScreen({ listId }) {
     <${DragScope} className="screen list-screen" key=${listId}>
       <div style=${{ '--list-color': list.color }}>
         ${list.archived ? html`<p class="hint warn">Список в архиве: его задачи не показываются в «Сегодня».</p>` : null}
+        <${SkillBar} list=${list}/>
         ${empty ? html`<${Empty}>В списке нет активных задач. Нажми «+», чтобы добавить.<//>` : null}
         ${SECTIONS.map(([key, title, autoReason]) => (key === 'done'
           ? (v.doneCount ? section(key, title, autoReason, { collapsible: true, defaultOpen: false, storageKey: 'list.done.' + listId }) : null)

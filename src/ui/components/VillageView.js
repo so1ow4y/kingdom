@@ -17,6 +17,9 @@ import { charHeight } from '../../village/puppets.js';
 import { getPrefs, setPrefs, SCHEMES } from '../prefs.js';
 import { useMedia, readLocal } from '../hooks.js';
 import { getFocus } from '../../store/focus.js';
+import { keepersOf } from '../../village/keepers.js';
+import { skillsNow } from './Skills.js';
+import { openTalk, closeTalk, talk } from './VillageDialog.js';
 
 const LEGACY = G.COSMETICS.filter((c) => c.legacy).map((c) => c.id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -133,7 +136,7 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
   const wrap = useRef(null);
   const cv = useRef(null);
   const layer = useRef(null);
-  const geo = useRef({ z: 2, dpr: 1, W: 0, H: 0, camX: 0, camY: 0, override: null, raw: null });
+  const geo = useRef({ z: 2, dpr: 1, R: 1, W: 0, H: 0, camX: 0, camY: 0, override: null, raw: null });
   const cam = useRef({ user: null, drag: null, pinch: null, pointers: new Map(), last: null });
   const mode = useRef(interactive);
   mode.current = interactive;
@@ -158,13 +161,15 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
       const d = z * dpr;
       const W = Math.ceil((iw * dpr) / d);
       const H = Math.ceil((ih * dpr) / d);
-      if (g.z === z && g.W === W && g.H === H && g.dpr === dpr) return;
+      // 0.8: холст вдвое подробнее мира, если на пиксель деревни приходится хотя бы 2 пикселя экрана (для чиби)
+      const R = d >= 2 ? 2 : 1;
+      if (g.z === z && g.W === W && g.H === H && g.dpr === dpr && g.R === R) return;
       const cx = g.camX + g.W / 2;
       const cy = g.camY + g.H / 2;
       const had = g.W > 0;
-      Object.assign(g, { z, dpr, W, H });
-      canvas.width = W;
-      canvas.height = H;
+      Object.assign(g, { z, dpr, W, H, R });
+      canvas.width = W * R;
+      canvas.height = H * R;
       canvas.style.width = (W * d) / dpr + 'px';
       canvas.style.height = (H * d) / dpr + 'px';
       if (had && cam.current.user) cam.current.user = { x: cx - W / 2, y: cy - H / 2 };
@@ -238,6 +243,14 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
           setGhost(Math.floor(p.wx / TILE) - d.ghost.ox, Math.floor(p.wy / TILE) - d.ghost.oy);
         }
       }
+      const tk = mode.current ? talk.current : null;
+      if (tk && !tk.actor.hidden) {
+        // разговор: камера плавно подъезжает к жителю (он — в верхней половине экрана, над окном диалога)
+        const cur = cam.current.user || { x: g.camX, y: g.camY };
+        const tx = tk.actor.x - g.W / 2;
+        const ty = tk.actor.y - g.H * 0.36;
+        cam.current.user = { x: cur.x + (tx - cur.x) * 0.12, y: cur.y + (ty - cur.y) * 0.12 };
+      }
       if (cam.current.user && mode.current) {
         camX = clamp(cam.current.user.x, B.x[0], B.x[1]);
         camY = clamp(cam.current.user.y, B.y[0], B.y[1]);
@@ -264,7 +277,7 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
       }
       const move = mode.current ? villageMove.current : null;
       renderer.render(ctx, world, {
-        W: g.W, H: g.H, camX: g.camX, camY: g.camY, phase: env.phase, n: env.n, style: env.style, letter: env.letter, marks, pointer, ghost: move,
+        W: g.W, H: g.H, R: g.R, camX: g.camX, camY: g.camY, phase: env.phase, n: env.n, style: env.style, letter: env.letter, marks, pointer, ghost: move,
       });
       updateBubbles();
     };
@@ -370,7 +383,15 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
         setGhost(Math.floor(p.wx / TILE) - Math.floor(m.tw / 2), Math.floor(p.wy / TILE) - Math.floor(m.th / 2));
         return;
       }
-      selectInVillage(interact(world.hit(p.wx, p.wy)));
+      const h = world.hit(p.wx, p.wy);
+      if (h?.type === 'actor') {
+        // житель — разговор «как в новелле» (0.8)
+        selectInVillage(null);
+        openTalk(h.actor);
+        return;
+      }
+      if (talk.current) closeTalk();
+      selectInVillage(interact(h));
     };
     const wheel = (e) => {
       if (!mode.current) return;
@@ -408,6 +429,7 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
       cam.current.user = null; // на вкладках камера снова гуляет сама
       if (villageSel.current) villageSel.current = null;
       if (villageMove.current) villageMove.current = null;
+      if (talk.current) closeTalk();
     }
   }, [interactive]);
 
@@ -431,8 +453,9 @@ export function VillageVisitor() {
     const W = 30;
     const H = 40;
     const S = 6; // гость ближе к «стеклу» — крупнее жителей деревни (размер холста в CSS: 180 × 240)
-    canvas.width = W;
-    canvas.height = H;
+    canvas.width = W * 2; // 0.8: вдвое подробнее — для чиби
+    canvas.height = H * 2;
+    ctx.setTransform(2, 0, 0, 2, 0, 0);
     const draw = () => {
       const v = world.visitor;
       const el = box.current;
@@ -479,6 +502,7 @@ export function VillageHost({ route }) {
   const tz = data.settings?.timeZone || 'UTC';
   const owned = useMemo(() => ownedVillage(data), [store.version]);
   const objects = useMemo(() => villageObjects(data), [store.version]);
+  const keepers = useMemo(() => keepersOf(data, skillsNow()), [store.version]);
   const legacy = useMemo(() => legacyOwned(data), [store.version]);
   const mood = useMemo(() => happiness(data, tz, store.now.today), [store.version, store.now.today]);
   const exp = useMemo(() => G.experience(data), [store.version]);
@@ -502,7 +526,7 @@ export function VillageHost({ route }) {
   });
   useEffect(() => {
     configureVillage({
-      owned, objects, legacy, flavor: flavorOf(villageStyle(scheme)), mood: mood.value, focus: !!focus && !focus.pausedAt,
+      owned, objects, keepers, legacy, flavor: flavorOf(villageStyle(scheme)), mood: mood.value, focus: !!focus && !focus.pausedAt,
       visitors: on && motion && p.visitors !== false, lightsOff: p.villageLightsOff || [],
     });
   });

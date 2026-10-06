@@ -6,6 +6,7 @@
 // тёплые огни окон и фонарей, потом частицы, светлячки, погода.
 
 import { painter, drawCharacter, drawEmote, charHeight } from './puppets.js';
+import { chibiSprite, lookKey, poseOf, LOOKS, CW, CH } from './chibi.js';
 import { TILE, T, rnd } from './map.js';
 import { SPRITE_H } from './world.js';
 
@@ -1097,8 +1098,9 @@ function drawParticles(c, world) {
 // ---------- Рендерер ----------
 
 /**
- * Рисует деревню в контекст видимого холста. view: { W, H, camX, camY, phase, n, style, letter }.
- * camX, camY — левый верхний угол экрана в пикселях карты.
+ * Рисует деревню в контекст видимого холста. view: { W, H, camX, camY, phase, n, style, letter, R }.
+ * camX, camY — левый верхний угол экрана в пикселях карты. R (0.8) — пикселей холста на пиксель деревни (1 или 2):
+ * при R = 2 люди-чиби рисуются вдвое мельче «пикселем», чем мир.
  */
 export class VillageRenderer {
   constructor() {
@@ -1142,6 +1144,8 @@ export class VillageRenderer {
     const H = v.H;
     const camX = Math.round(v.camX);
     const camY = Math.round(v.camY);
+    const RES = v.R || 1;
+    ctx.setTransform(RES, 0, 0, RES, 0, 0);
     const styleKey = `${flavor}|${st.roof}|${st.grass}|${v.letter}|${world.owned.has('v:flowers')}|${world.legacy.has('scene:web')}`;
     this.K = {
       st, style: st, flavor, pal: palette(st, flavor), world, letter: v.letter,
@@ -1245,8 +1249,23 @@ export class VillageRenderer {
           R(ctx, x, y - a.thread, 1, Math.max(0, a.thread - a.z - 4), '#e8e8f0');
           ctx.globalAlpha = 1;
         }
-        const g = painter(ctx, x, Math.round(y - a.z), a.dir, a.u, a.alpha);
-        drawCharacter(g, a.kind, { state: a.state, phase: a.phase, t: a.anim, night, happy: a.happy, squash: a.squash > 0.3, fire: a.fire });
+        const look = a.look || LOOKS[a.kind];
+        if (look) {
+          // чиби: спрайт в кэше, «пиксель» — половина пикселя деревни (у больших — целый)
+          if (!a.lk) a.lk = lookKey(look);
+          const s = chibiSprite(look, a.lk, poseOf(a, v.n), a.dir);
+          const fs = 0.5 * a.u;
+          const X = Math.round(a.x / fs) * fs - s.ax * fs;
+          const Y = Math.round((a.y - a.z) / fs) * fs - s.ay * fs;
+          ctx.globalAlpha = a.alpha;
+          ctx.imageSmoothingEnabled = RES * fs < 1;
+          ctx.drawImage(s.cv, X, Y, CW * fs, CH * fs);
+          ctx.imageSmoothingEnabled = false;
+          ctx.globalAlpha = 1;
+        } else {
+          const g = painter(ctx, x, Math.round(y - a.z), a.dir, a.u, a.alpha);
+          drawCharacter(g, a.kind, { state: a.state, phase: a.phase, t: a.anim, night, happy: a.happy, squash: a.squash > 0.3, fire: a.fire });
+        }
       }
       if (it.ghost) ctx.globalAlpha = 1;
     }
@@ -1293,6 +1312,7 @@ export class VillageRenderer {
     }
     ctx.restore();
     this.weather(ctx, world, v, flavor, camX, camY);
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
   }
 
   /** Спрайт постройки (огород, шахта, дом…) из кэша. */
@@ -1542,8 +1562,16 @@ export function drawVisitor(c, world, v) {
   }
   const y = v.H - 3 - Math.round(vis.y / 6);
   const dir = vis.stage === 'out' ? vis.side : -vis.side;
-  const g = painter(c, x, y, dir, v.u, 1);
-  drawCharacter(g, vis.kind, { state: vis.state, phase: vis.phase || 0, t: vis.anim || 0, happy: vis.stage === 'poked', night: v.n > 0.5 });
+  const look = vis.actor?.look || LOOKS[vis.kind];
+  if (look) {
+    const a = { state: vis.state, phase: vis.phase || 0, anim: vis.anim || 0, happy: vis.stage === 'poked', n: 0 };
+    const s = chibiSprite(look, lookKey(look), poseOf(a, v.n), dir);
+    const fs = 0.5 * v.u;
+    c.drawImage(s.cv, Math.round(x / fs) * fs - s.ax * fs, Math.round(y / fs) * fs - s.ay * fs, CW * fs, CH * fs);
+  } else {
+    const g = painter(c, x, y, dir, v.u, 1);
+    drawCharacter(g, vis.kind, { state: vis.state, phase: vis.phase || 0, t: vis.anim || 0, happy: vis.stage === 'poked', night: v.n > 0.5 });
+  }
   const hTop = y - charHeight(vis.kind) * v.u;
   if (vis.emote) drawEmote(c, x, hTop - 6, vis.emote, Math.max(1, v.u - 1));
   const kx = x + dir * 6 * v.u;

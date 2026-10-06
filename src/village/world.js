@@ -24,6 +24,7 @@ export const KINDS = {
   witch: { speed: 16, human: true },
   knight: { speed: 12, human: true },
   neko: { speed: 17, human: true },
+  keeper: { speed: 16, human: true }, // хранитель навыка списка (0.8, village/keepers.js)
   cat: { speed: 20, beast: true },
   kitten: { speed: 28, beast: true },
   fox: { speed: 32, beast: true },
@@ -50,6 +51,7 @@ export const PHRASES = {
   knight: ['К службе готов!', 'Деревня под защитой.', 'Ох, тяжёлые латы.'],
   ghost: ['Бу!', 'У-у-у…', 'Не бойся.'],
   dragon: ['Ррр!', '*пых*', 'Я грозный. Наверное.'],
+  keeper: ['Сделаем ещё задачку?', 'Я тренируюсь!', 'Уровень растёт!', 'Привет!', 'Как продвигается?'],
 };
 const SAD = ['Скучновато…', 'Задачи копятся…', 'Эх…', 'Сделаешь что-нибудь?'];
 const HAPPY = ['Ура!', 'Какой день!', 'Мы растём!', 'Спасибо!'];
@@ -66,13 +68,14 @@ function newActor(id, kind, x, y, u) {
   };
 }
 
-/** Жители по покупкам: id предмета → вид персонажа. Базовый — странник. */
-export function residentsOf(owned) {
+/** Жители по покупкам: id предмета → вид персонажа. Базовый — странник. keepers — хранители списков (0.8). */
+export function residentsOf(owned, keepers = []) {
   const out = [{ id: 'base:wanderer', kind: 'wanderer', big: false }];
   for (const id of owned) {
     const it = villageItem(id);
     if (it?.kind === 'char') out.push({ id, kind: it.char, big: !!it.big, name: it.name });
   }
+  for (const k of keepers) if (k) out.push({ id: k.id, kind: 'keeper', big: false, name: k.name, look: k.look, listId: k.listId, gender: k.gender });
   return out;
 }
 
@@ -132,14 +135,15 @@ export class World {
    * Обновить мир под покупки, расстановку и стиль. Жители, что уже гуляют, остаются на местах (если место ещё проходимо).
    * objects — из core/village.js villageObjects; minCols/minRows — карта не меньше видимой области при отдалении.
    */
-  configure({ owned, objects = [], legacy = new Set(), flavor = 'classic', minCols = 0, minRows = 0, mood = 50, focus = false, visitors = true, lightsOff = null }) {
+  configure({ owned, objects = [], keepers = [], legacy = new Set(), flavor = 'classic', minCols = 0, minRows = 0, mood = 50, focus = false, visitors = true, lightsOff = null }) {
     this.mood = mood;
     this.focus = focus;
     this.visitors = visitors;
     if (lightsOff) this.lightsOff = new Set(lightsOff);
     const list = [...objects];
     if (owned.has('v:char:archer')) list.push({ key: 'virtual:target', place: 'target', x: null, y: null, virtual: true, level: 1 });
-    const key = [...owned].sort().join(',') + '|' + list.map((o) => `${o.key}:${o.place}:${o.level}:${o.x},${o.y}`).join(';') + '|' + [...legacy].sort().join(',') + '|' + flavor + '|' + minCols + 'x' + minRows;
+    const key = [...owned].sort().join(',') + '|' + list.map((o) => `${o.key}:${o.place}:${o.level}:${o.x},${o.y}`).join(';') + '|' + [...legacy].sort().join(',') + '|' + flavor + '|' + minCols + 'x' + minRows
+      + '|' + keepers.filter(Boolean).map((k) => `${k.id}:${k.name}:${JSON.stringify(k.look)}`).join(';');
     if (key === this.key) return false;
     this.key = key;
     this.owned = new Set(owned);
@@ -159,12 +163,18 @@ export class World {
       }
       this.shift = { dx: (this.shift?.dx || 0) + dx, dy: (this.shift?.dy || 0) + dy };
     }
-    const want = residentsOf(owned);
+    const want = residentsOf(owned, keepers);
     const keep = new Map(this.actors.map((a) => [a.id, a]));
     const plaza = this.map.spots.plaza;
     this.actors = want.map((r) => {
       const old = keep.get(r.id);
       if (old) {
+        if (r.look) {
+          old.look = r.look; // хранитель повзрослел или список перекрасили
+          old.lk = null;
+          old.name = r.name;
+        }
+        if (old.talking) return old; // идёт разговор — не трогаем
         if (old.task?.type === 'away') return old; // сейчас у экрана — вернётся сам
         const [tx, ty] = this.tileOf(old.x, old.y);
         if (!walkable(this.map, tx, ty)) this.placeNear(old, old.x, old.y);
@@ -181,6 +191,11 @@ export class World {
       const [tx, ty] = randomSpot(this.map, this.rand, plaza, 7);
       const a = newActor(r.id, r.kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE, r.big ? 2 : 1);
       a.name = r.name || 'Странник';
+      if (r.look) {
+        a.look = r.look;
+        a.listId = r.listId;
+        a.gender = r.gender;
+      }
       if (this.t > 1) {
         a.z = 50; // новый житель после покупки падает с неба в искрах
         this.burst(a.x, a.y, 30, 'spark', 16);
@@ -276,6 +291,10 @@ export class World {
     }
     for (const a of this.actors) {
       if (a.hidden || a.task?.type === 'away' || a.task?.type === 'leave') continue;
+      if (a.talking) {
+        this.emote(a, gems ? 'gem' : 'star', 2);
+        continue;
+      }
       if (a.state === 'sleep') this.emote(a, '!');
       if (['broom', 'float', 'flyhigh', 'climb'].includes(a.task?.type)) continue;
       a.queue = [];
@@ -340,6 +359,51 @@ export class World {
     this.emote(a, this.rand() < 0.6 ? 'heart' : 'note');
     const mood = this.mood < 30 ? SAD : this.mood > 75 ? HAPPY : [];
     this.say(a, this.pick([...(PHRASES[a.kind] || PHRASES.wanderer), ...mood]));
+  }
+
+  /** Разговор (0.8): житель останавливается и смотрит на нас, пока открыто окно диалога. */
+  talkTo(a) {
+    if (!a || a.hidden) return false;
+    for (const o of this.actors) if (o.talking && o !== a) this.release(o);
+    a.talking = true;
+    a.queue = [];
+    a.path = null;
+    a.say = null;
+    a.task = { type: 'pose', pose: 'idle', d: 1e9, t: 0, talk: true };
+    if (a.z <= 0) a.vz = 50;
+    this.emote(a, '!', 1.2);
+    return true;
+  }
+
+  release(a) {
+    if (!a) return;
+    a.talking = false;
+    if (a.task?.talk) a.task = null;
+  }
+
+  /** Жест в разговоре: помахать, подпрыгнуть, радость. */
+  gesture(a, kind) {
+    if (!a || a.hidden) return;
+    if (kind === 'wave') a.task = { type: 'pose', pose: 'wave', d: 1.4, t: 0, talk: true, then: 'idle' };
+    if (kind === 'jump' && a.z <= 0) a.vz = 80;
+    if (kind === 'heart') this.emote(a, 'heart', 2);
+    if (kind === 'sad') this.emote(a, 'sad', 2);
+    if (kind === 'star') this.emote(a, 'star', 2);
+  }
+
+  /** Новый уровень навыка или престиж: хранитель списка радуется. */
+  cheer(listId, big = false) {
+    const a = this.actors.find((x) => x.listId === listId && !x.hidden);
+    if (!a) return;
+    if (!a.talking) {
+      a.queue = [];
+      a.path = null;
+      a.task = { type: 'celebrate', d: big ? 3 : 1.8, jumps: 0, t: 0 };
+    }
+    a.happy = true;
+    this.emote(a, 'star', 2.5);
+    this.burst(a.x, a.y, 12, 'star', big ? 24 : 12, 30);
+    if (big) for (let i = 0; i < 3; i++) setTimeoutSafe(() => this.firework(a.x + (this.rand() - 0.5) * 80, a.y - 10, 60 + this.rand() * 30), i * 400);
   }
 
   /** Что под точкой карты: житель, фонарь, постройка (передние — первыми). */
@@ -478,6 +542,11 @@ export class World {
       return q.push({ type: 'float', tx: p.x, ty: p.y, d: 5 + r * 4 });
     }
     if (k === 'witch' && night > 0.55 && r < 0.7) return q.push({ type: 'broom', d: 10 + r * 8, cx: M.spots.plaza.x, cy: M.spots.plaza.y - 10 });
+    // хранитель навыка иногда «тренирует навык»: читает, рисует, играет — по роли
+    if (k === 'keeper' && night < 0.6 && r < 0.2) {
+      const p = spot(M.spots.plaza, 10);
+      return q.push(this.go(p.x, p.y), { type: 'work', d: 4 + r * 10 });
+    }
     if (k === 'spider' && r < 0.5 && M.trees.length) {
       const near = M.trees.filter((t) => Math.abs(t.x - a.x) < 140 && Math.abs(t.y - a.y) < 100 && t.y > M.village.y0 + 10);
       const t = near.length ? near[Math.floor(this.rand() * near.length)] : null;
@@ -672,7 +741,10 @@ export class World {
         state = T.pose;
         if (T.face != null) a.dir = T.face > a.x ? 1 : -1;
         if (T.ghostHide) a.alpha = Math.max(0, a.alpha - dt);
-        if (T.t > T.d) done = true;
+        if (T.t > T.d) {
+          if (T.then && a.talking) a.task = { type: 'pose', pose: T.then, d: 1e9, t: 0, talk: true };
+          else done = true;
+        }
         break;
       case 'greet': {
         const o = T.who;
@@ -932,10 +1004,11 @@ export class World {
   /** Отправить жителя к экрану (по тропинке в лес на юг). Можно вызвать вручную; иначе — само раз в несколько минут. */
   sendVisitor(who = null) {
     if (this.visitor || this.actors.some((x) => x.task?.type === 'leave')) return false;
-    const pool = this.actors.filter((a) => !a.hidden && !['inside', 'leave', 'away'].includes(a.task?.type) && a.kind !== 'ghost' && a.kind !== 'spider');
+    const pool = this.actors.filter((a) => !a.hidden && (!a.talking || a === who) && !['inside', 'leave', 'away'].includes(a.task?.type) && a.kind !== 'ghost' && a.kind !== 'spider');
     if (!pool.length) return false;
     const grounded = pool.filter((x) => x.z <= 0);
     const a = who && pool.includes(who) ? who : this.pick(grounded.length ? grounded : pool);
+    this.release(a);
     if (a.z > 0 || ['broom', 'flyhigh', 'climb'].includes(a.task?.type)) {
       this.placeNear(a, a.x, a.y);
       a.z = 0;

@@ -13,6 +13,7 @@ import {
   villageOn, villageSel, selectInVillage, villageMove, startMove, cancelMove, findObject, zoomRange, snapZoom, viewZoom,
 } from '../components/VillageView.js';
 import { FOOT, nearestPlace } from '../../village/map.js';
+import { VillageDialog, talk, closeTalk } from '../components/VillageDialog.js';
 import { DecorationSettings } from '../components/Decorations.js';
 import { world, env, setEnv } from '../../village/runtime.js';
 import { getPrefs, setPrefs } from '../prefs.js';
@@ -312,12 +313,14 @@ export function VillageScreen() {
     setView(!view);
   };
   const moving = !!villageMove.current;
+  const talking = !!talk.current;
+  useEffect(() => () => closeTalk(), []);
   return html`<div class="screen village-screen">
     <${Mood} mood=${mood} bal=${bal} gems=${gems} compact onView=${toggle} viewOpen=${view}/>
-    ${view ? html`<${ViewControls}/>` : null}
-    <div class="village-bottom">
-      ${moving ? html`<${MoveBar}/>` : html`<${Selected} sel=${villageSel.current} bal=${bal}/>`}
-      ${moving || villageSel.current ? null : html`<p class="village-hint">Нажми на жителя, постройку или пустую клетку. Потяни — прокрутка, щипок или Ctrl + колесо — приближение.</p>`}
+    ${view && !talking ? html`<${ViewControls}/>` : null}
+    <div class=${'village-bottom' + (talking ? ' talking' : '')}>
+      ${talking ? html`<${VillageDialog}/>` : moving ? html`<${MoveBar}/>` : html`<${Selected} sel=${villageSel.current} bal=${bal}/>`}
+      ${talking || moving || villageSel.current ? null : html`<p class="village-hint">Нажми на жителя — поговорить; на постройку или пустую клетку — стройка. Потяни — прокрутка, щипок или Ctrl + колесо — приближение.</p>`}
     </div>
   </div>`;
 }

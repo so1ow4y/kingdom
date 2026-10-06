@@ -24,4 +24,5 @@ await run([
   './media.test.js',
   './village.test.js',
   './villageWorld.test.js',
+  './skills.test.js',
 ]);

@@ -53,9 +53,9 @@ function appData() {
     deviceId,
     data: {
       settings: [defaultSettings('Europe/Moscow')],
-      lists: [...defaultLists(), l],
+      lists: [...defaultLists().map((x, i) => (i === 1 ? touch(x, { prestige: 2, prestigeXp: 22000 }, c) : x)), l], // 0.8: престиж навыка
       tasks: [t1, t2, t3, t4],
-      priorities: defaultPriorities(),
+      priorities: defaultPriorities().map((p, i) => (i === 2 ? touch(p, { xp: 25 }, c) : p)), // 0.8: опыт навыка
       rewards: [newReward({ name: 'Пицца', emoji: '🍕', price: 300, repeatable: true, order: 'a0' }, c)],
       coinEvents: [
         purchaseEvent({ price: 300, title: 'Пицца' }, c),

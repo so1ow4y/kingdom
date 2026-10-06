@@ -483,10 +483,13 @@ export function defaultPriorities() {
   }));
 }
 
-export function newPriority({ name, color, coins, order }, ctx) {
+export function newPriority({ name, color, coins, order, xp = null }, ctx) {
   const n = normalizeListName(name);
   if (!n) throw new Error('newPriority: пустое название');
-  return create(uuidv7(ctx.now), { name: n, color, coins: Math.max(0, Math.round(coins) || 0), order, archived: false }, PRIORITY_FIELDS, ctx);
+  const fields = { name: n, color, coins: Math.max(0, Math.round(coins) || 0), order, archived: false };
+  // опыт навыка (0.8) — необязательное поле: без него берётся значение по умолчанию (core/skills.js)
+  if (Number.isFinite(xp)) fields.xp = Math.max(0, Math.min(100000, Math.round(xp)));
+  return create(uuidv7(ctx.now), fields, fields.xp != null ? [...PRIORITY_FIELDS, 'xp'] : PRIORITY_FIELDS, ctx);
 }
 
 export function newReward({ name, emoji, price, repeatable, order }, ctx) {

@@ -19,6 +19,7 @@ import { ShopScreen } from './screens/Shop.js';
 import { StartScreen, RedirectingScreen } from './components/Sync.js';
 import { Dock } from './components/Dock.js';
 import { AchievementToast } from './components/Decorations.js';
+import { SkillToast, SkillBadge } from './components/Skills.js';
 import { VillageHost, villageOn } from './components/VillageView.js';
 import { FocusBar } from './components/Focus.js';
 import { VillageScreen } from './screens/Village.js';
@@ -80,7 +81,7 @@ function TopBar({ route }) {
   return html`
     <header class="topbar">
       ${back ? html`<button class="icon-btn back-btn" onClick=${() => goBack(fallback)} aria-label="Назад"><${Icon} name="back"/></button>` : null}
-      <h1 class="topbar-title">${titleFor(route)}</h1>
+      <h1 class="topbar-title">${titleFor(route)}${route.name === 'list' ? html` <${SkillBadge} listId=${route.param} className="in-title"/>` : null}</h1>
       ${route.name === 'list' && S.liveList(store.data, route.param) && !store.ui.readOnly ? html`
         <button class="icon-btn" onClick=${() => openSheet('listEditor', { listId: route.param })} aria-label="Изменить список" title="Изменить список">
           <${Icon} name="edit" size=${20}/></button>` : null}
@@ -210,7 +211,7 @@ export function App() {
     <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + dockPosition(!desktop)
       + (base.name === 'village' && villageOn() ? ' village-mode' : '')
       + (villageOn() && (base.name === 'village' || getPrefs().villageBackdrop !== false) ? ' village-bg-on' : '')}>
-      <${VillageHost} route=${base}/><${AchievementToast}/><${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
+      <${VillageHost} route=${base}/><${AchievementToast}/><${SkillToast}/><${Dock} route=${base} counts=${counts} onAdd=${add} phone=${!desktop}/>
       <div class="main-col">
         ${base.name !== 'task' ? html`<${TopBar} route=${base}/>` : null}
         <${FocusBar} sticky=${base.name !== 'task'}/>

@@ -88,4 +88,6 @@ onVillage((type, p) => {
   if (type === 'focus-start') world.focusStart();
   else if (type === 'focus-done') world.focusDone(p.gems || 0);
   else if (type === 'focus-fail') world.focusFailed();
+  else if (type === 'levelup') world.cheer(p.listId, !!p.prestige);
+  else if (type === 'prestige') world.cheer(p.listId, true);
 });

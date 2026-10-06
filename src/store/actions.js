@@ -23,6 +23,7 @@ import { APP_VERSION } from '../version.js';
 import { tokenValid } from '../google/auth.js';
 import { planningDate } from '../core/planning.js';
 import * as V from '../core/village.js';
+import * as SK from '../core/skills.js';
 import { getFocus, setFocus, claimFocus, focusElapsed } from './focus.js';
 import { buildMap, suggestPlace } from '../village/map.js';
 import { emitVillage } from '../village/bus.js';
@@ -320,7 +321,10 @@ export async function toggleComplete(id) {
   }
   if (await commit(changes)) {
     const coins = changes.filter((c) => c.coll === 'coinEvents').reduce((s, c) => s + (c.next.amount | 0), 0);
-    offerUndo(coins && store.data.settings.gameEnabled ? `Выполнено · +${coins} 🪙` : 'Выполнено', changes);
+    // опыт навыков (0.8): каждому списку задачи — по приоритету
+    const xp = targets.reduce((s, x) => s + SK.xpOfPriority(store.data.priorities.get(x.priorityId)) * M.taskListIds(x).length, 0);
+    const game = store.data.settings.gameEnabled;
+    offerUndo(game ? ['Выполнено', coins ? `+${coins} 🪙` : '', xp ? `+${xp} опыта` : ''].filter(Boolean).join(' · ') : 'Выполнено', changes);
   }
 }
 
@@ -816,10 +820,10 @@ export async function createListAndAdd(taskId, name) {
 
 // ---------- Приоритеты (п. 2.6, 2.9) ----------
 
-export async function createPriority({ name, color, coins }) {
+export async function createPriority({ name, color, coins, xp = null }) {
   const all = [...S.sortedPriorities(store.data), ...S.sortedPriorities(store.data, { archived: true })]
     .sort((a, b) => (a.order < b.order ? -1 : 1));
-  const p = M.newPriority({ name, color, coins, order: keyAfterSafe(all.at(-1)?.order) }, ctx());
+  const p = M.newPriority({ name, color, coins, xp, order: keyAfterSafe(all.at(-1)?.order) }, ctx());
   return (await commit([{ coll: 'priorities', prev: undefined, next: p }])) ? p : null;
 }
 
@@ -853,6 +857,35 @@ export async function deletePriority(id) {
 
 export async function updateList(id, changes) {
   return commit([change('lists', id, (l) => M.touch(l, changes, ctx()))]);
+}
+
+/**
+ * Повысить престиж навыка списка (0.8): только на 100-м уровне. Уровень снова 1, престиж +1; весь накопленный опыт
+ * «тратится» (prestigeXp = весь опыт списка на этот момент). Синхронизируется как обычные поля списка.
+ */
+export async function prestigeList(id) {
+  const l = getList(id);
+  if (!l || l.deletedAt) return false;
+  const s = SK.skillOf(store.data, l);
+  if (!s.max) {
+    showSnackbar(`Престиж — на ${SK.MAX_LEVEL}-м уровне навыка`);
+    return false;
+  }
+  const next = s.prestige + 1;
+  const ok = await confirm({
+    title: `Повысить престиж «${l.name}»?`,
+    text: `Навык станет ${SK.roman(next)} · 1: уровень начнётся заново, а престиж останется навсегда. Хранитель списка в деревне повзрослеет.`,
+    confirmLabel: `Престиж ${SK.roman(next)}`,
+  });
+  if (!ok) return false;
+  const cur = SK.skillOf(store.data, getList(id));
+  if (!cur.max) return false;
+  const done = await commit([change('lists', id, (x) => M.touch(x, { prestige: next, prestigeXp: cur.total }, ctx()))]);
+  if (done) {
+    showSnackbar(`✨ «${l.name}» — престиж ${SK.roman(next)}!`);
+    emitVillage('prestige', { listId: id, prestige: next });
+  }
+  return done;
 }
 
 export async function archiveList(id) {

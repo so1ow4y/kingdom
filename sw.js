@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.7.2';
+const VERSION = '0.8.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -31,6 +31,7 @@ const PRECACHE = [
   './src/core/retention.js',
   './src/core/selectors.js',
   './src/core/sessions.js',
+  './src/core/skills.js',
   './src/core/treeDrop.js',
   './src/core/village.js',
   './src/data/envelope.js',
@@ -78,11 +79,13 @@ const PRECACHE = [
   './src/ui/components/Section.js',
   './src/ui/components/Sheet.js',
   './src/ui/components/Sheets.js',
+  './src/ui/components/Skills.js',
   './src/ui/components/Sortable.js',
   './src/ui/components/Sync.js',
   './src/ui/components/TaskRow.js',
   './src/ui/components/TaskTree.js',
   './src/ui/components/TimeInput.js',
+  './src/ui/components/VillageDialog.js',
   './src/ui/components/VillageView.js',
   './src/ui/dayContext.js',
   './src/ui/hooks.js',
@@ -104,8 +107,12 @@ const PRECACHE = [
   './src/ui/theme.js',
   './src/version.js',
   './src/village/bus.js',
+  './src/village/chibi.js',
+  './src/village/dialogs.js',
   './src/village/draw.js',
+  './src/village/keepers.js',
   './src/village/map.js',
+  './src/village/portraits.js',
   './src/village/puppets.js',
   './src/village/runtime.js',
   './src/village/world.js',

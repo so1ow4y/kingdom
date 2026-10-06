@@ -447,6 +447,17 @@
               },
               "archived": {
                 "type": "boolean"
+              },
+              "prestige": {
+                "description": "0.8: сколько раз повышен престиж навыка списка. Необязательное поле.",
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 3999
+              },
+              "prestigeXp": {
+                "description": "0.8: сколько опыта навыка потрачено на престижи. Необязательное поле.",
+                "type": "integer",
+                "minimum": 0
               }
             }
           }
@@ -1173,6 +1184,12 @@
                 "pattern": "^#[0-9A-Fa-f]{6}$"
               },
               "coins": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 100000
+              },
+              "xp": {
+                "description": "0.8: опыт навыка списка за выполнение задачи с этим приоритетом. Необязательное поле (без него — значение по умолчанию).",
                 "type": "integer",
                 "minimum": 0,
                 "maximum": 100000
