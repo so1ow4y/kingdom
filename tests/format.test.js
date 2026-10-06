@@ -60,6 +60,7 @@ function appData() {
       coinEvents: [
         purchaseEvent({ price: 300, title: 'Пицца' }, c),
         purchaseEvent({ gems: 3, title: 'Смена дня и ночи', itemId: 'v:daynight' }, c), // 0.7: покупка за изумруды
+        purchaseEvent({ price: 120, title: 'Домик', itemId: 'v:house', x: -3, y: -8 }, c), // 0.7.2: место объекта деревни
         focusEvent({ coinEvents: new Map() }, { minutes: 25, taskId: t1.id, title: 'Бег' }, c), // 0.7: фокус-сессия
       ],
       media: [],

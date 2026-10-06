@@ -10,7 +10,7 @@ export const world = new World();
 /** Окружение кадра: время суток, стиль, цвет флагов. Обновляет ui/components/VillageView.js (VillageHost). */
 export const env = {
   mode: 'theme', dark: false, motion: true, phaseOverride: null, phase: 0.5, n: 0,
-  style: villageStyle('indigo'), letter: '#3949ab', dimmed: false, viewW: 320,
+  style: villageStyle('indigo'), letter: '#3949ab', dimmed: false, minCols: 0, minRows: 0,
 };
 
 let cfg = null;
@@ -25,16 +25,18 @@ export function setEnv(patch) {
   computePhase();
 }
 
-/** Покупки, настроение, фокус и т. п. (см. World.configure). Ширину мира задаёт видимый холст. */
+/** Покупки, расстановка, настроение, фокус и т. п. (см. World.configure). Размер карты — не меньше экрана. */
 export function configureVillage(next) {
   cfg = next;
-  world.configure({ ...cfg, viewW: env.viewW });
+  world.configure({ ...cfg, minCols: env.minCols, minRows: env.minRows });
 }
 
-/** Холст фона сообщает свою ширину (в пикселях деревни) — от неё зависит раскладка. */
-export function setViewWidth(w) {
-  env.viewW = w;
-  if (cfg) world.configure({ ...cfg, viewW: w });
+/** Холст фона сообщает, сколько клеток видно при самом дальнем отдалении: карта должна быть не меньше. */
+export function setViewSize(cols, rows) {
+  if (env.minCols === cols && env.minRows === rows) return;
+  env.minCols = cols;
+  env.minRows = rows;
+  if (cfg) world.configure({ ...cfg, minCols: cols, minRows: rows });
 }
 
 const views = new Set();

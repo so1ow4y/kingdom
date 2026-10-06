@@ -7,13 +7,13 @@
 
 import { villageItem } from '../core/village.js';
 import { charHeight } from './puppets.js';
-import { buildMap, findPath, walkable, randomSpot, TILE, COLS, ROWS } from './map.js';
+import { buildMap, findPath, walkable, randomSpot, buildable, TILE } from './map.js';
 
 export const GRAVITY = 260;
 const TAU = Math.PI * 2;
 
 // Высота спрайтов построек над нижним краем основания — для попадания кликом и дыма из труб.
-export const SPRITE_H = { house: 60, house4: 78, forge: 52, tavern: 72, tower: 96, windmill: 86, fountain: 34, goldmine: 34, gemmine: 34 };
+export const SPRITE_H = { house: 60, house4: 78, forge: 52, tavern: 72, tower: 96, windmill: 86, fountain: 34, goldmine: 40, gemmine: 40, field: 40 };
 const CHIMNEY = { house: [0.74, 54], house4: [0.78, 72], tavern: [0.8, 66], forge: [0.82, 54] };
 
 export const KINDS = {
@@ -76,13 +76,13 @@ export function residentsOf(owned) {
   return out;
 }
 
-const tileOf = (x, y) => [Math.max(0, Math.min(COLS - 1, Math.floor(x / TILE))), Math.max(0, Math.min(ROWS - 1, Math.floor(y / TILE)))];
+
 
 export class World {
   constructor({ rand = Math.random } = {}) {
     this.rand = rand;
     this.t = 0;
-    this.map = buildMap(new Set(['base:house']), new Set(), 'classic');
+    this.map = buildMap([], {});
     this.W = this.map.cols * TILE;
     this.H = this.map.rows * TILE;
     this.actors = [];
@@ -98,6 +98,7 @@ export class World {
     this.lightsOff = new Set();
     this.mill = 0;
     this.key = '';
+    this.shift = null; // сдвиг карты после перестройки — камера сдвигается так же (VillageView)
     this.legacy = new Set();
     this.owned = new Set();
     this.flavor = 'classic';
@@ -119,19 +120,45 @@ export class World {
     return this.map.trees;
   }
 
-  /** Обновить мир под покупки и стиль. Жители, что уже гуляют, остаются на местах (если место ещё проходимо). */
-  configure({ owned, legacy = new Set(), flavor = 'classic', mood = 50, focus = false, visitors = true, lightsOff = null }) {
+  get smalls() {
+    return this.map.smalls;
+  }
+
+  tileOf(x, y) {
+    return [Math.max(0, Math.min(this.map.cols - 1, Math.floor(x / TILE))), Math.max(0, Math.min(this.map.rows - 1, Math.floor(y / TILE)))];
+  }
+
+  /**
+   * Обновить мир под покупки, расстановку и стиль. Жители, что уже гуляют, остаются на местах (если место ещё проходимо).
+   * objects — из core/village.js villageObjects; minCols/minRows — карта не меньше видимой области при отдалении.
+   */
+  configure({ owned, objects = [], legacy = new Set(), flavor = 'classic', minCols = 0, minRows = 0, mood = 50, focus = false, visitors = true, lightsOff = null }) {
     this.mood = mood;
     this.focus = focus;
     this.visitors = visitors;
     if (lightsOff) this.lightsOff = new Set(lightsOff);
-    const key = [...owned].sort().join(',') + '|' + [...legacy].sort().join(',') + '|' + flavor;
+    const list = [...objects];
+    if (owned.has('v:char:archer')) list.push({ key: 'virtual:target', place: 'target', x: null, y: null, virtual: true, level: 1 });
+    const key = [...owned].sort().join(',') + '|' + list.map((o) => `${o.key}:${o.place}:${o.level}:${o.x},${o.y}`).join(';') + '|' + [...legacy].sort().join(',') + '|' + flavor + '|' + minCols + 'x' + minRows;
     if (key === this.key) return false;
     this.key = key;
     this.owned = new Set(owned);
     this.legacy = new Set(legacy);
     this.flavor = flavor;
-    this.map = buildMap(owned, legacy, flavor);
+    const prev = this.map;
+    this.map = buildMap(list, { flavor, legacy, minCols, minRows });
+    this.W = this.map.cols * TILE;
+    this.H = this.map.rows * TILE;
+    // карта стала шире/выше (рост земли, другой экран) — площадь сместилась: сдвигаем всё, что уже есть, вместе с ней
+    const dx = (this.map.cx - prev.cx) * TILE;
+    const dy = (this.map.cy - prev.cy) * TILE;
+    if (dx || dy) {
+      for (const o of [...this.actors, ...this.particles, ...this.fireflies]) {
+        o.x += dx;
+        o.y += dy;
+      }
+      this.shift = { dx: (this.shift?.dx || 0) + dx, dy: (this.shift?.dy || 0) + dy };
+    }
     const want = residentsOf(owned);
     const keep = new Map(this.actors.map((a) => [a.id, a]));
     const plaza = this.map.spots.plaza;
@@ -139,7 +166,7 @@ export class World {
       const old = keep.get(r.id);
       if (old) {
         if (old.task?.type === 'away') return old; // сейчас у экрана — вернётся сам
-        const [tx, ty] = tileOf(old.x, old.y);
+        const [tx, ty] = this.tileOf(old.x, old.y);
         if (!walkable(this.map, tx, ty)) this.placeNear(old, old.x, old.y);
         old.queue = [];
         old.task = null;
@@ -171,7 +198,7 @@ export class World {
 
   /** Поставить жителя на ближайший проходимый тайл. */
   placeNear(a, x, y) {
-    const [cx, cy] = tileOf(x, y);
+    const [cx, cy] = this.tileOf(x, y);
     for (let r = 0; r < 12; r++) {
       for (let dy = -r; dy <= r; dy++) {
         for (let dx = -r; dx <= r; dx++) {
@@ -324,12 +351,21 @@ export class World {
       const top = a.y - a.z - h;
       if (Math.abs(wx - a.x) <= w && wy >= top && wy <= a.y - a.z + 3) return { type: 'actor', actor: a };
     }
-    for (const l of this.lanterns) if (Math.abs(wx - l.x) <= 4 && wy >= l.y - 24 && wy <= l.y + 2) return { type: 'lantern', lantern: l };
+    for (const l of this.lanterns) if (Math.abs(wx - l.x) <= 4 && wy >= l.y - 24 && wy <= l.y + 2) return { type: 'lantern', lantern: l, obj: l };
+    const smalls = [...this.smalls].sort((p, q) => q.base - p.base);
+    for (const s of smalls) {
+      if (s.place === 'lantern') continue;
+      const top = s.base - (s.place === 'tree' ? 30 : 14);
+      if (wx >= s.x - 2 && wx <= s.x + s.w + 2 && wy >= top && wy <= s.base + 2) return { type: 'object', obj: s };
+    }
     const bs = [...this.buildings].sort((p, q) => q.base - p.base);
     for (const b of bs) {
       const top = b.base - (SPRITE_H[b.type] || b.h);
-      if (wx >= b.x - 2 && wx <= b.x + b.w + 2 && wy >= top && wy <= b.base + 2) return { type: 'building', building: b };
+      if (wx >= b.x - 2 && wx <= b.x + b.w + 2 && wy >= top && wy <= b.base + 2) return { type: 'building', building: b, obj: b };
     }
+    const tx = Math.floor(wx / TILE);
+    const ty = Math.floor(wy / TILE);
+    if (buildable(this.map, tx, ty)) return { type: 'tile', tx, ty };
     return null;
   }
 
@@ -500,8 +536,8 @@ export class World {
         return q.push(this.go(h.door.x + 14, h.door.y), { type: 'work', d: 5, sparks: true, face: h.door.x + 30 });
       }
       if (k === 'archer') {
-        const t = M.decor.find((d) => d.type === 'target');
-        if (t) return q.push(this.go(M.spots.archer.x, M.spots.archer.y), { type: 'shoot', d: 4, tx: t.x, ty: t.y, shots: 0 });
+        const t = M.smalls.find((s) => s.place === 'target');
+        if (t && M.spots.archer) return q.push(this.go(M.spots.archer.x, M.spots.archer.y), { type: 'shoot', d: 4, tx: t.x + TILE / 2, ty: t.base - 2, shots: 0 });
       }
       if (k === 'fox') {
         const p = spot(a, 6);
@@ -556,8 +592,8 @@ export class World {
 
   /** Проложить путь к точке (x, y). false — недостижимо. */
   route(a, x, y) {
-    const from = tileOf(a.x, a.y);
-    const to = tileOf(x, y);
+    const from = this.tileOf(a.x, a.y);
+    const to = this.tileOf(x, y);
     let target = to;
     if (!walkable(this.map, to[0], to[1])) {
       // цель на непроходимом тайле — ближайший соседний

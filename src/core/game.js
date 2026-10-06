@@ -13,8 +13,9 @@ import { PRIORITY_NONE_ID } from './priorities.js';
 import { countLabel } from './plural.js';
 import { coinMultiplierAt, focusFields, levelAt } from './village.js';
 
-// gems и minutes — с 0.7 (деревня): изумруды у покупок и фокус-сессий, длительность фокуса. Старые версии их просто хранят.
-export const COIN_EVENT_FIELDS = ['type', 'amount', 'active', 'taskId', 'occKey', 'rewardId', 'itemId', 'title', 'at', 'gems', 'minutes', 'deletedAt'];
+// gems и minutes — с 0.7 (деревня): изумруды у покупок и фокус-сессий, длительность фокуса. x, y — с 0.7.2: клетка
+// объекта деревни (перестановка — обычное изменение полей, сливается по времени поля). Старые версии их просто хранят.
+export const COIN_EVENT_FIELDS = ['type', 'amount', 'active', 'taskId', 'occKey', 'rewardId', 'itemId', 'title', 'at', 'gems', 'minutes', 'x', 'y', 'deletedAt'];
 
 export const awardId = (taskId, occKey = null) => (occKey ? `a:${taskId}:${occKey}` : `a:${taskId}`);
 
@@ -59,9 +60,14 @@ export function revokeEvent(data, taskId, occKey, ctx) {
 }
 
 /** Покупка: награда пользователя (rewardId) или встроенный предмет магазина (itemId). gems — цена в изумрудах. */
-export function purchaseEvent({ price = 0, gems = 0, title, rewardId = null, itemId = null }, ctx) {
+export function purchaseEvent({ price = 0, gems = 0, title, rewardId = null, itemId = null, x = null, y = null }, ctx) {
   const fields = { type: 'purchase', amount: -Math.abs(price | 0), rewardId, itemId, title };
   if (gems) fields.gems = -Math.abs(gems | 0);
+  // клетка объекта деревни относительно центра площади (0.7.2)
+  if (Number.isInteger(x) && Number.isInteger(y)) {
+    fields.x = x;
+    fields.y = y;
+  }
   return newEvent(uuidv7(ctx.now), fields, ctx);
 }
 

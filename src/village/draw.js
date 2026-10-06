@@ -6,7 +6,7 @@
 // тёплые огни окон и фонарей, потом частицы, светлячки, погода.
 
 import { painter, drawCharacter, drawEmote, charHeight } from './puppets.js';
-import { TILE, T, COLS, ROWS, rnd } from './map.js';
+import { TILE, T, rnd } from './map.js';
 import { SPRITE_H } from './world.js';
 
 // ---------- Цвета и примитивы ----------
@@ -187,7 +187,7 @@ function bridgeTile(c, X, Y, K) {
   for (let i = 1; i < TILE; i += 3) if (rnd(X + i, Y) > 0.6) P(c, X + i, Y + Math.floor(rnd(Y, X + i) * 10), shade(wood, 0.2));
 }
 
-function cliffTile(c, X, Y, ty, K) {
+function cliffTile(c, X, Y, top, K) {
   const cl = K.pal.cliff;
   R(c, X, Y, TILE, TILE, cl);
   for (let j = 0; j < TILE; j += 3) {
@@ -198,7 +198,7 @@ function cliffTile(c, X, Y, ty, K) {
       P(c, X + i + off, Y + j + 2, shade(cl, 0.3));
     }
   }
-  if (ty === 5) {
+  if (top) {
     // край уступа: трава нависает, под ней тень
     R(c, X, Y, TILE, 3, K.pal.high);
     for (let i = 0; i < TILE; i++) if (rnd(X + i, Y) > 0.45) P(c, X + i, Y + 3, K.pal.high);
@@ -214,13 +214,19 @@ function sandTile(c, X, Y, K) {
 
 /** Земля всей карты: тайлы, края, берега, тени от построек и деревьев. */
 function paintGround(c, map, K) {
-  const { grid } = map;
-  const at = (x, y) => (x < 0 || y < 0 || x >= COLS || y >= ROWS ? -1 : grid[y * COLS + x]);
-  for (let ty = 0; ty < ROWS; ty++) {
-    for (let tx = 0; tx < COLS; tx++) {
+  const { grid, cols, rows } = map;
+  const at = (x, y) => (x < 0 || y < 0 || x >= cols || y >= rows ? -1 : grid[y * cols + x]);
+  const near = (tx, ty) => tx > map.land.x0 - 12 && tx < map.land.x1 + 12 && ty > map.land.y0 - 12 && ty < map.land.y1 + 12;
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
       const X = tx * TILE;
       const Y = ty * TILE;
       const t = at(tx, ty);
+      if (t === T.FOREST && !near(tx, ty)) {
+        // дальний лес — без мелкой фактуры (его всё равно закрывают деревья)
+        R(c, X, Y, TILE, TILE, mix(K.pal.grass, K.pal.grassD, 0.6));
+        continue;
+      }
       if (t === T.GRASS) grassTile(c, X, Y, K.pal.grass, K);
       else if (t === T.HIGH) grassTile(c, X, Y, K.pal.high, K);
       else if (t === T.FOREST) grassTile(c, X, Y, mix(K.pal.grass, K.pal.grassD, 0.55), K);
@@ -228,7 +234,7 @@ function paintGround(c, map, K) {
       else if (t === T.PLAZA) plazaTile(c, X, Y, K);
       else if (t === T.WATER) waterTile(c, X, Y, K, false);
       else if (t === T.SEA) waterTile(c, X, Y, K, true);
-      else if (t === T.CLIFF) cliffTile(c, X, Y, ty, K);
+      else if (t === T.CLIFF) cliffTile(c, X, Y, ty === map.cliffY, K);
       else if (t === T.FIELD) fieldTile(c, X, Y, K);
       else if (t === T.BRIDGE) bridgeTile(c, X, Y, K);
       else if (t === T.SAND) sandTile(c, X, Y, K);
@@ -236,8 +242,9 @@ function paintGround(c, map, K) {
   }
   // края: трава заходит на дорожки, у площади — бордюр, у воды — берег и пена
   const soft = (t) => t === T.GRASS || t === T.FOREST || t === T.HIGH;
-  for (let ty = 0; ty < ROWS; ty++) {
-    for (let tx = 0; tx < COLS; tx++) {
+  for (let ty = 0; ty < rows; ty++) {
+    for (let tx = 0; tx < cols; tx++) {
+      if (!near(tx, ty)) continue;
       const t = at(tx, ty);
       const X = tx * TILE;
       const Y = ty * TILE;
@@ -309,7 +316,11 @@ function paintGround(c, map, K) {
   // тени построек и деревьев на земле
   c.globalAlpha = 0.22;
   for (const b of map.buildings) {
-    if (b.type.endsWith('mine')) continue;
+    if (b.type === 'field') continue;
+    if (b.type.endsWith('mine')) {
+      ellipse(c, b.x + b.w / 2 + 2, b.base - 3, b.w / 2 + 2, 5, '#000');
+      continue;
+    }
     if (b.type === 'fountain') {
       ellipse(c, b.x + b.w / 2 + 2, b.base - 6, b.w / 2, 6, '#000');
       continue;
@@ -686,50 +697,147 @@ function paintFountain(c, b, K) {
   R(c, cx - 1, base - 28, 2, 4, stone);
 }
 
+/** Шахта (0.7.2 — стоит где угодно): каменный холм со входом на юг, крепь, рельсы, фонарь; у изумрудной — кристаллы. */
 function paintMine(c, b, K, out) {
   const gem = b.type === 'gemmine';
   const W = b.w + 4;
   const base = SPRITE_H[b.type];
   const cx = Math.floor(W / 2);
+  const rock = K.flavor === 'gothic' ? '#5e5870' : K.pal.cliff;
+  const wood = K.pal.wood;
+  // силуэт холма по столбцам: обводка, заливка, каменная кладка, тень справа, трава на макушке
+  const top = [];
   for (let i = 0; i < W; i++) {
-    const h = 8 + Math.round(Math.sin((Math.PI * i) / W) * 6 + rnd(i, b.x) * 3);
-    R(c, i, base - 26 - h, 1, h, mix(K.pal.cliff, '#000000', 0.1 + rnd(i, 3) * 0.1));
+    const k = Math.sin((Math.PI * (i + 0.5)) / W);
+    top.push(base - 3 - Math.round(Math.pow(k, 0.55) * 27 + rnd(i >> 1, b.x) * 3));
   }
-  R(c, cx - 9, base - 22, 18, 22, '#0f0b09');
-  R(c, cx - 7, base - 19, 14, 19, '#1a1310');
-  R(c, cx - 5, base - 15, 10, 15, '#251b15');
-  R(c, cx - 11, base - 24, 3, 24, K.pal.wood);
-  R(c, cx + 8, base - 24, 3, 24, K.pal.wood);
-  R(c, cx - 13, base - 27, 26, 4, shade(K.pal.wood, 0.15));
-  R(c, cx - 13, base - 27, 26, 1, tint(K.pal.wood, 0.12));
-  if (b.level >= 2) R(c, cx - 7, base - 18, 14, 2, shade(K.pal.wood, 0.25));
-  R(c, cx - 4, base - 6, 1, 8, '#7a7a80');
-  R(c, cx + 3, base - 6, 1, 8, '#7a7a80');
-  for (let y = base - 5; y < base + 2; y += 2) R(c, cx - 5, y, 10, 1, shade(K.pal.wood, 0.3));
-  R(c, cx - 15, base - 21, 4, 1, K.pal.iron);
-  R(c, cx - 16, base - 20, 3, 4, K.pal.iron);
-  R(c, cx - 15, base - 19, 1, 2, '#d8c890');
-  out.lamps.push({ x: cx - 15, y: base - 19, w: 1, h: 2, r: 16 });
+  for (let i = 0; i < W; i++) R(c, i - 1, top[i] - 1, 3, base - top[i] + 1, shade(rock, 0.55));
+  for (let i = 0; i < W; i++) R(c, i, top[i], 1, base - top[i], rock);
+  for (let y = base - 3, row = 0; y > base - 34; y -= 4, row++) {
+    for (let x = row % 2 ? 3 : 0; x < W - 1; x += 6) {
+      const xe = Math.min(W - 1, x + 5);
+      if (y - 3 < Math.max(top[x], top[xe - 1]) + 2) continue;
+      const k = rnd(x + b.x, y);
+      R(c, x, y - 3, xe - x, 3, k > 0.65 ? tint(rock, 0.1) : k < 0.3 ? shade(rock, 0.1) : rock);
+      R(c, x, y, xe - x, 1, shade(rock, 0.3));
+      P(c, xe, y - 2, shade(rock, 0.3));
+    }
+  }
+  c.globalAlpha = 0.22;
+  for (let i = Math.floor(W * 0.6); i < W; i++) R(c, i, top[i] + 1, 1, base - top[i] - 1, '#000');
+  c.globalAlpha = 1;
+  R(c, 0, base - 3, W, 3, shade(rock, 0.3));
+  for (let i = 1; i < W * 0.55; i++) P(c, i, top[i] + 1, tint(rock, 0.22));
+  if (K.flavor !== 'gothic' && K.flavor !== 'sea') {
+    for (let i = 2; i < W - 2; i++) if (rnd(i, b.x + 5) > 0.55) {
+      P(c, i, top[i], K.pal.high);
+      if (rnd(b.x, i) > 0.6) P(c, i, top[i] - 1, tint(K.pal.high, 0.15));
+    }
+  }
+  // вход: темнота, крепь, перекладина, табличка с добычей
+  const ex = cx - 7;
+  R(c, ex, base - 17, 14, 17, '#120d0a');
+  R(c, ex + 2, base - 15, 10, 15, '#1d1511');
+  R(c, ex + 4, base - 12, 6, 12, '#2a1f18');
+  if (b.level >= 2) R(c, ex + 1, base - 12, 12, 1, shade(wood, 0.35));
+  R(c, ex - 2, base - 18, 3, 18, wood);
+  R(c, ex - 2, base - 18, 1, 18, tint(wood, 0.15));
+  R(c, ex + 13, base - 18, 3, 18, shade(wood, 0.12));
+  R(c, ex - 4, base - 21, 22, 4, shade(wood, 0.1));
+  R(c, ex - 4, base - 21, 22, 1, tint(wood, 0.18));
+  R(c, ex - 4, base - 18, 22, 1, shade(wood, 0.45));
+  R(c, cx - 4, base - 28, 9, 6, wood);
+  R(c, cx - 4, base - 28, 9, 1, tint(wood, 0.2));
   if (gem) {
-    for (const [dx, dy, h] of [[3, -18, 7], [6, -14, 5], [W - 6, -20, 6], [W - 9, -15, 8], [W - 3, -12, 4]]) {
+    R(c, cx - 1, base - 26, 3, 2, '#2ec27e');
+    P(c, cx, base - 27, '#b6ffd8');
+    P(c, cx, base - 24, '#25a86c');
+  } else {
+    R(c, cx - 2, base - 26, 5, 2, '#ffcc33');
+    P(c, cx - 1, base - 26, '#fff2a0');
+  }
+  // рельсы из штольни
+  R(c, cx - 4, base - 7, 1, 10, '#7a7a80');
+  R(c, cx + 3, base - 7, 1, 10, '#7a7a80');
+  for (let y = base - 6; y < base + 3; y += 2) R(c, cx - 5, y, 10, 1, shade(wood, 0.3));
+  // фонарь на левом столбе
+  R(c, ex - 6, base - 17, 4, 1, K.pal.iron);
+  R(c, ex - 7, base - 16, 3, 4, K.pal.iron);
+  R(c, ex - 6, base - 15, 1, 2, '#d8c890');
+  out.lamps.push({ x: ex - 6, y: base - 15, w: 1, h: 2, r: 16 });
+  if (gem) {
+    for (const [dx, dy, h] of [[5, -12, 6], [8, -19, 5], [W - 7, -14, 7], [W - 11, -23, 5], [W - 4, -8, 4]]) {
       for (let r = 0; r < h; r++) R(c, dx - Math.floor((h - r) / 3), base + dy - r, 1 + Math.floor((h - r) / 1.5), 1, r > h - 2 ? '#b6ffd8' : r % 2 ? '#2ec27e' : '#25a86c');
       out.glows.push({ x: dx, y: base + dy - h / 2, r: 9, warm: '#5dffb0', base: 0.3 });
     }
   } else {
-    for (let i = 0; i < 9; i++) {
+    for (let i = 0; i < 14; i++) {
       const x = 2 + rnd(i, b.x) * (W - 4);
-      const y = base - 30 + rnd(b.x, i) * 8;
-      if (Math.abs(x - cx) > 12) R(c, x, y, 2, 1, '#ffcc33');
+      const y = base - 6 - rnd(b.x, i) * 24;
+      if (Math.abs(x - cx) < 10 && y > base - 22) continue;
+      if (y < top[Math.min(W - 1, Math.floor(x))] + 2) continue;
+      R(c, x, y, 2, 1, '#ffcc33');
+      if (i % 3 === 0) P(c, x, y - 1, '#fff2a0');
     }
   }
   if (b.level >= 3) {
-    R(c, W - 6, base - 12, 1, 12, K.pal.wood);
-    R(c, W - 12, base - 14, 12, 6, K.pal.wood);
-    R(c, W - 10, base - 12, 8, 2, gem ? '#2ec27e' : '#ffcc33');
+    // вагонетка с добычей на рельсах
+    R(c, cx - 5, base - 5, 11, 4, '#5a5a62');
+    R(c, cx - 5, base - 5, 11, 1, '#7c7c86');
+    R(c, cx - 4, base - 7, 9, 2, gem ? '#2ec27e' : '#ffcc33');
+    P(c, cx - 2, base - 8, gem ? '#b6ffd8' : '#fff2a0');
+    P(c, cx - 3, base - 1, '#222');
+    P(c, cx + 3, base - 1, '#222');
   }
 }
 
-const PAINTERS = { house: paintHouse, house4: paintHouse, tavern: paintTavern, forge: paintForge, windmill: paintWindmill, tower: paintTower, fountain: paintFountain, goldmine: paintMine, gemmine: paintMine };
+/** Огород: грядки — на земле (тайлы FIELD), здесь — заборчик с калиткой и пугало. */
+function paintField(c, b, K) {
+  const W = b.w;
+  const base = SPRITE_H.field;
+  const top = base - b.h;
+  const wood = mix(K.pal.wood, '#a0703a', 0.3);
+  const post = (x, y) => {
+    R(c, x, y - 6, 2, 6, wood);
+    P(c, x, y - 6, tint(wood, 0.25));
+    P(c, x + 1, y - 3, shade(wood, 0.3));
+  };
+  const rail = (x0, x1, y) => {
+    R(c, x0, y - 5, x1 - x0, 1, tint(wood, 0.12));
+    R(c, x0, y - 2, x1 - x0, 1, wood);
+  };
+  const gate = Math.floor(W / 2) - 3;
+  rail(2, W + 2, top + 3);
+  for (let x = 2; x <= W; x += 8) post(x, top + 3);
+  post(W, top + 3);
+  for (const x of [2, W]) {
+    R(c, x, top + 3, 1, base - top - 3, shade(wood, 0.15));
+    R(c, x + 1, top + 3, 1, base - top - 3, tint(wood, 0.05));
+    for (let y = top + 11; y < base; y += 8) post(x, y);
+  }
+  rail(2, gate, base);
+  rail(gate + 8, W + 2, base);
+  for (const x of [2, gate - 2, gate + 8, W]) post(x, base);
+  if (K.flavor === 'sea') return;
+  // пугало
+  const sx = 2 + Math.round(W * 0.68);
+  const sy = top + 20;
+  R(c, sx, sy - 15, 1, 15, shade(wood, 0.2));
+  R(c, sx - 5, sy - 11, 11, 1, wood);
+  R(c, sx - 3, sy - 11, 7, 5, K.flavor === 'gothic' ? '#4a3a5a' : mix(K.style.accent || '#3949ab', '#8a5a3a', 0.4));
+  R(c, sx - 3, sy - 6, 7, 1, '#c8a440');
+  if (K.flavor === 'gothic') {
+    disc(c, sx, sy - 15, 2.5, '#d8722a');
+    P(c, sx - 1, sy - 15, '#ffd23a');
+    P(c, sx + 1, sy - 15, '#ffd23a');
+  } else {
+    disc(c, sx, sy - 15, 2.5, '#e8d4a0');
+    R(c, sx - 4, sy - 18, 9, 1, '#6a4a2a');
+    R(c, sx - 2, sy - 20, 5, 2, '#6a4a2a');
+  }
+}
+
+const PAINTERS = { house: paintHouse, house4: paintHouse, tavern: paintTavern, forge: paintForge, windmill: paintWindmill, tower: paintTower, fountain: paintFountain, goldmine: paintMine, gemmine: paintMine, field: paintField };
 
 // ---------- Спрайты: обстановка (холст 32 × 34, точка у основания — (16, 30)) ----------
 
@@ -999,6 +1107,8 @@ export class VillageRenderer {
     this.sprites = new Map();
     this.spriteStyle = null;
     this.K = null;
+    this.smallDecor = [];
+    this.smallKey = null;
   }
 
   canvas(w, h) {
@@ -1043,55 +1153,69 @@ export class VillageRenderer {
       this.spriteStyle = styleKey;
     }
     ctx.imageSmoothingEnabled = false;
-    // земля
+    // земля (с дальним лесом — он статичный, рисуется в кэш вместе с ней)
     const gKey = `${styleKey}|${map.key}`;
     if (this.groundKey !== gKey) {
-      this.ground = this.ground || this.canvas(map.cols * TILE, map.rows * TILE);
-      paintGround(this.ground.getContext('2d'), map, K);
+      const gw = map.cols * TILE;
+      const gh = map.rows * TILE;
+      if (!this.ground || this.ground.width !== gw || this.ground.height !== gh) this.ground = this.canvas(gw, gh);
+      const gc = this.ground.getContext('2d');
+      gc.imageSmoothingEnabled = false;
+      paintGround(gc, map, K);
+      for (const t of [...map.farTrees].sort((p, q) => p.y - q.y)) {
+        const s = this.treeSprite(t, flavor, K);
+        gc.drawImage(s.cv, Math.round(t.x - s.ax), Math.round(t.y - s.ay));
+      }
       this.groundKey = gKey;
+      this.smallKey = null;
+    }
+    // мелкие объекты (скамейки, клумбы, тыквы, костёр, мишень) рисуются как обстановка
+    if (this.smallKey !== map.key) {
+      this.smallDecor = map.smalls.filter((s) => s.place !== 'lantern' && s.place !== 'tree')
+        .map((s) => ({ type: s.place, key: s.key, x: s.x + s.w / 2, y: s.y + TILE * 0.85 }));
+      this.smallKey = map.key;
     }
     R(ctx, 0, 0, W, H, mix(K.pal.grass, K.pal.grassD, 0.6));
     ctx.drawImage(this.ground, -camX, -camY);
     ctx.save();
     ctx.translate(-camX, -camY);
     this.waterShimmer(ctx, map, world, camX, camY, W, H);
+    // подсветка клеток: выбранное, место для перестановки
+    const ghost = v.ghost || null;
+    for (const m of v.marks || []) this.mark(ctx, m);
+    if (ghost) this.mark(ctx, { tx: ghost.tx, ty: ghost.ty, tw: ghost.tw, th: ghost.th, kind: ghost.ok ? 'ok' : 'bad' });
     // спрайты и жители — по глубине (нижнему краю)
+    const skip = ghost?.key;
     const items = [];
     const inView = (x, y, w, h) => x + w > camX - 8 && x - 8 < camX + W && y + 8 > camY && y - h < camY + H + 8;
-    for (const b of map.buildings) if (inView(b.x - 6, b.base, b.w + 12, SPRITE_H[b.type] + 34)) items.push({ y: b.base, b });
-    for (const t of map.trees) if (inView(t.x - 20, t.y, 40, 48)) items.push({ y: t.y, t });
+    for (const b of map.buildings) if (b.key !== skip && inView(b.x - 6, b.base, b.w + 12, SPRITE_H[b.type] + 34)) items.push({ y: b.base, b });
+    for (const t of map.trees) if ((!skip || t.obj !== skip) && inView(t.x - 20, t.y, 40, 48)) items.push({ y: t.y, t });
     for (const d of map.decor) if (inView(d.x - 16, d.y, 32, 34)) items.push({ y: d.y, d });
-    for (const l of map.lanterns) if (inView(l.x - 8, l.y, 16, 30)) items.push({ y: l.y, l });
+    for (const d of this.smallDecor) if (d.key !== skip && inView(d.x - 16, d.y, 32, 34)) items.push({ y: d.y, d });
+    for (const l of map.lanterns) if (l.key !== skip && inView(l.x - 8, l.y, 16, 30)) items.push({ y: l.y, l });
     for (const a of world.actors) if (!a.hidden && inView(a.x - 20, a.y, 40, 60 + a.z)) items.push({ y: a.y + 0.5, a });
+    if (ghost) {
+      const g = this.ghostItem(map, ghost);
+      if (g) items.push(g);
+    }
     items.sort((p, q) => p.y - q.y);
     const lit = [];
     const night = v.n > 0.5;
     for (const it of items) {
+      if (it.ghost) ctx.globalAlpha = 0.8;
       if (it.b) {
         const b = it.b;
-        const sh = SPRITE_H[b.type];
-        const s = this.sprite(`b|${b.type}|${b.v}|${b.level}|${b.x}`, b.w + 8, sh + 10, 4, sh + 6, (c, meta) => {
-          c.translate(2, 6);
-          PAINTERS[b.type](c, b, K, meta);
-          c.setTransform(1, 0, 0, 1, 0, 0);
-          for (const list of [meta.wins, meta.lamps, meta.cores, meta.glows]) for (const o of list) {
-            o.x += 2;
-            o.y += 6;
-          }
-        });
-        const ox = b.x - s.ax;
-        const oy = b.base - s.ay;
+        const s = this.buildingSprite(b, K);
+        const ox = (it.at ? it.at.x : b.x) - s.ax;
+        const oy = (it.at ? it.at.base : b.base) - s.ay;
         ctx.drawImage(s.cv, ox, oy);
-        animatedParts(ctx, b, world, K);
-        lit.push({ s, ox, oy, id: b.id });
+        if (!it.ghost) {
+          animatedParts(ctx, b, world, K);
+          lit.push({ s, ox, oy, id: b.id });
+        }
       } else if (it.t) {
         const t = it.t;
-        const sz = Math.round(t.size * 10) / 10;
-        const s = this.sprite(`t|${t.s}|${sz}`, 40, 48, 20, 46, (c) => {
-          if (flavor === 'gothic' && t.s === 2) deadTree(c, 20, 46, sz);
-          else if ((flavor === 'classic' || flavor === 'sea' || flavor === 'gothic') && t.s !== 1) pineTree(c, 20, 46, sz, K.pal.trees[t.s % 3], t.s * 7 + 1);
-          else roundTree(c, 20, 46, sz, K.pal.trees[t.s % 3], t.s * 13 + 5, flavor === 'meadow' && t.s === 0 ? '#ff6f91' : flavor === 'classic' && t.s === 1 ? '#d84a3a' : null);
-        });
+        const s = this.treeSprite(t, flavor, K);
         ctx.drawImage(s.cv, Math.round(t.x - s.ax), Math.round(t.y - s.ay));
       } else if (it.d) {
         const d = it.d;
@@ -1100,14 +1224,14 @@ export class VillageRenderer {
         const oy = Math.round(d.y - s.ay);
         ctx.drawImage(s.cv, ox, oy);
         if (d.type === 'bonfire') bonfireFlames(ctx, d, world);
-        if (s.cores.length || s.glows.length) lit.push({ s, ox, oy, id: 'decor' });
+        if (!it.ghost && (s.cores.length || s.glows.length)) lit.push({ s, ox, oy, id: 'decor' });
       } else if (it.l) {
         const l = it.l;
         const s = this.sprite('lantern', 32, 34, 16, 30, (c, meta) => paintLantern(c, K, meta));
         const ox = Math.round(l.x - s.ax);
         const oy = Math.round(l.y - s.ay);
         ctx.drawImage(s.cv, ox, oy);
-        lit.push({ s, ox, oy, id: l.id, lantern: true });
+        if (!it.ghost) lit.push({ s, ox, oy, id: l.id, lantern: true });
       } else {
         const a = it.a;
         const x = Math.round(a.x);
@@ -1124,7 +1248,9 @@ export class VillageRenderer {
         const g = painter(ctx, x, Math.round(y - a.z), a.dir, a.u, a.alpha);
         drawCharacter(g, a.kind, { state: a.state, phase: a.phase, t: a.anim, night, happy: a.happy, squash: a.squash > 0.3, fire: a.fire });
       }
+      if (it.ghost) ctx.globalAlpha = 1;
     }
+    if (ghost) this.mark(ctx, { tx: ghost.tx, ty: ghost.ty, tw: ghost.tw, th: ghost.th, kind: ghost.ok ? 'ok' : 'bad', line: true });
     ctx.restore();
     // ночь и сумерки — затемняем весь кадр
     const dusk = duskOf(v.phase);
@@ -1157,8 +1283,73 @@ export class VillageRenderer {
       if (a.hidden || !a.emote) continue;
       drawEmote(ctx, Math.round(a.x), Math.round(a.y - a.z - charHeight(a.kind) * a.u - 4), a.emote, 1);
     }
+    if (v.pointer) {
+      // стрелка над выбранным объектом
+      const px = Math.round(v.pointer.x);
+      const py = Math.round(v.pointer.y - 4 + Math.sin(world.t * 5) * 2);
+      for (let r = 0; r < 6; r++) R(ctx, px - 5 + r, py - 6 + r, 11 - r * 2, 1, '#2a2a38');
+      for (let r = 0; r < 4; r++) R(ctx, px - 3 + r, py - 5 + r, 7 - r * 2, 1, '#ffd23a');
+      P(ctx, px - 2, py - 5, '#fff6c0');
+    }
     ctx.restore();
     this.weather(ctx, world, v, flavor, camX, camY);
+  }
+
+  /** Спрайт постройки (огород, шахта, дом…) из кэша. */
+  buildingSprite(b, K) {
+    const sh = SPRITE_H[b.type];
+    return this.sprite(`b|${b.type}|${b.v}|${b.level}|${b.x}|${b.y}`, b.w + 8, sh + 10, 4, sh + 6, (c, meta) => {
+      c.translate(2, 6);
+      PAINTERS[b.type](c, b, K, meta);
+      c.setTransform(1, 0, 0, 1, 0, 0);
+      for (const list of [meta.wins, meta.lamps, meta.cores, meta.glows]) for (const o of list) {
+        o.x += 2;
+        o.y += 6;
+      }
+    });
+  }
+
+  treeSprite(t, flavor, K) {
+    const sz = Math.round(t.size * 10) / 10;
+    return this.sprite(`t|${t.s}|${sz}`, 40, 48, 20, 46, (c) => {
+      if (flavor === 'gothic' && t.s === 2) deadTree(c, 20, 46, sz);
+      else if ((flavor === 'classic' || flavor === 'sea' || flavor === 'gothic') && t.s !== 1) pineTree(c, 20, 46, sz, K.pal.trees[t.s % 3], t.s * 7 + 1);
+      else roundTree(c, 20, 46, sz, K.pal.trees[t.s % 3], t.s * 13 + 5, flavor === 'meadow' && t.s === 0 ? '#ff6f91' : flavor === 'classic' && t.s === 1 ? '#d84a3a' : null);
+    });
+  }
+
+  /** Объект, который переставляют, — на новом месте (полупрозрачный). */
+  ghostItem(map, g) {
+    const b = map.buildings.find((x) => x.key === g.key);
+    const x = g.tx * TILE;
+    const y = g.ty * TILE;
+    if (b) return { y: (g.ty + b.th) * TILE, b, at: { x, base: (g.ty + b.th) * TILE }, ghost: true };
+    const s = map.smalls.find((o) => o.key === g.key);
+    if (!s) return null;
+    if (s.place === 'lantern') return { y: y + TILE * 0.8, l: { ...s, x: x + TILE / 2, y: y + TILE * 0.8 }, ghost: true };
+    if (s.place === 'tree') {
+      const t = map.trees.find((o) => o.obj === s.key) || { s: 0, size: 1 };
+      return { y: y + TILE * 0.9, t: { ...t, x: x + TILE / 2, y: y + TILE * 0.9 }, ghost: true };
+    }
+    return { y: y + TILE * 0.85, d: { type: s.place, x: x + s.w / 2, y: y + TILE * 0.85 }, ghost: true };
+  }
+
+  /** Подсветка клеток: ok — можно поставить, bad — нельзя, tile — выбранная пустая клетка. line — только рамка. */
+  mark(ctx, m) {
+    const x = m.tx * TILE;
+    const y = m.ty * TILE;
+    const w = (m.tw || 1) * TILE;
+    const h = (m.th || 1) * TILE;
+    const col = m.kind === 'ok' ? '110,230,140' : m.kind === 'bad' ? '245,90,80' : '255,255,255';
+    if (!m.line) {
+      ctx.fillStyle = `rgba(${col},${m.kind === 'tile' ? 0.22 : 0.32})`;
+      ctx.fillRect(x, y, w, h);
+    }
+    ctx.fillStyle = `rgba(${col},${m.line ? 0.75 : 0.9})`;
+    ctx.fillRect(x, y, w, 1);
+    ctx.fillRect(x, y + h - 1, w, 1);
+    ctx.fillRect(x, y, 1, h);
+    ctx.fillRect(x + w - 1, y, 1, h);
   }
 
   /** Блики на воде и струи водопада — каждый кадр, по видимым тайлам воды. */
@@ -1174,7 +1365,7 @@ export class VillageRenderer {
         if (type !== T.WATER && type !== T.SEA) continue;
         const X = tx * TILE;
         const Y = ty * TILE;
-        if (ty === 5 || ty === 6) {
+        if (ty === map.cliffY || ty === map.cliffY + 1) {
           for (let i = 1; i < TILE - 1; i += 2) {
             const off = (t * 40 + rnd(i, tx) * 12) % 12;
             R(c, X + i, Y + off, 1, 3, '#e6f6ff');
@@ -1184,7 +1375,7 @@ export class VillageRenderer {
         const k = rnd(tx, ty);
         const ph = (t * (0.6 + k * 0.6) + k * 10) % 3;
         if (ph < 1.4) R(c, X + 2 + Math.floor(k * 7), Y + 2 + Math.floor(rnd(ty, tx) * 8), ph < 0.7 ? 2 : 3, 1, '#d8f0ff');
-        if (ty === 7 && map.grid[6 * map.cols + tx] === T.WATER) {
+        if (ty === map.cliffY + 2 && map.grid[(map.cliffY + 1) * map.cols + tx] === T.WATER) {
           for (let i = 0; i < 4; i++) P(c, X + 1 + rnd(i, Math.floor(t * 6)) * 10, Y + rnd(Math.floor(t * 6), i) * 4, '#ffffff');
         }
       }
@@ -1230,7 +1421,7 @@ export class VillageRenderer {
         cores.push({ ...cc, x: ox + cc.x, y: oy + cc.y });
       }
     }
-    for (const d of world.decor) if (d.type === 'bonfire') glow(d.x, d.y - 6, 30, Math.max(0.35, n) * (0.85 + Math.random() * 0.15), '#ff9a40');
+    for (const d of this.smallDecor || []) if (d.type === 'bonfire') glow(d.x, d.y - 6, 30, Math.max(0.35, n) * (0.85 + Math.random() * 0.15), '#ff9a40');
     const forge = world.buildings.find((b) => b.type === 'forge');
     if (forge && world.focus) glow(forge.x + 42, forge.base - 8, 20, 0.6, '#ff8a3a');
     ctx.globalCompositeOperation = 'source-over';

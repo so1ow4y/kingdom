@@ -13,7 +13,7 @@ const DEFAULTS = {
   listsCollapsed: false,
   // деревня (0.7): полоса на фоне, масштаб, смена дня и ночи, гости у экрана, выключенный свет, строгий фокус
   villageBackdrop: true,
-  villageScale: 'small', // 'small' | 'large'
+  villageZoom: null, // 0.7.2: приближение (CSS-пикселей на пиксель деревни); null — «Авто»: чем больше деревня, тем дальше
   dayMode: 'theme', // 'theme' | 'cycle' (каждые 5 минут) | 'real' (по часам); cycle/real — после покупки «Смены дня и ночи»
   visitors: true,
   villageLightsOff: [],

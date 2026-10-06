@@ -42,6 +42,10 @@ const PATHS = {
   bell: 'M6 16V11a6 6 0 0112 0v5l2 2H4zM10 20a2 2 0 004 0',
   village: 'M2 20h20M4 20v-8l5-4 5 4v8M14 20v-6l4-3 3 3v6M8 20v-4h2v4M17 4l1 2 2 .3-1.5 1.4.4 2.1-1.9-1-1.9 1 .4-2.1L14 6.3l2-.3z',
   focus: 'M12 3a9 9 0 100 18 9 9 0 000-18zM12 7.5a4.5 4.5 0 100 9 4.5 4.5 0 000-9zM12 11.5v1M12 2v3M12 19v3M2 12h3M19 12h3',
+  pause: 'M9 6v12M15 6v12',
+  play: 'M8 5.5v13l10.5-6.5z',
+  move: 'M12 3v18M3 12h18M12 3l-3 3M12 3l3 3M12 21l-3-3M12 21l3-3M3 12l3-3M3 12l3 3M21 12l-3-3M21 12l-3 3',
+  zoomout: 'M10.5 4a6.5 6.5 0 100 13 6.5 6.5 0 000-13zM15.5 15.5L20 20M7.5 10.5h6',
 };
 
 export function Icon({ name, size = 22, filled = false, className = '' }) {

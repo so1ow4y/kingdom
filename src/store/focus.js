@@ -17,7 +17,11 @@ function load() {
 
 let state = load();
 
-/** { taskId, title, minutes, startedAt, endsAt, hiddenAt? } или null. */
+/**
+ * { taskId, title, minutes, startedAt, endsAt, hiddenAt?, pausedAt?, pausedMs? } или null.
+ * Пауза (0.7.2): pausedAt — когда поставили на паузу; при продолжении endsAt сдвигается на длину паузы,
+ * а pausedMs копит, сколько всего стояли на паузе (эти минуты не засчитываются).
+ */
 export const getFocus = () => state;
 
 let persisted = true;
@@ -65,5 +69,8 @@ export function claimFocus() {
   return mine;
 }
 
-/** Сколько осталось, мс (не меньше 0). */
-export const focusLeft = (f, now = Date.now()) => Math.max(0, f.endsAt - now);
+/** Сколько осталось, мс (не меньше 0). На паузе — не убывает. */
+export const focusLeft = (f, now = Date.now()) => Math.max(0, f.endsAt - (f.pausedAt || now));
+
+/** Сколько уже сфокусировано, мс (без пауз). */
+export const focusElapsed = (f, now = Date.now()) => Math.max(0, (f.pausedAt || now) - f.startedAt - (f.pausedMs || 0));

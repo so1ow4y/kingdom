@@ -1152,6 +1152,38 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
 }
 .app.village-bg-on .content { text-shadow: 0 1px 4px color-mix(in srgb, var(--bg) 85%, transparent); }
 .app.village-mode .topbar::before { background: linear-gradient(to bottom, color-mix(in srgb, var(--bg) 25%, transparent), transparent); }
+/* 0.7.2: на экране «Деревня» шапки нет — панель жителей у самого верха, карточки — внизу, посередине — деревня */
+.app.village-mode .topbar { display: none; }
+.app.village-mode .focus-bar { top: 8px; }
+.app.village-mode .content { padding-top: 8px; }
+.village-bottom { position: fixed; z-index: 30; left: calc(var(--dock-left, 0px) + 12px); right: calc(var(--dock-right, 0px) + 12px);
+  bottom: calc(var(--dock-bottom, 0px) + var(--safe-b) + 12px); max-width: 736px; margin: 0 auto; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+.app.village-mode .village-bottom > .village-sel { pointer-events: auto; }
+.village-head.hud { padding: 8px 12px; gap: 8px 14px; }
+@media (max-width: 600px) {
+  .village-head.hud { gap: 6px 10px; }
+  .village-head.hud .vh-mood { flex: 1 1 140px; gap: 8px; }
+  .village-head.hud .vh-mood small { display: none; }
+  .village-head.hud .vh-emoji { font-size: 26px; }
+  .village-head.hud .vh-wallet { gap: 10px; font-size: 15px; }
+  .village-head.hud .vh-actions { flex: 1 1 100%; gap: 5px; }
+  .village-head.hud .vh-actions .btn { flex: 1 1 auto; justify-content: center; padding-inline: 8px; }
+}
+.village-bottom .village-hint { align-self: center; margin: 0; padding: 4px 12px; border-radius: 12px; text-align: center;
+  background: color-mix(in srgb, var(--surface) 60%, transparent); pointer-events: none; }
+.village-bottom .village-sel { margin-top: 0; }
+.village-build .vb-grid { flex: 1 1 100%; display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 6px; max-height: min(38vh, 300px); overflow: auto; }
+.vb-item { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 8px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface); text-align: center; }
+.vb-item:not(:disabled):hover { border-color: var(--accent); }
+.vb-item .v-emoji { font-size: 24px; }
+.vb-name { font-size: 12.5px; line-height: 1.2; }
+.vb-item small { color: var(--accent); font-weight: 600; font-size: 12px; }
+.village-move { border: 1.5px dashed color-mix(in srgb, var(--accent) 60%, transparent); }
+.vm-bad { color: var(--danger); }
+.vz-row { display: flex; flex: 1 1 100%; align-items: center; gap: 10px; }
+.vz-row .vl-slider { flex: 1; flex-direction: row; align-items: center; gap: 10px; margin: 0; }
+.vz-row .vl-slider span { white-space: nowrap; font-size: 14px; }
+.village-settings .vz-row { margin: 6px 0; }
 .village-head.hud { padding: 10px 14px; border-radius: var(--radius); background: color-mix(in srgb, var(--surface) 82%, transparent);
   -webkit-backdrop-filter: blur(6px); backdrop-filter: blur(6px); box-shadow: var(--shadow); }
 .village-time, .village-sel { margin-top: 8px; padding: 8px 12px; border-radius: 14px; background: color-mix(in srgb, var(--surface) 84%, transparent);
@@ -1216,6 +1248,10 @@ body.tree-dragging, body.tree-dragging * { cursor: grabbing !important; user-sel
 .focus-info b { font-size: 17px; font-variant-numeric: tabular-nums; }
 .focus-info small { overflow: hidden; color: var(--muted); white-space: nowrap; text-overflow: ellipsis; }
 .focus-info a { color: inherit; }
+.focus-bar.paused { border-style: dashed; background: color-mix(in srgb, var(--accent) 5%, var(--surface)); }
+.focus-bar.paused .focus-ring i { animation: none; }
+.focus-bar.paused .focus-info b { color: var(--muted); }
+.focus-paused { margin-left: 6px; padding: 1px 7px; border-radius: 8px; background: var(--surface-2); color: var(--muted); font-size: 12px; font-weight: 600; vertical-align: 2px; }
 @keyframes hammer { 50% { transform: rotate(-18deg); } }
 .focus-task { margin: 0 0 10px; font-weight: 600; }
 .focus-presets { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-bottom: 12px; }

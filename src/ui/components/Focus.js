@@ -112,13 +112,13 @@ export function FocusSection({ task, locked = false }) {
   return html`
     <div class="focus-summary">
       <span class="fs-total">${total.count ? html`◎ <b>${formatMinutes(total.minutes)}</b> · ${total.count} ${total.count === 1 ? 'сессия' : total.count < 5 ? 'сессии' : 'сессий'}` : html`<span class="muted">Ещё не было фокуса</span>`}</span>
-      ${running ? html`<span class="fs-running">идёт · осталось ${mmss(focusLeft(f))}</span>`
+      ${running ? html`<span class="fs-running">${f.pausedAt ? 'на паузе' : 'идёт'} · осталось ${mmss(focusLeft(f))}</span>`
         : html`<button class="btn small" disabled=${locked} onClick=${() => openSheet('focus', { taskId: task.id })}><${Icon} name="focus" size=${16}/> Взяться</button>`}
     </div>
     ${recent.length ? html`<ul class="focus-history">${recent.map((s) => html`<li key=${s.id}><span>${formatMoment(s.startedAt, tz)}</span><b>${formatMinutes(s.minutes)}</b></li>`)}</ul>` : null}`;
 }
 
-/** Полоса текущего фокуса: оставшееся время, «Готово» (засчитать прошедшее) и «Прервать». */
+/** Полоса текущего фокуса: оставшееся время, пауза, «Готово» (засчитать прошедшее) и «Прервать». */
 export function FocusBar({ sticky = true }) {
   const f = getFocus();
   const [, setTick] = useState(0);
@@ -127,15 +127,15 @@ export function FocusBar({ sticky = true }) {
     const id = setInterval(() => {
       const cur = getFocus();
       if (!cur) return;
-      if (focusLeft(cur) <= 0) {
+      if (!cur.pausedAt && focusLeft(cur) <= 0) {
         if (document.hidden) notifyPlain('⏳ Фокус завершён', `«${cur.title}» · ${cur.minutes} мин. Загляни в деревню!`, 'lt-focus');
         A.finishFocus();
       } else setTick((x) => x + 1);
     }, 1000);
-    // строгий режим: ушёл из приложения дольше 15 секунд — фокус прерывается
+    // строгий режим: ушёл из приложения дольше 15 секунд — фокус прерывается (на паузе — можно уходить)
     const onVis = () => {
       const cur = getFocus();
-      if (!cur) return;
+      if (!cur || cur.pausedAt) return;
       if (document.hidden) setFocus({ ...cur, hiddenAt: Date.now() });
       else if (cur.hiddenAt) {
         const away = Date.now() - cur.hiddenAt;
@@ -145,7 +145,7 @@ export function FocusBar({ sticky = true }) {
     };
     document.addEventListener('visibilitychange', onVis);
     // открыли приложение, а время уже вышло
-    if (focusLeft(f) <= 0) A.finishFocus();
+    if (!f.pausedAt && focusLeft(f) <= 0) A.finishFocus();
     return () => {
       clearInterval(id);
       document.removeEventListener('visibilitychange', onVis);
@@ -155,17 +155,20 @@ export function FocusBar({ sticky = true }) {
   const left = focusLeft(f);
   const total = f.minutes * 60000;
   const progress = 1 - left / total;
+  const paused = !!f.pausedAt;
   const stop = async () => {
     const ok = await confirm({ title: 'Прервать фокус?', text: 'Время не засчитается, жители немного расстроятся.', confirmLabel: 'Прервать', danger: true });
     if (ok) A.cancelFocus();
   };
   return html`
-    <div class=${'focus-bar' + (sticky ? '' : ' static')} role="timer" aria-live="off">
-      <span class="focus-ring" style=${{ '--p': Math.round(progress * 100) }} aria-hidden="true"><i>🔨</i></span>
+    <div class=${'focus-bar' + (sticky ? '' : ' static') + (paused ? ' paused' : '')} role="timer" aria-live="off">
+      <span class="focus-ring" style=${{ '--p': Math.round(progress * 100) }} aria-hidden="true"><i>${paused ? '☕' : '🔨'}</i></span>
       <div class="focus-info">
-        <b>${mmss(left)}</b>
+        <b>${mmss(left)}${paused ? html` <span class="focus-paused">на паузе</span>` : null}</b>
         <small title=${f.title}>${f.taskId ? html`<a href=${'#/task/' + f.taskId}>${f.title}</a>` : f.title}</small>
       </div>
+      <button class="icon-btn small" onClick=${() => (paused ? A.resumeFocus() : A.pauseFocus())}
+        aria-label=${paused ? 'Продолжить фокус' : 'Пауза'} title=${paused ? 'Продолжить' : 'Пауза'}><${Icon} name=${paused ? 'play' : 'pause'} size=${18}/></button>
       <button class="btn small" onClick=${() => A.finishFocus({ early: true })} title="Засчитать прошедшие минуты">Готово</button>
       <button class="icon-btn small" onClick=${stop} aria-label="Прервать фокус" title="Прервать"><${Icon} name="close" size=${18}/></button>
     </div>`;

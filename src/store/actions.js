@@ -23,7 +23,8 @@ import { APP_VERSION } from '../version.js';
 import { tokenValid } from '../google/auth.js';
 import { planningDate } from '../core/planning.js';
 import * as V from '../core/village.js';
-import { getFocus, setFocus, claimFocus } from './focus.js';
+import { getFocus, setFocus, claimFocus, focusElapsed } from './focus.js';
+import { buildMap, suggestPlace } from '../village/map.js';
 import { emitVillage } from '../village/bus.js';
 
 let repo = null;
@@ -983,8 +984,25 @@ export async function refundPurchase(eventId) {
 
 // ---------- Деревня и фокус (обновление 0.7) ----------
 
-/** Купить постройку, жителя, свет или декор деревни — за монеты или изумруды. */
-export async function buyVillageItem(itemId) {
+/**
+ * Объекты деревни, которые ещё ни разу не ставили вручную, «замораживаются» на своих текущих местах (поля x, y) —
+ * вместе с любым изменением деревни (покупка, перестановка, продажа). Иначе при росте земли они могли бы сдвинуться.
+ */
+function freezeVillage(map, c0, skip = null) {
+  const out = [];
+  for (const o of V.villageObjects(store.data)) {
+    if (o.x != null || o.key === skip) continue;
+    const m = [...map.buildings, ...map.smalls].find((b) => b.key === o.key);
+    if (m) out.push(change('coinEvents', o.key, (x) => M.touch(x, { x: m.rx, y: m.ry }, c0)));
+  }
+  return out.filter(Boolean);
+}
+
+/**
+ * Купить постройку, жителя, свет или декор деревни — за монеты или изумруды.
+ * pos — клетка { x, y } относительно центра площади (нажали «Построить здесь»); без неё место выбирается само.
+ */
+export async function buyVillageItem(itemId, pos = null) {
   const item = V.villageItem(itemId);
   if (!item) return false;
   const check = V.canBuy(store.data, item, G.balance(store.data));
@@ -992,16 +1010,60 @@ export async function buyVillageItem(itemId) {
     showSnackbar(check.reason);
     return false;
   }
-  const price = item.coins || 0;
-  const gems = item.gems || 0;
+  const p = V.priceOf(store.data, item);
+  const price = p.coins || 0;
+  const gems = p.gems || 0;
   const cost = gems ? `${gems} 💎` : `${price} 🪙`;
   const left = gems ? `${V.gemBalance(store.data) - gems} 💎` : `${G.balance(store.data) - price} 🪙`;
   const ok = await confirm({ title: `Купить «${item.name}»?`, text: `Спишется ${cost}. Останется ${left}.`, confirmLabel: 'Купить' });
   if (!ok || !V.canBuy(store.data, item, G.balance(store.data)).ok) return false;
-  const e = G.purchaseEvent({ price, gems, title: item.name, itemId }, ctx());
-  if (!(await commit([{ coll: 'coinEvents', prev: undefined, next: e }]))) return false;
+  const c0 = ctx();
+  const changes = [];
+  let at = null;
+  if (item.place && !item.upgrade) {
+    const objects = V.villageObjects(store.data);
+    at = pos && Number.isInteger(pos.x) && Number.isInteger(pos.y) ? pos : suggestPlace(objects, item.place);
+    changes.push(...freezeVillage(buildMap(objects), c0));
+  }
+  const e = G.purchaseEvent({ price, gems, title: item.name, itemId, x: at?.x, y: at?.y }, c0);
+  changes.push({ coll: 'coinEvents', prev: undefined, next: e });
+  if (!(await commit(changes))) return false;
   showSnackbar(`Куплено: ${item.emoji} ${item.name} · −${cost}`);
-  emitVillage('bought', { itemId });
+  emitVillage('bought', { itemId, key: e.id });
+  return true;
+}
+
+/** Переставить объект деревни (key — id покупки, см. core/village.js villageObjects) в клетку (x, y) от центра площади. */
+export async function moveVillageObject(key, x, y) {
+  const obj = V.villageObjects(store.data).find((o) => o.key === key);
+  if (!obj || !Number.isInteger(x) || !Number.isInteger(y)) return false;
+  const c0 = ctx();
+  const changes = [...freezeVillage(buildMap(V.villageObjects(store.data)), c0, key), change('coinEvents', key, (e) => M.touch(e, { x, y }, c0))];
+  return commit(changes.filter(Boolean));
+}
+
+/** Продать объект деревни: покупки становятся неактивными, монеты и изумруды возвращаются полностью. */
+export async function sellVillageObject(key) {
+  const plan = V.sellPlan(store.data, key);
+  if (plan.error) {
+    showSnackbar(plan.error);
+    return false;
+  }
+  const item = V.villageItem(plan.obj.itemId);
+  const name = item?.name.replace(/ · ур\. \d$/, '') || 'объект';
+  const back = [plan.coins ? `${plan.coins} 🪙` : '', plan.gems ? `${plan.gems} 💎` : ''].filter(Boolean).join(' и ') || 'ничего';
+  const ok = await confirm({ title: `Продать «${name}»?`, text: `Вернётся ${back}.`, confirmLabel: 'Продать' });
+  if (!ok) return false;
+  const again = V.sellPlan(store.data, key);
+  if (again.error) return false;
+  const c0 = ctx();
+  const at = new Date(c0.now).toISOString();
+  const changes = [
+    ...freezeVillage(buildMap(V.villageObjects(store.data)), c0, key),
+    ...again.events.map((id) => change('coinEvents', id, (x) => M.touch(x, { active: false, at }, c0))),
+  ].filter(Boolean);
+  if (!(await commit(changes))) return false;
+  showSnackbar(`Продано: ${name} · +${back}`);
   return true;
 }
 
@@ -1018,7 +1080,7 @@ export async function startFocus({ taskId = null, minutes = 25, title = '' } = {
   const now = Date.now();
   const m = Math.max(1, Math.min(240, Math.round(minutes)));
   const label = t?.title || M.normalizeTitle(title) || 'Фокус';
-  setFocus({ taskId: t ? t.id : null, title: label, minutes: m, startedAt: now, endsAt: now + m * 60000 });
+  setFocus({ taskId: t ? t.id : null, title: label, minutes: m, startedAt: now, endsAt: now + m * 60000, pausedAt: null, pausedMs: 0 });
   emitVillage('focus-start');
   showSnackbar(`Фокус на ${m} мин. Деревня работает вместе с тобой`);
   return true;
@@ -1031,7 +1093,7 @@ export async function startFocus({ taskId = null, minutes = 25, title = '' } = {
 export async function finishFocus({ early = false } = {}) {
   const f = claimFocus(); // другая вкладка могла уже завершить эту сессию
   if (!f) return;
-  const minutes = early ? Math.min(f.minutes, Math.floor((Date.now() - f.startedAt) / 60000)) : f.minutes;
+  const minutes = early ? Math.min(f.minutes, Math.floor(focusElapsed(f) / 60000)) : f.minutes;
   if (minutes < 1) {
     emitVillage('focus-fail');
     showSnackbar('Фокус отменён');
@@ -1062,6 +1124,23 @@ export async function finishFocus({ early = false } = {}) {
     });
     if (v === true) await toggleComplete(t.id);
   } else showSnackbar(summary);
+}
+
+/** Пауза фокуса (0.7.2): таймер замирает, минуты паузы не засчитываются. */
+export function pauseFocus() {
+  const f = getFocus();
+  if (!f || f.pausedAt) return;
+  setFocus({ ...f, pausedAt: Date.now() });
+  emitVillage('focus-pause');
+}
+
+/** Продолжить фокус после паузы: время окончания сдвигается на длину паузы. */
+export function resumeFocus() {
+  const f = getFocus();
+  if (!f || !f.pausedAt) return;
+  const d = Math.max(0, Date.now() - f.pausedAt);
+  setFocus({ ...f, pausedAt: null, pausedMs: (f.pausedMs || 0) + d, endsAt: f.endsAt + d, hiddenAt: null });
+  emitVillage('focus-start');
 }
 
 /** Прервать фокус без зачёта (как засохшее дерево в Forest — жители немного расстроятся). */
