@@ -333,3 +333,34 @@ test('Цели БЖУ: переход «в граммах» → «в проце�
   assert.deepEqual(p, { protein: 41, fat: 29, carbs: 30 });
   assert.deepEqual(N.normalizedPct({ protein: 0, fat: 0, carbs: 0 }), { protein: 20, fat: 30, carbs: 50 });
 });
+
+test('Активности: калории в день у каждой, свои активности, расход', () => {
+  const p = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activity: 'light', goal: 'keep' };
+  const base = B.bmr(p);
+  assert.equal(base, 1780);
+  assert.equal(B.activityBurn(B.activityOf('sedentary'), base), 356);
+  assert.equal(B.activityBurn(B.activityOf('light'), base), 668);
+  assert.ok(B.activityLabel(B.activityOf('moderate'), base).endsWith('· +979 ккал в день'));
+  assert.ok(B.activityLabel(B.activityOf('moderate'), null).endsWith('· обмен × 1,55'), 'без обмена — коэффициент');
+  const custom = [{ id: 'c:1', name: 'Курьер', hint: 'весь день на ногах', kcal: 1200 }, { id: 'bad' }];
+  assert.equal(B.activityList(custom).length, 6, 'битые записи отбрасываются');
+  assert.equal(B.tdee({ ...p, activity: 'c:1', activities: custom }), 2980, 'своя — обмен + ккал');
+  assert.equal(B.tdee({ ...p, activity: 'c:удалена', activities: custom }), B.tdee(p), 'удалённая своя — как лёгкая');
+  assert.equal(B.tdee({ ...p, activity: 'moderate' }), 2759, 'как раньше');
+});
+
+test('«Рассчитать»: лимит по рекомендации, белок и жир по весу и цели, углеводы — остальное, не больше лимита', () => {
+  const p = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activity: 'moderate', goal: 'lose' };
+  const r = B.calcGoals(p, {});
+  assert.equal(r.kcal, 2260);
+  assert.deepEqual(r.grams, { protein: 160, fat: 72, carbs: 243 });
+  assert.ok(N.macrosKcal(r.grams) <= r.kcal);
+  assert.ok(r.why.includes('2 г на кг'));
+  assert.equal(B.calcGoals({ ...p, goal: 'keep' }, {}).grams.protein, 128);
+  const own = B.calcGoals(p, { recKcal: 1500 });
+  assert.equal(own.kcal, 1500, 'своя рекомендация');
+  assert.ok(N.macrosKcal(own.grams) <= 1500);
+  assert.deepEqual(B.calcGoals({ sex: 'male' }, {}).missing, ['дата рождения', 'рост', 'вес']);
+  const tiny = B.calcGoals({ ...p, weightKg: 150 }, { recKcal: 900 });
+  assert.ok(N.macrosKcal(tiny.grams) <= 900 && tiny.grams.carbs >= 0, 'маленький лимит — всё равно в пределах');
+});

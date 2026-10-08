@@ -10,7 +10,8 @@ import * as F from '../../core/feast.js';
 import {
   dayGoals, num, macroMode, macroPcts, gramsFromPct, normalizedPct, macrosKcal, checkGoals, KCAL_RANGE, KCAL_PER_G, MACROS, NUTRIENT,
 } from '../../core/nutrition.js';
-import { recommendation, ageOn, latest } from '../../core/body.js';
+import { recommendation, calcGoals } from '../../core/body.js';
+import { bodyState } from './FeastProfile.js';
 import { FEAST_RETENTION } from '../../config.js';
 import { buildFeastDb } from '../../data/feastEnvelope.js';
 
@@ -49,8 +50,10 @@ function IntField({ label, value, unit, onChange, disabled, big = false, after =
  * Настройки → Crimson Harvest → Цели и лимиты (0.12): лимит калорий и БЖУ — долями калорий (граммы считаются от лимита
  * сами) или граммами. Вне границ (доли не дают 100 %, граммы дают больше калорий, чем лимит) — «Сохранить» недоступна.
  */
-export function FeastGoalsSection() {
+export function FeastGoalsSection({ st = null }) {
   const s = store.feast.settings || {};
+  const body = st || bodyState();
+  const [calcNote, setCalcNote] = useState(null);
   const ro = !!store.ui.feastReadOnly;
   const saved = useMemo(() => goalsDraft(s), [s]);
   const [draft, setDraft] = useState(saved);
@@ -61,9 +64,8 @@ export function FeastGoalsSection() {
     if (sameDraft(draft, base)) setDraft(saved);
     setBase(saved);
   }, [saved]);
-  const w = latest([...store.feast.body.values()], 'weightKg');
-  const r = recommendation({ ...s, age: ageOn(s.birthDate, store.now.today), weightKg: w?.value }, s);
-  const rec = r.value;
+  const r = recommendation(body.p, s);
+  const calc = calcGoals(body.p, s);
   const check = checkGoals(draft);
   const dirty = !sameDraft(draft, saved);
   const kcalOk = Number.isFinite(draft.kcal) && draft.kcal >= KCAL_RANGE[0] && draft.kcal <= KCAL_RANGE[1];
@@ -78,21 +80,35 @@ export function FeastGoalsSection() {
   const setMacro = (k, v) => setDraft(draft.mode === 'pct' ? { ...draft, pct: { ...draft.pct, [k]: v } } : { ...draft, grams: { ...draft.grams, [k]: v } });
   const save = async (e) => {
     e?.preventDefault();
-    if (check.ok && (await FA.saveGoals(draft))) setDraft(goalsDraft(store.feast.settings));
+    if (check.ok && (await FA.saveGoals(draft))) {
+      setDraft(goalsDraft(store.feast.settings));
+      setCalcNote(null);
+    }
+  };
+  // «Рассчитать»: лимит — рекомендация по параметрам, БЖУ — по весу и цели (в выбранном виде: граммы или доли)
+  const runCalc = () => {
+    if (!calc.kcal) return;
+    // БЖУ посчитаны в граммах по весу — так и ставим (в процентах они бы округлились иначе); переключить можно потом
+    setDraft({ ...draft, kcal: calc.kcal, mode: 'grams', grams: calc.grams, pct: normalizedPct(calc.grams) });
+    setCalcNote(`Посчитано: ${calc.kcal} ккал (${r.own ? 'твоя рекомендация' : 'расход с активностью и цель'}); ${calc.why}. `
+      + 'БЖУ — в граммах. Проверь и нажми «Сохранить».');
   };
   const total = draft.mode === 'pct' ? MACROS.reduce((t, k) => t + (draft.pct[k] || 0), 0) : grams ? macrosKcal(grams) : 0;
   return html`
     <form class="goals-form" onSubmit=${save}>
       <section class="set-section">
-        <h2>Калории</h2>
+        <h2>Лимит калорий</h2>
         <div class="ne-main">
           <${IntField} big label="Лимит в день" unit="ккал" value=${draft.kcal} disabled=${ro} invalid=${!kcalOk} onChange=${setKcal}/>
         </div>
+        <div class="form-actions wrap calc-row">
+          <button type="button" class="btn primary" disabled=${ro || !calc.kcal} onClick=${runCalc}><${Icon} name="flame" size=${16}/> Рассчитать</button>
+          <span class="muted small">${calc.kcal
+            ? `По параметрам: ${calc.kcal} ккал, белки ${calc.grams.protein} г, жиры ${calc.grams.fat} г, углеводы ${calc.grams.carbs} г`
+            : `Для расчёта нужны: ${calc.missing.join(', ')} — заполни «Параметры» выше.`}</span>
+        </div>
+        ${calcNote ? html`<p class="hint" role="status">${calcNote}</p>` : null}
         <p class="muted small">От ${KCAL_RANGE[0]} до ${KCAL_RANGE[1]} ккал. В дневнике: «Осталось 247» — сколько ещё можно съесть, «−247» — насколько лимит превышен.</p>
-        ${rec ? html`<div class="form-actions"><span class="muted">${r.own ? 'Твоя рекомендация —' : 'По «Обо мне» под твою цель выходит'} <b>${rec}</b> ккал
-          (<${Link} to="/body">настроить<//>).</span>
-          ${rec !== draft.kcal ? html`<button type="button" class="btn" disabled=${ro} onClick=${() => setKcal(rec)}>Подставить ${rec}</button>` : null}</div>`
-          : html`<p class="muted small">Заполни пол, дату рождения, рост и вес в <${Link} to="/body">«Обо мне»<//> — посчитаю рекомендуемый лимит.</p>`}
       </section>
       <section class="set-section">
         <h2>Белки, жиры, углеводы</h2>

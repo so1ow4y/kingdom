@@ -5,6 +5,7 @@
 // Это оценки для ориентира, а не диагноз — так и пишется в интерфейсе.
 
 import { addDays, daysBetween } from './dates.js';
+import { MACROS, KCAL_PER_G, DEFAULT_MACRO_PCT, gramsFromPct } from './nutrition.js';
 
 export const SEXES = [
   { key: 'male', label: 'Мужской' },
@@ -43,12 +44,45 @@ export function bmr({ sex, weightKg, heightCm, age }) {
   return Math.round(10 * weightKg + 6.25 * heightCm - 5 * age + (sex === 'male' ? 5 : -161));
 }
 
-/** Расход за сутки с учётом активности. */
+// ---------- Активность (0.12.2: свои активности) ----------
+
+/** Свои активности из настроек: { id: 'c:…', name, hint, kcal } — сколько ккал в день сверх базового обмена. */
+export const ACTIVITY_NAME_MAX = 40;
+export const ACTIVITY_KCAL_MAX = 3000;
+export const CUSTOM_ACTIVITY_MAX = 20;
+
+export function customActivities(list) {
+  return (Array.isArray(list) ? list : []).filter((a) => a && typeof a.id === 'string' && a.name && Number.isFinite(a.kcal));
+}
+
+/** Все активности: встроенные (коэффициент к обмену) и свои (ккал в день). */
+export function activityList(custom = []) {
+  return [...ACTIVITY, ...customActivities(custom).map((a) => ({ key: a.id, label: a.name, hint: a.hint || '', kcal: a.kcal, custom: true }))];
+}
+
+/** Активность по ключу; неизвестная (удалённая своя) — «Лёгкая активность». */
+export function activityOf(key, custom = []) {
+  return activityList(custom).find((a) => a.key === key) || ACTIVITY[1];
+}
+
+/** Сколько ккал в день добавляет активность к базовому обмену (null — обмен неизвестен, а активность — коэффициентом). */
+export function activityBurn(a, base) {
+  if (Number.isFinite(a.kcal)) return Math.round(a.kcal);
+  return base ? Math.round(base * (a.factor - 1)) : null;
+}
+
+/** Подпись активности для списка: «… · +620 ккал в день» (или коэффициент, пока обмен не посчитан). */
+export function activityLabel(a, base) {
+  const burn = activityBurn(a, base);
+  const tail = burn != null ? `+${burn} ккал в день` : `обмен × ${String(a.factor).replace('.', ',')}`;
+  return `${a.label}${a.hint ? ' — ' + a.hint : ''} · ${tail}`;
+}
+
+/** Расход за сутки с учётом активности (p.activities — свои активности из настроек). */
 export function tdee(p) {
   const b = bmr(p);
   if (!b) return null;
-  const f = ACTIVITY.find((a) => a.key === p.activity)?.factor || 1.375;
-  return Math.round(b * f);
+  return b + activityBurn(activityOf(p.activity, p.activities), b);
 }
 
 /** Безопасный минимум калорий по умолчанию: 1500 у мужчин, 1200 у женщин. */
@@ -77,6 +111,49 @@ export function recommendation(p, settings = {}) {
   const auto = recommendedKcal(p, { lose: settings.loseKcal ?? undefined, gain: settings.gainKcal ?? undefined, floor: n(settings.minKcal) ?? undefined });
   const own = n(settings.recKcal);
   return { auto, own, value: own ?? auto };
+}
+
+/** Чего не хватает для расчёта обмена: ['пол', 'дата рождения', 'рост', 'вес']. */
+export function missingForBmr(p) {
+  const out = [];
+  if (!p.sex) out.push('пол');
+  if (!Number.isFinite(p.age)) out.push('дата рождения');
+  if (!ok(p.heightCm)) out.push('рост');
+  if (!ok(p.weightKg)) out.push('вес');
+  return out;
+}
+
+/** Белок на кг веса под цель (г): похудеть — 2,0 (сохранить мышцы), держать — 1,6, набрать — 1,8. */
+export const PROTEIN_PER_KG = { lose: 2, keep: 1.6, gain: 1.8 };
+/** Жир на кг веса (г), но не меньше 20 % и не больше 35 % калорий. */
+export const FAT_PER_KG = 0.9;
+
+/**
+ * «Рассчитать» (0.12.2): лимит калорий — рекомендация (своя или расчёт), БЖУ в граммах — белок и жир по весу и цели,
+ * углеводы — остальное. Граммы округляются вниз: вместе они никогда не дают больше лимита.
+ * → { kcal, grams, why } или { missing: [...] }.
+ */
+export function calcGoals(p, settings = {}) {
+  const r = recommendation(p, settings);
+  if (!r.value) return { missing: missingForBmr(p) };
+  const kcal = r.value;
+  const kg = ok(p.weightKg) ? p.weightKg : null;
+  if (!kg) return { kcal, grams: gramsFromPct(kcal, DEFAULT_MACRO_PCT), why: 'вес не указан — БЖУ по умолчанию: 20 / 30 / 50 %' };
+  const perKg = PROTEIN_PER_KG[p.goal] ?? PROTEIN_PER_KG.keep;
+  let protein = Math.floor(perKg * kg);
+  let fat = Math.floor(Math.min(Math.max(FAT_PER_KG * kg, (kcal * 0.2) / 9), (kcal * 0.35) / 9));
+  // очень маленький лимит: белок и жир вместе не больше 80 % калорий (углеводам — хоть что-то)
+  const pf = protein * KCAL_PER_G.protein + fat * KCAL_PER_G.fat;
+  if (pf > kcal * 0.8) {
+    const k = (kcal * 0.8) / pf;
+    protein = Math.floor(protein * k);
+    fat = Math.floor(fat * k);
+  }
+  const carbs = Math.max(0, Math.floor((kcal - protein * KCAL_PER_G.protein - fat * KCAL_PER_G.fat) / KCAL_PER_G.carbs));
+  const grams = { protein, fat, carbs };
+  for (const m of MACROS) grams[m] = Math.max(0, grams[m]);
+  const n = (v) => String(v).replace('.', ',');
+  return { kcal, grams, why: `белок ${n(perKg)} г на кг (${n(Math.round(kg * 10) / 10)} кг), жир ≈ ${n(FAT_PER_KG)} г на кг, углеводы — остальное` };
 }
 
 export function bmi(weightKg, heightCm) {

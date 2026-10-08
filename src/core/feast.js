@@ -26,7 +26,7 @@ export const FEAST_COLLECTIONS = ['settings', 'foods', 'entries', 'dayArchive', 
 // (loseKcal — дефицит для похудения, gainKcal — профицит для набора, minKcal — нижняя граница, recKcal — своя рекомендация).
 export const FEAST_SETTINGS_FIELDS = ['kcalGoal', 'proteinGoal', 'fatGoal', 'carbsGoal', 'entryLimit',
   'rewardXp', 'rewardCoins', 'rewardGems', 'loseKcal', 'gainKcal', 'minKcal', 'recKcal',
-  'macroMode', 'proteinPct', 'fatPct', 'carbsPct',
+  'macroMode', 'proteinPct', 'fatPct', 'carbsPct', 'activities',
   'sex', 'birthDate', 'heightCm', 'activity', 'goal', 'targetWeightKg', 'deletedAt'];
 // rewards (0.12) — опыт, монеты и 💎 за каждую запись продукта; не задано — по умолчанию из настроек
 export const FOOD_FIELDS = ['name', 'brand', 'unit', 'servingName', 'servingSize', 'nutrients', 'favorite', 'note', 'rewards', 'deletedAt'];
@@ -87,6 +87,7 @@ export function defaultFeastSettings() {
     proteinPct: null,
     fatPct: null,
     carbsPct: null,
+    activities: [], // 0.12.2: свои активности { id: 'c:…', name, hint, kcal }
   };
 }
 

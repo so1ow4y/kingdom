@@ -1,12 +1,15 @@
-// Feast (обновление 0.11): «Обо мне» — параметры (пол, дата рождения, рост, активность, цель, желаемый вес),
+// Crimson Harvest (0.11, «Feast»): «Обо мне» — параметры (пол, дата рождения, рост, активность, цель, желаемый вес),
 // замеры (вес, обхваты, процент жира), состав тела с пиксельной фигурой «сейчас» и «при цели», расход калорий
-// и рекомендуемый лимит, график веса. Всё хранится в базе Feast и синхронизируется (DATA_FORMAT §19).
+// и рекомендуемый лимит, график веса. 0.12.2: параметры и расчёт — общие с «Настройки → Цели и лимиты»
+// (components/FeastProfile.js), здесь же — лимит калорий и БЖУ с кнопкой «Рассчитать».
 
 import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { LineChart } from '../components/FeastCharts.js';
 import { BodyFigure } from '../components/BodyFigure.js';
-import { NumField, OptNumField } from '../components/FeastParts.js';
+import { NumField } from '../components/FeastParts.js';
+import { bodyState, ProfileCard, EnergyCard } from '../components/FeastProfile.js';
+import { FeastGoalsSection } from '../components/FeastSettings.js';
 import { Banner } from '../components/Overlays.js';
 import { store, confirm } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
@@ -15,28 +18,10 @@ import * as B from '../../core/body.js';
 import { addDays, longDate } from '../../core/dates.js';
 import { SCHEMES, getAppPrefs } from '../prefs.js';
 
+export { bodyState };
+
 const f1 = (v) => (Number.isFinite(v) ? v.toLocaleString('ru-RU', { maximumFractionDigits: 1 }) : '—');
 
-/** Всё, что известно о теле на сегодня: параметры, последние замеры, оценки. */
-export function bodyState(today = store.now.today) {
-  const s = store.feast.settings || {};
-  const logs = [...store.feast.body.values()];
-  const last = (k) => B.latest(logs, k, today);
-  const weight = last('weightKg');
-  const age = B.ageOn(s.birthDate, today);
-  const p = {
-    sex: s.sex, age, heightCm: s.heightCm, weightKg: weight?.value ?? null, activity: s.activity, goal: s.goal,
-    waistCm: last('waistCm')?.value ?? null, neckCm: last('neckCm')?.value ?? null, hipCm: last('hipCm')?.value ?? null,
-    bodyFatPct: (() => {
-      // замер процента жира действует, только если он не старше последнего взвешивания
-      const bf = last('bodyFatPct');
-      return bf && (!weight || bf.date >= weight.date) ? bf.value : null;
-    })(),
-  };
-  const bmi = B.bmi(p.weightKg, p.heightCm);
-  const est = B.estimateBodyFat(p);
-  return { s, p, weight, bmi, est, logs };
-}
 
 /** Процент жира на каждый день со взвешиванием (для графика). */
 export function bodyFatSeries(st) {
@@ -109,30 +94,6 @@ export function CompositionCard({ st }) {
   </section>`;
 }
 
-function ProfileCard({ s, ro }) {
-  const set = (c) => FA.updateFeastSettings(c);
-  return html`<section class="set-section">
-    <h2>Параметры</h2>
-    <div class="chip-row wrap" role="radiogroup" aria-label="Пол">
-      ${B.SEXES.map((x) => html`<button type="button" role="radio" aria-checked=${s.sex === x.key} key=${x.key} disabled=${ro}
-        class=${'chip' + (s.sex === x.key ? ' selected' : '')} onClick=${() => set({ sex: x.key })}>${x.label}</button>`)}
-    </div>
-    <div class="field-row">
-      <label class="field"><span>Дата рождения</span><input type="date" value=${s.birthDate || ''} max=${store.now.today} disabled=${ro}
-        onChange=${(e) => set({ birthDate: e.target.value || null })}/></label>
-      <${NumField} label="Рост" unit="см" value=${s.heightCm} disabled=${ro} onCommit=${(v) => set({ heightCm: parseFloat(String(v).replace(',', '.')) || null })}/>
-      <${NumField} label="Желаемый вес" unit="кг" value=${s.targetWeightKg} disabled=${ro} onCommit=${(v) => set({ targetWeightKg: parseFloat(String(v).replace(',', '.')) || null })}/>
-    </div>
-    <label class="field"><span>Активность</span>
-      <select value=${s.activity || 'light'} disabled=${ro} onChange=${(e) => set({ activity: e.target.value })}>
-        ${B.ACTIVITY.map((a) => html`<option value=${a.key}>${a.label} — ${a.hint}</option>`)}
-      </select></label>
-    <div class="chip-row wrap" role="radiogroup" aria-label="Цель">
-      ${B.GOALS.map((g) => html`<button type="button" role="radio" aria-checked=${s.goal === g.key} key=${g.key} disabled=${ro}
-        class=${'chip' + (s.goal === g.key ? ' selected' : '')} onClick=${() => set({ goal: g.key })}>${g.label}</button>`)}
-    </div>
-  </section>`;
-}
 
 function MeasureCard({ st, ro }) {
   const today = store.now.today;
@@ -154,50 +115,6 @@ function MeasureCard({ st, ro }) {
   </section>`;
 }
 
-/**
- * Калории: обмен, расход, рекомендуемый лимит под цель. 0.12: рекомендацию можно настроить — дефицит для
- * похудения, профицит для набора, нижнюю границу — или задать свою целиком.
- */
-function EnergyCard({ st, ro }) {
-  const { s, p } = st;
-  const r = B.recommendation(p, s);
-  const rec = r.value;
-  const base = B.bmr(p);
-  const t = B.tdee(p);
-  const tuned = r.own != null || s.loseKcal != null || s.gainKcal != null || s.minKcal != null;
-  const [open, setOpen] = useState(false);
-  const set = (k) => (v) => FA.updateFeastSettings({ [k]: v });
-  const goal = B.GOALS.find((g) => g.key === s.goal)?.label.toLowerCase() || 'держать вес';
-  return html`<section class="set-section">
-    <h2>Калории</h2>
-    ${base || r.own ? html`<div class="stat-tiles">
-      ${base ? html`<div class="stat-tile"><span>Базовый обмен</span><b>${base}</b><small>ккал в покое</small></div>
-      <div class="stat-tile"><span>Расход с активностью</span><b>${t}</b><small>держать вес</small></div>` : null}
-      <div class="stat-tile"><span>${r.own ? 'Своя рекомендация' : `Под цель «${goal}»`}</span><b>${rec ?? '—'}</b>
-        <small>${r.own && r.auto ? `по расчёту — ${r.auto}` : 'ккал в день'}</small></div>
-    </div>
-    <div class="form-actions wrap">
-      <span class="muted">Сейчас лимит: <b>${s.kcalGoal}</b> ккал</span>
-      ${rec && rec !== s.kcalGoal ? html`<button type="button" class="btn primary" disabled=${ro} onClick=${() => FA.setKcalGoal(rec)}>Сделать лимитом ${rec}</button>` : null}
-      <button type="button" class="btn ghost" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-        <${Icon} name=${open ? 'chevronDown' : 'chevron'} size=${16}/> Настроить рекомендацию${tuned ? ' · изменена' : ''}</button>
-    </div>` : html`<p class="muted">Укажи пол, дату рождения, рост и вес — посчитаю обмен веществ и лимит калорий под цель.
-      Или задай свою рекомендацию: <button type="button" class="link-btn" onClick=${() => setOpen(!open)}>настроить</button>.</p>`}
-    ${open ? html`<div class="rec-tune">
-      <div class="ne-main">
-        <${OptNumField} label="Дефицит для «Похудеть»" unit="ккал" placeholder="500" value=${s.loseKcal} disabled=${ro} max=${2000} onCommit=${set('loseKcal')}/>
-        <${OptNumField} label="Профицит для «Набрать»" unit="ккал" placeholder="300" value=${s.gainKcal} disabled=${ro} max=${2000} onCommit=${set('gainKcal')}/>
-        <${OptNumField} label="Не ниже" unit="ккал" placeholder=${String(B.defaultFloor(s.sex))} value=${s.minKcal} disabled=${ro} max=${10000} onCommit=${(v) => set('minKcal')(v || null)}/>
-        <${OptNumField} label="Своя рекомендация" unit="ккал" placeholder=${r.auto ? String(r.auto) : 'нет расчёта'} value=${s.recKcal} disabled=${ro} max=${10000} onCommit=${(v) => set('recKcal')(v || null)}/>
-      </div>
-      <p class="muted small">Пустое поле — по умолчанию (−500 для похудения, +300 для набора, не ниже 1500 у мужчин и 1200 у женщин).
-        «Своя рекомендация» заменяет расчёт целиком — например, по совету врача или тренера. Лимит в дневнике меняется только кнопкой
-        «Сделать лимитом» или в настройках.</p>
-      ${tuned ? html`<button type="button" class="btn small" disabled=${ro}
-        onClick=${() => FA.updateFeastSettings({ loseKcal: null, gainKcal: null, minKcal: null, recKcal: null })}>Сбросить к расчёту</button>` : null}
-    </div>` : null}
-  </section>`;
-}
 
 const PERIODS = [['30', '30 дней'], ['90', '3 месяца'], ['365', 'Год'], ['all', 'Всё время']];
 
@@ -256,10 +173,11 @@ export function BodyScreen() {
   return html`
     <div class="screen body-screen">
       ${store.ui.feastReadOnly ? html`<${Banner} tone="danger">${store.ui.feastReadOnly}<//>` : null}
-      <${ProfileCard} s=${st.s} ro=${ro}/>
+      <${ProfileCard} st=${st} ro=${ro}/>
       <${MeasureCard} st=${st} ro=${ro}/>
       <${CompositionCard} st=${st}/>
-      <${EnergyCard} st=${st} ro=${ro}/>
+      <${EnergyCard} st=${st} ro=${ro} limitButton=${false}/>
+      <${FeastGoalsSection} st=${st}/>
       <${WeightCard} st=${st}/>
       <${HistoryCard} st=${st} ro=${ro}/>
     </div>`;

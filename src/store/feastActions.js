@@ -6,6 +6,8 @@ import { store, bumpData, setUi, showSnackbar, confirm } from './appState.js';
 import { touch, tombstone, revert } from '../core/model.js';
 import { keyForIndex } from '../core/order.js';
 import * as F from '../core/feast.js';
+import * as B from '../core/body.js';
+import { uuidv7 } from '../core/ids.js';
 import { normalizeBarcode } from '../core/barcode.js';
 import { num, fmt, entryKcal, checkGoals, goalChanges, kcalGoalChanges } from '../core/nutrition.js';
 import { countLabel } from '../core/plural.js';
@@ -135,6 +137,45 @@ export async function saveGoals(input) {
   const ok = await updateFeastSettings(goalChanges(input));
   if (ok) showSnackbar('Цели сохранены');
   return ok;
+}
+
+/** Своя активность (0.12.2): название, описание, сколько ккал в день сверх базового обмена. Возвращает её id. */
+export async function addActivity({ name, hint = '', kcal }) {
+  const s = D().settings;
+  const list = B.customActivities(s.activities);
+  const n = F.normalizeName(name).slice(0, B.ACTIVITY_NAME_MAX);
+  const k = Math.round(num(kcal));
+  if (!n) {
+    showSnackbar('Назови активность');
+    return null;
+  }
+  if (!(k >= 0 && k <= B.ACTIVITY_KCAL_MAX) || !String(kcal).trim()) {
+    showSnackbar(`Калории в день — от 0 до ${B.ACTIVITY_KCAL_MAX}`);
+    return null;
+  }
+  if (list.length >= B.CUSTOM_ACTIVITY_MAX) {
+    showSnackbar(`Своих активностей — не больше ${B.CUSTOM_ACTIVITY_MAX}`);
+    return null;
+  }
+  const a = { id: 'c:' + uuidv7(Date.now()), name: n, hint: F.normalizeName(hint).slice(0, 80), kcal: k };
+  const ok = await updateFeastSettings({ activities: [...list, a], activity: a.id });
+  return ok ? a.id : null;
+}
+
+/** Удалить свою активность; если она выбрана — снова «Лёгкая активность». */
+export async function removeActivity(id) {
+  const s = D().settings;
+  const list = B.customActivities(s.activities);
+  const a = list.find((x) => x.id === id);
+  if (!a) return false;
+  const changes = { activities: list.filter((x) => x.id !== id) };
+  if (s.activity === id) changes.activity = 'light';
+  const c = change('settings', F.FEAST_SETTINGS_ID, (x) => touch(x, changes, ctx()));
+  if (await commit([c])) {
+    offerUndo(`Активность «${a.name}» удалена`, [c]);
+    return true;
+  }
+  return false;
 }
 
 /** Только лимит калорий («Сделать лимитом»): доли пересчитывают граммы сами, заданные граммы — проверяются. */

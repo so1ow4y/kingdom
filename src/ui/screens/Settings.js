@@ -20,6 +20,17 @@ import { DataSection, LimitsSection } from '../components/DataSettings.js';
 import { ShortcutsSection } from '../components/Shortcuts.js';
 import { FeastGoalsSection, FeastDataSection, FeastRewardsSection } from '../components/FeastSettings.js';
 import { MealsSection } from '../components/Meals.js';
+import { bodyState, ProfileCard, EnergyCard } from '../components/FeastProfile.js';
+
+/** Настройки → Цели и лимиты (0.12.2): параметры «Обо мне», расчёт и лимиты — то же, что на экране «Обо мне». */
+function FeastGoalsPage() {
+  const st = useMemo(() => bodyState(), [store.version, store.now.today]);
+  const ro = !!store.ui.feastReadOnly;
+  return html`
+    <${ProfileCard} st=${st} ro=${ro} withWeight=${true}/>
+    <${EnergyCard} st=${st} ro=${ro} limitButton=${false}/>
+    <${FeastGoalsSection} st=${st}/>`;
+}
 import { activeApp } from '../prefs.js';
 import { APPS, otherApp, switchApp } from '../apps.js';
 import { GameSettingsSection } from './Shop.js';
@@ -291,7 +302,7 @@ const TREE = [
   {
     id: 'feast', title: 'Crimson Harvest — еда', icon: 'flame',
     items: [
-      { key: 'feast-goals', title: 'Цели и лимиты', desc: 'Дневной лимит калорий и цели по белкам, жирам и углеводам. Общие для всех устройств.', keywords: 'калории лимит цель белки жиры углеводы бжу ккал норма feast crimson harvest фитнес' },
+      { key: 'feast-goals', title: 'Цели и лимиты', desc: 'Параметры (пол, возраст, рост, вес, активность, цель), расчёт, дневной лимит калорий и БЖУ — то же, что в «Обо мне». Общие для всех устройств.', keywords: 'калории лимит цель белки жиры углеводы бжу ккал норма рассчитать активность пол рост вес возраст обо мне feast crimson harvest фитнес' },
       { key: 'feast-rewards', title: 'Награды за еду', desc: 'Сколько опыта, монет и алмазов 💎 приносит запись продукта по умолчанию.', keywords: 'награда опыт монеты алмазы изумруды xp игра продукт еда' },
       { key: 'feast-meals', title: 'Рационы', desc: 'Завтрак, обед, ужин, перекус и свои рационы: названия, значки, время, порядок.', keywords: 'рацион рационы приём пищи завтрак обед ужин перекус полдник время порядок значок' },
       { key: 'feast-data', title: 'Дневник и хранение', desc: 'Сколько записей дневника хранить: старые дни удаляются, а их итоги остаются в аналитике.', keywords: 'дневник записи лимит хранение удаление сводки экспорт json feast' },
@@ -402,7 +413,7 @@ export function SettingsScreen({ query = {} }) {
       case 'priorities': return html`<${PrioritiesSection}/>`;
       case 'notifications': return html`<${NotificationsSection}/>`;
       case 'appearance': return html`<${AppearanceSection} phone=${phone}/>`;
-      case 'feast-goals': return html`<${FeastGoalsSection}/>`;
+      case 'feast-goals': return html`<${FeastGoalsPage}/>`;
       case 'feast-data': return html`<${FeastDataSection}/>`;
       case 'feast-meals': return html`<${MealsSection}/>`;
       case 'feast-rewards': return html`<${FeastRewardsSection}/>`;

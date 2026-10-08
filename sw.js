@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.12.1';
+const VERSION = '0.12.2';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -88,6 +88,7 @@ const PRECACHE = [
   './src/ui/components/Explorer.js',
   './src/ui/components/FeastCharts.js',
   './src/ui/components/FeastParts.js',
+  './src/ui/components/FeastProfile.js',
   './src/ui/components/FeastSettings.js',
   './src/ui/components/Focus.js',
   './src/ui/components/ItemLists.js',
