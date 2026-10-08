@@ -12,7 +12,7 @@ import { store, confirm } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import {
-  KINDS, PLACEHOLDER, RANGES, RANGE_LABEL, HAS_HINT, fieldChips, rangeFrom, makeContext, search, facets, histogram,
+  KINDS, PLACEHOLDER, RANGES, RANGE_LABEL, HAS_HINT, REPEAT_HINT, fieldChips, rangeFrom, makeContext, search, facets, histogram,
   eventTime, listNames, priorityName, statusOf, STATUS_LABEL, deviceName,
 } from '../../core/explore.js';
 import { withTerm, andQuery } from '../../core/query.js';
@@ -278,7 +278,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
         <div class="ex-fields">
           <span>Поля:</span>
           ${fieldChips(kind).map((f) => html`<button type="button" class="ex-field" key=${f}
-            title=${f === 'есть' ? HAS_HINT : undefined}
+            title=${f === 'есть' ? HAS_HINT : f === 'повтор' ? REPEAT_HINT : undefined}
             onClick=${() => setDraft((d) => `${d.trim()} ${f}:`.trim())}>${f}:</button>`)}
           <span class="ex-syntax">${SYNTAX}</span>
         </div>

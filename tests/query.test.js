@@ -160,7 +160,7 @@ test('обозреватель: диапазон времени, топ знач
   assert.deepEqual(titles(search(s.ctx, 'done', { from: rangeFrom('7d', NOW) })), ['Пробежка']);
   const r = search(s.ctx, 'all', { q: '' });
   const top = facets(s.ctx, r.rows, 'all');
-  assert.deepEqual(top.map((f) => f.field), ['статус', 'список', 'приоритет', 'день', 'устройство']);
+  assert.deepEqual(top.map((f) => f.field), ['статус', 'список', 'приоритет', 'повтор', 'день', 'устройство']);
   assert.deepEqual(top[0].values, [{ value: 'активна', count: 6 }, { value: 'в корзине', count: 1 }, { value: 'выполнена', count: 1 }]);
   assert.deepEqual(top[1].values[0], { value: 'Входящие', count: 4 });
   const h = histogram(r.rows, 'all', null, NOW);
@@ -181,4 +181,24 @@ test('обозреватель: проверка одного условия и 
     'Готово: 2 из 5. Не подошли: уже выполнены (2), повторяющиеся — их отмечают по одной (1)');
   const t2 = touch(s.a, { title: 'Ёжик в тумане' }, makeCtx(NOW));
   assert.ok(matchTerm(s.ctx, t2, { field: null, value: 'ежик' }, 'all'), 'ё = е');
+});
+
+test('обозреватель (0.12.3): «повтор:» — группы, есть/нет, текст правила, топ «повтор»', () => {
+  const s = sample();
+  const c = makeCtx(NOW);
+  addTask(s.d, c, { title: 'День рождения Кати', repeat: makeRule({ kind: 'yearly', month: 3, monthDay: 8 }, TODAY) });
+  addTask(s.d, c, { title: 'Квартплата', repeat: makeRule({ kind: 'monthly', monthDay: 20 }, TODAY) });
+  addTask(s.d, c, { title: 'Тренировка', repeat: makeRule({ kind: 'weekly', weekdays: [1, 3, 5] }, TODAY) });
+  const ctx = makeContext(s.d, 'Europe/Moscow', TODAY);
+  const q = (query) => titles(search(ctx, 'all', { q: query }));
+  assert.deepEqual(q('повтор:годы'), ['День рождения Кати']);
+  assert.deepEqual(q('repeat:monthly'), ['Квартплата']);
+  assert.deepEqual(q('повтор:недели'), ['Тренировка']);
+  assert.deepEqual(q('повтор:дни'), ['Зарядка']);
+  assert.deepEqual(q('повтор:есть'), ['День рождения Кати', 'Зарядка', 'Квартплата', 'Тренировка']);
+  assert.ok(q('повтор:нет').includes('Врач') && !q('повтор:нет').includes('Зарядка'));
+  assert.deepEqual(q('повтор:марта'), ['День рождения Кати'], 'по тексту правила');
+  assert.deepEqual(q('повтор:"по годам"'), ['День рождения Кати'], 'значение из топа');
+  const top = facets(ctx, search(ctx, 'all', { q: '' }).rows, 'all').find((f) => f.field === 'повтор');
+  assert.ok(top && top.values.some((v) => v.value === 'по годам' && v.count === 1) && top.values.some((v) => v.value === 'без повтора'));
 });

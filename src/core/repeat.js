@@ -1,10 +1,11 @@
 // Повторяющиеся задачи (обновление 0.9; правило и алгоритм — DATA_FORMAT §5.3.4, §5.3.6, §5.4). Чистые функции.
+// 0.12.3: ежегодные (freq 'yearly': месяц byMonth и число byMonthDay; 29 февраля в невисокосный год — 28-го).
 //
 // У повторяющейся задачи scheduledDate = deadlineDate = null; её дата — текущий экземпляр по правилу repeat
 // и словарю occurrences (ключ — исходная дата экземпляра). Закрыть экземпляр = occurrences[key].state = done;
 // пропущенные раньше экземпляры не копятся: текущим становится последний незакрытый до сегодня (или ближайший после).
 
-import { addDays, daysBetween, isoWeekday, mondayOf, localDateOf, WEEKDAY_SHORT } from './dates.js';
+import { addDays, daysBetween, isoWeekday, mondayOf, localDateOf, WEEKDAY_SHORT, MONTH_GEN } from './dates.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => [Number(d.slice(0, 4)), Number(d.slice(5, 7)), Number(d.slice(8, 10))];
@@ -30,8 +31,18 @@ export function matches(rule, d) {
     const want = Math.min(rule.byMonthDay || ymd(rule.startDate)[2], daysInMonth(y, m));
     return day === want && monthsBetween(rule.startDate, d) % n === 0;
   }
+  if (rule.freq === 'yearly') {
+    const [y, m, day] = ymd(d);
+    const [sy, sm, sd] = ymd(rule.startDate);
+    if (m !== (rule.byMonth || sm)) return false;
+    const want = Math.min(rule.byMonthDay || sd, daysInMonth(y, m));
+    return day === want && (y - sy) % n === 0;
+  }
   return false;
 }
+
+/** Сколько дней вперёд искать следующий экземпляр (у ежегодных — до N лет). */
+const horizon = (rule) => (rule.freq === 'yearly' ? 366 * (Math.max(1, rule.interval | 0 || 1) + 1) : 366 * 3);
 
 const isClosed = (o) => !!o && (o.state === 'done' || o.state === 'skipped');
 
@@ -46,7 +57,7 @@ function addInterval(d, freq, n) {
   if (freq === 'daily') return addDays(d, n);
   if (freq === 'weekly') return addDays(d, 7 * n);
   const [y, m, day] = ymd(d);
-  const total = y * 12 + (m - 1) + n;
+  const total = y * 12 + (m - 1) + (freq === 'yearly' ? 12 * n : n);
   const ny = Math.floor(total / 12);
   const nm = (total % 12) + 1;
   return `${ny}-${pad(nm)}-${pad(Math.min(day, daysInMonth(ny, nm)))}`;
@@ -74,8 +85,9 @@ export function currentKey(task, today, tz = 'UTC') {
   }
   // иначе ближайший будущий
   let d = lo > today ? lo : addDays(today, 1);
-  const end = addDays(today, 366 * 3);
-  for (let i = 0; i < 1200 && d <= end; i++, d = addDays(d, 1)) if (matches(rule, d) && !isClosed(occ[d])) return d;
+  const span = horizon(rule);
+  const end = addDays(today, span);
+  for (let i = 0; i <= span && d <= end; i++, d = addDays(d, 1)) if (matches(rule, d) && !isClosed(occ[d])) return d;
   return null;
 }
 
@@ -94,7 +106,8 @@ export function upcoming(task, today, n = 3, tz = 'UTC') {
   const out = [effDate(task, key)];
   if (task.repeat.mode === 'afterCompletion') return out;
   let d = addDays(key, 1);
-  for (let i = 0; i < 800 && out.length < n; i++, d = addDays(d, 1)) if (matches(task.repeat, d) && !isClosed(task.occurrences?.[d])) out.push(effDate(task, d));
+  const span = task.repeat.freq === 'yearly' ? horizon(task.repeat) * n : 800;
+  for (let i = 0; i < span && out.length < n; i++, d = addDays(d, 1)) if (matches(task.repeat, d) && !isClosed(task.occurrences?.[d])) out.push(effDate(task, d));
   return out;
 }
 
@@ -116,14 +129,21 @@ export function reopenOccurrence(task, key, ctx) {
   return { ...bumped(task, ctx), occurrences: { ...(task.occurrences || {}), [key]: occ(task, key, { state: 'open', doneAt: null }, ctx) } };
 }
 
-/** Правило из простых настроек интерфейса: { kind: daily|weekly|monthly|every, weekdays, monthDay, interval, mode }. */
-export function makeRule({ kind = 'daily', weekdays = null, monthDay = null, interval = 1, mode = 'schedule' }, startDate) {
+/** Правило из простых настроек интерфейса: { kind: daily|weekly|monthly|yearly|every, weekdays, monthDay, month, interval, mode }. */
+export function makeRule({ kind = 'daily', weekdays = null, monthDay = null, month = null, interval = 1, mode = 'schedule' }, startDate) {
   const base = { interval: 1, byWeekday: null, byMonthDay: null, mode, startDate, until: null, resetSubtasks: true };
   if (kind === 'weekly') {
     const days = [...new Set((weekdays?.length ? weekdays : [isoWeekday(startDate)]).map(Number))].filter((x) => x >= 1 && x <= 7).sort((a, b) => a - b);
     return { ...base, freq: 'weekly', byWeekday: mode === 'schedule' ? days : null };
   }
   if (kind === 'monthly') return { ...base, freq: 'monthly', byMonthDay: mode === 'schedule' ? Math.max(1, Math.min(31, monthDay | 0 || ymd(startDate)[2])) : null };
+  if (kind === 'yearly') {
+    if (mode !== 'schedule') return { ...base, freq: 'yearly', byMonth: null };
+    const m = Math.max(1, Math.min(12, month | 0 || ymd(startDate)[1]));
+    // в феврале — до 29-го (в невисокосный год сработает 28-го), в остальных — до последнего дня месяца
+    const day = Math.max(1, Math.min(daysInMonth(2024, m), monthDay | 0 || ymd(startDate)[2]));
+    return { ...base, freq: 'yearly', byMonth: m, byMonthDay: day };
+  }
   if (kind === 'every') return { ...base, freq: 'daily', interval: Math.max(1, Math.min(365, interval | 0 || 2)) };
   return { ...base, freq: 'daily' };
 }
@@ -131,6 +151,9 @@ export function makeRule({ kind = 'daily', weekdays = null, monthDay = null, int
 /** Простой вид правила для редактора: { kind, weekdays, monthDay, interval }. */
 export function ruleKind(rule) {
   if (!rule) return { kind: 'none', weekdays: [], monthDay: null, interval: 2 };
+  if (rule.freq === 'yearly') {
+    return { kind: 'yearly', weekdays: [], month: rule.byMonth || ymd(rule.startDate)[1], monthDay: rule.byMonthDay || ymd(rule.startDate)[2], interval: rule.interval };
+  }
   if (rule.freq === 'weekly') return { kind: 'weekly', weekdays: rule.byWeekday || [isoWeekday(rule.startDate)], monthDay: null, interval: rule.interval };
   if (rule.freq === 'monthly') return { kind: 'monthly', weekdays: [], monthDay: rule.byMonthDay || ymd(rule.startDate)[2], interval: rule.interval };
   if ((rule.interval | 0) > 1) return { kind: 'every', weekdays: [], monthDay: null, interval: rule.interval };
@@ -152,5 +175,27 @@ export function describeRule(rule) {
     const day = rule.byMonthDay || ymd(rule.startDate)[2];
     return n === 1 ? `каждый месяц ${day}-го${after}` : `раз в ${n} мес. ${day}-го${after}`;
   }
+  if (rule.freq === 'yearly') {
+    const when = `${rule.byMonthDay || ymd(rule.startDate)[2]} ${MONTH_GEN[(rule.byMonth || ymd(rule.startDate)[1]) - 1]}`;
+    if (rule.mode === 'afterCompletion') return n === 1 ? 'раз в год от выполнения' : `раз в ${n} ${n < 5 ? 'года' : 'лет'} от выполнения`;
+    return n === 1 ? `каждый год ${when}` : `раз в ${n} ${n < 5 ? 'года' : 'лет'} ${when}`;
+  }
   return 'повтор';
+}
+
+/** Группы повторов (вкладка «Повторяющиеся», поиск «повтор:»). */
+export const CATEGORIES = [
+  { key: 'days', label: 'По дням', hint: 'каждый день и каждые N дней', aliases: ['дни', 'день', 'дням', 'ежедневно', 'daily', 'days', 'day', 'n'] },
+  { key: 'weeks', label: 'По неделям', hint: 'по дням недели', aliases: ['недели', 'неделя', 'неделям', 'еженедельно', 'weekly', 'weeks', 'week'] },
+  { key: 'months', label: 'По месяцам', hint: 'раз в месяц', aliases: ['месяцы', 'месяц', 'месяцам', 'ежемесячно', 'monthly', 'months', 'month'] },
+  { key: 'years', label: 'По годам', hint: 'раз в год', aliases: ['годы', 'год', 'годам', 'ежегодно', 'yearly', 'years', 'year'] },
+];
+
+/** Группа правила: days | weeks | months | years (неизвестное правило — days). */
+export function ruleCategory(rule) {
+  if (!rule) return null;
+  if (rule.freq === 'weekly') return 'weeks';
+  if (rule.freq === 'monthly') return 'months';
+  if (rule.freq === 'yearly') return 'years';
+  return 'days';
 }

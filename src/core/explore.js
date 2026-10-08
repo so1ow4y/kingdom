@@ -7,11 +7,12 @@ import { parseQuery, evaluate, textMatch, textContains } from './query.js';
 import * as S from './selectors.js';
 import { liveNotes, liveAttachments } from './model.js';
 import { localDateOf, isoWeekday, addDays, WEEKDAY_SHORT, WEEKDAY_LONG } from './dates.js';
+import { describeRule, ruleCategory, CATEGORIES } from './repeat.js';
 
 /** Виды обозревателя: какие задачи, по какому времени, какие поля в топе. */
 export const KINDS = {
   all: { title: 'Все задачи', time: 'createdAt', timeLabel: 'Создана', histogram: 'Создано задач',
-    facets: ['статус', 'список', 'приоритет', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
+    facets: ['статус', 'список', 'приоритет', 'повтор', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
   done: { title: 'Выполненные', time: 'completedAt', timeLabel: 'Выполнена', histogram: 'Выполнено задач',
     facets: ['список', 'приоритет', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
   trash: { title: 'Корзина', time: 'trashedAt', timeLabel: 'В корзине', histogram: 'Удалено в корзину',
@@ -29,6 +30,7 @@ export const FIELDS = {
   'день': ['day', 'weekday'],
   'план': ['plan', 'scheduled'],
   'срок': ['due', 'deadline', 'дедлайн'],
+  'повтор': ['repeat', 'повторы', 'повторяется'], // 0.12.3: дни, недели, месяцы, годы, нет — или текст правила
   'есть': ['has'],
   'устройство': ['device', 'by'],
 };
@@ -39,7 +41,7 @@ export function fieldChips(kind) {
 }
 
 export const PLACEHOLDER = {
-  all: 'список:Работа -статус:выполнена есть:заметка текст',
+  all: 'список:Работа -статус:выполнена повтор:годы есть:заметка текст',
   done: 'дата:2026-10 приоритет:высокий -список:Дом',
   trash: 'устройство:телефон список:входящие текст',
 };
@@ -64,6 +66,7 @@ const HAS = {
   focus: ['focus', 'фокус'],
 };
 export const HAS_HINT = 'заметка, вложение, напоминание, повтор, подзадачи, родитель, срок, план, фокус';
+export const REPEAT_HINT = 'дни, недели, месяцы, годы, есть, нет — или слово из правила: будни, март, 15-го';
 
 export const INBOX_NAME = 'Входящие';
 const NO = ['нет', 'no', 'none', 'без', '-'];
@@ -159,8 +162,26 @@ export function fieldValues(ctx, t, field, kind) {
     case 'день': return [weekdayOf(eventDate(ctx, t, kind))];
     case 'устройство': return [deviceName(ctx.data, t.updatedBy)];
     case 'дата': return [eventDate(ctx, t, kind)];
+    case 'повтор': return [repeatGroup(t)];
     default: return [];
   }
+}
+
+/** Группа повтора для топа: «по дням», «по неделям», «по месяцам», «по годам» или «без повтора». */
+export function repeatGroup(t) {
+  const c = ruleCategory(t.repeat);
+  return c ? CATEGORIES.find((x) => x.key === c).label.toLowerCase() : 'без повтора';
+}
+
+/** «повтор:годы», «повтор:нет», «повтор:есть», «повтор:март» (по тексту правила: «каждый год 8 марта»). */
+function repeatMatch(t, value) {
+  const v = value.toLowerCase();
+  if (NO.includes(v) || v === 'без повтора') return !t.repeat;
+  if (YES.includes(v)) return !!t.repeat;
+  if (!t.repeat) return false;
+  const cat = CATEGORIES.find((c) => c.aliases.includes(v) || c.label.toLowerCase() === v || c.label.toLowerCase().replace('по ', '') === v);
+  if (cat) return ruleCategory(t.repeat) === cat.key;
+  return v.includes('*') ? textMatch(describeRule(t.repeat), value) : textContains(describeRule(t.repeat), value);
 }
 
 /** Одно условие против задачи. */
@@ -180,6 +201,7 @@ export function matchTerm(ctx, t, { field, value }, kind) {
     case 'дата': return dateMatch(ctx, eventDate(ctx, t, kind), value);
     case 'план': return t.repeat ? YES.includes(value.toLowerCase()) : dateMatch(ctx, t.scheduledDate, value); // у повтора своей даты нет
     case 'срок': return dateMatch(ctx, t.deadlineDate, value);
+    case 'повтор': return repeatMatch(t, value);
     case 'день': {
       const i = isoWeekday(eventDate(ctx, t, kind)) - 1;
       const v = value.toLowerCase();

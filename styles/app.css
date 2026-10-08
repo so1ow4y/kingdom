@@ -1946,3 +1946,17 @@ a.msr-name:hover { color: var(--accent); }
 .activity-list { margin: 0 0 8px; padding: 0; list-style: none; }
 .activity-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
 .activity-form { margin: 6px 0 4px; padding: 10px 12px; border: 1px dashed var(--border); border-radius: var(--radius-sm); }
+.yearly-fields { display: flex; flex-wrap: wrap; align-items: flex-start; gap: 0 12px; }
+.yearly-fields .field { margin: 8px 0 4px; }
+.yearly-fields select { min-width: 150px; }
+.yearly-fields input { width: 90px; }
+.yearly-fields small { flex: 1 1 100%; }
+.repeat-cats { margin: 4px 0 8px; }
+.repeat-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 14px; margin-bottom: 10px; }
+.repeat-search { flex: 1; min-width: 220px; max-width: 520px; }
+.repeat-group { margin-bottom: 14px; }
+.repeat-group-title { margin: 10px 0 6px; font-size: 15px; }
+.repeat-group-title small { font-weight: 400; }
+@media (max-width: 520px) {
+  .repeat-search { flex: 1 1 100%; max-width: none; }
+}

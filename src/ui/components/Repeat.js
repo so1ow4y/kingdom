@@ -1,5 +1,5 @@
-// Повторяющиеся задачи (обновление 0.9): редактор правила «Каждый день / По дням недели / Раз в месяц / Каждые N дней»
-// и лист «Повтор» из карточки задачи. Правило — core/repeat.js, формат — DATA_FORMAT §5.3.4.
+// Повторяющиеся задачи (обновление 0.9): редактор правила «Каждый день / По дням недели / Раз в месяц / Раз в год
+// (0.12.3) / Каждые N дней» и лист «Повтор» из карточки задачи. Правило — core/repeat.js, формат — DATA_FORMAT §5.3.4.
 
 import { html, useState } from '../html.js';
 import { Sheet } from './Sheet.js';
@@ -7,9 +7,11 @@ import { TimeInput } from './TimeInput.js';
 import { store, closeSheet } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as RP from '../../core/repeat.js';
-import { isoWeekday, WEEKDAY_SHORT, humanDate } from '../../core/dates.js';
+import { isoWeekday, WEEKDAY_SHORT, MONTH_NOM, humanDate } from '../../core/dates.js';
 
-const KINDS = [['daily', 'Каждый день'], ['weekly', 'По дням недели'], ['monthly', 'Раз в месяц'], ['every', 'Каждые N дней']];
+const KINDS = [['daily', 'Каждый день'], ['weekly', 'По дням недели'], ['monthly', 'Раз в месяц'], ['yearly', 'Раз в год'], ['every', 'Каждые N дней']];
+/** Сколько дней в месяце (февраль — 29: в невисокосный год повтор сработает 28-го). */
+const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 
 /** Редактор правила. value — правило или null; onChange(rule | null). startDate — с какого дня считать. */
 export function RepeatEditor({ value, onChange, startDate }) {
@@ -27,7 +29,7 @@ export function RepeatEditor({ value, onChange, startDate }) {
     <div class="chip-row wrap">
       <button type="button" class=${'chip' + (!value ? ' selected' : '')} onClick=${() => set({ kind: 'none' })}>Не повторять</button>
       ${KINDS.map(([kind, label]) => html`<button type="button" class=${'chip' + (k.kind === kind ? ' selected' : '')}
-        onClick=${() => set({ kind, weekdays: days, monthDay: k.monthDay || Number(start.slice(8, 10)), interval: k.interval > 1 ? k.interval : 2 })}>${label}</button>`)}
+        onClick=${() => set({ kind, weekdays: days, monthDay: k.monthDay || Number(start.slice(8, 10)), month: k.month || Number(start.slice(5, 7)), interval: k.interval > 1 ? k.interval : 2 })}>${label}</button>`)}
     </div>
     ${k.kind === 'weekly' ? html`<div class="chip-row wrap weekday-chips" role="group" aria-label="Дни недели">
       ${WEEKDAY_SHORT.map((w, i) => {
@@ -43,6 +45,17 @@ export function RepeatEditor({ value, onChange, startDate }) {
     ${k.kind === 'monthly' ? html`<label class="field inline-field"><span>Число месяца</span>
       <input type="number" min="1" max="31" value=${k.monthDay} onInput=${(e) => { const v = Math.round(+e.target.value); if (v >= 1 && v <= 31) set({ monthDay: v }); }}/>
       <small class="muted">Если в месяце меньше дней — в последний день</small></label>` : null}
+    ${k.kind === 'yearly' ? html`<div class="yearly-fields">
+      <label class="field"><span>Месяц</span>
+        <select value=${k.month} onChange=${(e) => {
+          const m = Number(e.target.value);
+          set({ month: m, monthDay: Math.min(k.monthDay, MONTH_DAYS[m - 1]) });
+        }}>${MONTH_NOM.map((name, i) => html`<option value=${i + 1}>${name}</option>`)}</select></label>
+      <label class="field"><span>Число</span>
+        <input type="number" min="1" max=${MONTH_DAYS[k.month - 1]} value=${k.monthDay}
+          onInput=${(e) => { const v = Math.round(+e.target.value); if (v >= 1 && v <= MONTH_DAYS[k.month - 1]) set({ monthDay: v }); }}/></label>
+      ${k.month === 2 && k.monthDay === 29 ? html`<small class="muted">В невисокосный год — 28 февраля</small>` : null}
+    </div>` : null}
     ${k.kind === 'every' ? html`<label class="field inline-field"><span>Каждые … дней</span>
       <input type="number" min="2" max="365" value=${k.interval} onInput=${(e) => { const v = Math.round(+e.target.value); if (v >= 1 && v <= 365) set({ interval: v }); }}/></label>` : null}
     ${value ? html`<p class="muted small repeat-preview">↻ ${RP.describeRule(value)}. Ближайшие: ${preview.map((d) => humanDate(d, today).toLowerCase()).join(', ') || '—'}</p>` : null}

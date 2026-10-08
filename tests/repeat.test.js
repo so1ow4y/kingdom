@@ -104,3 +104,27 @@ test('повтор в «Сегодня», во «Входящих» (отдел�
   assert.equal(undone.occurrences[TODAY].state, 'open');
   assert.equal(currentKey(undone, TODAY), TODAY);
 });
+
+test('ежегодные (0.12.3): месяц и число, 29 февраля в невисокосный год — 28-го, раз в N лет, текущий и ближайшие', () => {
+  const bday = makeRule({ kind: 'yearly', month: 3, monthDay: 8 }, '2026-01-10');
+  assert.deepEqual([bday.freq, bday.byMonth, bday.byMonthDay], ['yearly', 3, 8]);
+  assert.ok(matches(bday, '2026-03-08') && matches(bday, '2027-03-08'));
+  assert.ok(!matches(bday, '2026-03-09') && !matches(bday, '2026-04-08'), 'только 8 марта');
+  assert.ok(!matches(bday, '2025-03-08'), 'не раньше начала');
+  assert.equal(describeRule(bday), 'каждый год 8 марта');
+  assert.deepEqual(ruleKind(bday), { kind: 'yearly', weekdays: [], month: 3, monthDay: 8, interval: 1 });
+  const leap = makeRule({ kind: 'yearly', month: 2, monthDay: 29 }, '2026-01-01');
+  assert.equal(leap.byMonthDay, 29);
+  assert.ok(matches(leap, '2026-02-28') && matches(leap, '2028-02-29') && !matches(leap, '2028-02-28'), 'в невисокосный год — 28-го');
+  assert.equal(makeRule({ kind: 'yearly', month: 4, monthDay: 31 }, '2026-01-01').byMonthDay, 30, 'в апреле 30 дней');
+  assert.equal(currentKey(task(bday), TODAY), '2026-03-08', 'начат в январе — мартовский раз пропущен и остаётся текущим');
+  assert.equal(currentKey(task(makeRule({ kind: 'yearly', month: 3, monthDay: 8 }, TODAY)), TODAY), '2027-03-08', 'новый — ближайший 8 марта');
+  assert.equal(describeRule(makeRule({ kind: 'yearly', mode: 'afterCompletion' }, TODAY)), 'раз в год от выполнения');
+  const two = task({ ...makeRule({ kind: 'yearly', month: 12, monthDay: 31 }, '2026-01-01'), interval: 3 });
+  assert.equal(describeRule(two.repeat), 'раз в 3 года 31 декабря');
+  assert.deepEqual(upcoming(two, TODAY, 3), ['2026-12-31', '2029-12-31', '2032-12-31'], 'раз в 3 года');
+  const after = task(makeRule({ kind: 'yearly', mode: 'afterCompletion' }, '2026-10-06'));
+  assert.equal(after.repeat.byMonth, null);
+  const closed = closeOccurrence(after, '2026-10-06', makeCtx(NOW));
+  assert.equal(currentKey(closed, TODAY, 'UTC'), '2027-10-06', 'от выполнения — через год');
+});

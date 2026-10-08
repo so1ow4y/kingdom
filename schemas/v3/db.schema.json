@@ -636,7 +636,21 @@
           "enum": [
             "daily",
             "weekly",
-            "monthly"
+            "monthly",
+            "yearly"
+          ]
+        },
+        "byMonth": {
+          "description": "месяц ежегодного повтора (1–12; 0.12.3), у остальных — нет или null",
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 12
+            }
           ]
         },
         "interval": {
