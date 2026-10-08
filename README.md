@@ -2,7 +2,7 @@
 
 Two apps in one serverless PWA: **Chronicle** — a personal task planner (formerly LifeTasks), and **Crimson Harvest** — food and calories in the spirit of FatSecret (called Feast in 0.11). Data lives in the browser (IndexedDB) and syncs between devices through files in your own Google Drive when you press **Push**: everything in one `Kingdom` folder, with `Chronicle` (tasks) and `Crimson Harvest` (food diary) inside. No backend: every user signs in with their own Google account and the app works only with the files it created in that user's Drive. Interface language: Russian.
 
-Live: https://so1ow4y.github.io/lifetasks/
+Live: https://so1ow4y.github.io/kindom/
 
 ## What's inside (version 0.12)
 
