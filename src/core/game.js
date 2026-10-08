@@ -12,6 +12,7 @@ import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 import { countLabel } from './plural.js';
 import { coinMultiplierAt, focusFields, levelAt } from './village.js';
+import { extraEarnings } from './earnings.js';
 
 // gems и minutes — с 0.7 (деревня): изумруды у покупок и фокус-сессий, длительность фокуса. x, y — с 0.7.2: клетка
 // объекта деревни (перестановка — обычное изменение полей, сливается по времени поля). Старые версии их просто хранят.
@@ -78,15 +79,19 @@ export function focusEvent(data, { minutes, taskId = null, title = '' }, ctx) {
 
 const live = (data) => [...data.coinEvents.values()].filter((e) => !e.deletedAt && e.active);
 
+/** Баланс монет: события журнала + целые монеты за еду (0.12, core/earnings.js). */
 export function balance(data) {
-  let s = 0;
+  let s = extraEarnings().coins;
   for (const e of live(data)) s += e.amount | 0;
   return s;
 }
 
-/** Опыт — всё заработанное за всё время: активные начисления (траты не уменьшают, возвраты — уменьшают). */
+/**
+ * Опыт — всё заработанное за всё время: активные начисления (траты не уменьшают, возвраты — уменьшают)
+ * и опыт за еду (0.12).
+ */
 export function experience(data) {
-  let s = 0;
+  let s = extraEarnings().xp;
   for (const e of live(data)) if (e.type === 'award') s += Math.max(0, e.amount | 0);
   return s;
 }

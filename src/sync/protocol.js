@@ -22,6 +22,7 @@ export async function parseDbBytes(bytes, { fakeNewerSchema = false } = {}) {
 /**
  * Слить удалённые данные с локальными.
  * local, remote — { coll: Entity[] }; base — Map<'coll/id', fieldTimes> последней синхронизации.
+ * collections — коллекции базы (у Feast свои, 0.11); withConflicts — вести ли журнал конфликтов.
  * Возвращает:
  *   merged      — итоговые данные;
  *   changes     — [{ coll, entity }] сущности, которые изменились относительно локальных;
@@ -31,14 +32,14 @@ export async function parseDbBytes(bytes, { fakeNewerSchema = false } = {}) {
  *   baseNext    — новый снимок base (= то, что сейчас на Диске);
  *   maxRemoteStamp.
  */
-export function mergeRemote({ local, remote, base, at = new Date().toISOString() }) {
-  const merged = mergeData(local, remote);
+export function mergeRemote({ local, remote, base, at = new Date().toISOString(), collections = MERGE_COLLECTIONS, withConflicts = true }) {
+  const merged = mergeData(local, remote, collections);
   const changes = [];
   const dirtyAdd = [];
   const dirtyRemove = [];
   const baseNext = new Map();
   let maxRemote = 0;
-  for (const c of MERGE_COLLECTIONS) {
+  for (const c of collections) {
     const L = new Map((local[c] || []).map((e) => [e.id, e]));
     const R = new Map((remote[c] || []).map((e) => [e.id, e]));
     for (const r of remote[c] || []) {
@@ -56,7 +57,7 @@ export function mergeRemote({ local, remote, base, at = new Date().toISOString()
       else dirtyAdd.push(key);
     }
   }
-  const conflicts = detectConflicts(local, remote, merged, base, at);
+  const conflicts = withConflicts ? detectConflicts(local, remote, merged, base, at) : [];
   return { merged, changes, dirtyAdd, dirtyRemove, conflicts, baseNext, maxRemoteStamp: maxRemote };
 }
 
@@ -83,9 +84,9 @@ export async function writeDbChecked({ drive, dbId, expectedPrevRev, makeBytes, 
 }
 
 /** Ключи «непушнутых», которые совпали с записанным снимком (их можно снять). */
-export function pushedKeys(dirtyKeys, snapshot, current) {
+export function pushedKeys(dirtyKeys, snapshot, current, collections = MERGE_COLLECTIONS) {
   const snap = new Map();
-  for (const c of MERGE_COLLECTIONS) for (const e of snapshot[c] || []) snap.set(`${c}/${e.id}`, canonicalJson(e));
+  for (const c of collections) for (const e of snapshot[c] || []) snap.set(`${c}/${e.id}`, canonicalJson(e));
   return dirtyKeys.filter((key) => {
     const [c, id] = key.split('/');
     const cur = current(c, id);
@@ -94,8 +95,8 @@ export function pushedKeys(dirtyKeys, snapshot, current) {
   });
 }
 
-export function baseFrom(snapshot) {
+export function baseFrom(snapshot, collections = MERGE_COLLECTIONS) {
   const m = new Map();
-  for (const c of MERGE_COLLECTIONS) for (const e of snapshot[c] || []) m.set(`${c}/${e.id}`, e.fieldTimes || {});
+  for (const c of collections) for (const e of snapshot[c] || []) m.set(`${c}/${e.id}`, e.fieldTimes || {});
   return m;
 }

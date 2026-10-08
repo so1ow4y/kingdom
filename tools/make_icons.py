@@ -14,10 +14,13 @@ import zlib
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 OUT = os.path.join(ROOT, "icons")
 
-BG = (57, 73, 171)  # #3949AB
-FG = (255, 255, 255)
-CHECK = [(0.29, 0.52), (0.44, 0.67), (0.72, 0.37)]
-STROKE = 0.085
+# 0.12 — Kingdom: золотая корона на багровом квадрате (0.11 — серп луны, раньше — галочка на индиго)
+BG = (122, 18, 34)  # #7A1222
+FG = (242, 196, 92)  # золото
+# Корона: зубцы (многоугольник), обруч под ними и шарики на вершинах зубцов
+CROWN = [(0.25, 0.64), (0.22, 0.35), (0.37, 0.49), (0.5, 0.29), (0.63, 0.49), (0.78, 0.35), (0.75, 0.64)]
+BAND = [(0.25, 0.68), (0.75, 0.68), (0.75, 0.75), (0.25, 0.75)]
+DOTS = [((0.22, 0.33), 0.045), ((0.5, 0.27), 0.05), ((0.78, 0.33), 0.045)]
 
 
 def seg_dist(px, py, ax, ay, bx, by):
@@ -33,10 +36,30 @@ def rrect_sdf(px, py, half, radius):
     return math.hypot(max(qx, 0), max(qy, 0)) + min(max(qx, qy), 0) - radius
 
 
+def poly_sdf(px, py, pts):
+    # Знаковое расстояние до многоугольника: снаружи > 0, внутри < 0.
+    d = min(seg_dist(px, py, *pts[i], *pts[(i + 1) % len(pts)]) for i in range(len(pts)))
+    inside = False
+    j = len(pts) - 1
+    for i in range(len(pts)):
+        (xi, yi), (xj, yj) = pts[i], pts[j]
+        if (yi > py) != (yj > py) and px < (xj - xi) * (py - yi) / (yj - yi) + xi:
+            inside = not inside
+        j = i
+    return -d if inside else d
+
+
+def crown_sdf(u, v):
+    d = min(poly_sdf(u, v, CROWN), poly_sdf(u, v, BAND))
+    for (cx, cy), r in DOTS:
+        d = min(d, math.hypot(u - cx, v - cy) - r)
+    return d
+
+
 def render(size, maskable):
     px_unit = 1.0 / size
     rows = []
-    scale = 0.78 if maskable else 1.0  # для maskable галочка — в безопасной зоне
+    scale = 0.78 if maskable else 1.0  # для maskable корона — в безопасной зоне
     for y in range(size):
         row = bytearray([0])  # фильтр строки PNG: none
         for x in range(size):
@@ -49,8 +72,8 @@ def render(size, maskable):
                 bg_a = max(0.0, min(1.0, 0.5 - d / px_unit))
             cu = (u - 0.5) / scale + 0.5
             cv = (v - 0.5) / scale + 0.5
-            d1 = min(seg_dist(cu, cv, *CHECK[0], *CHECK[1]), seg_dist(cu, cv, *CHECK[1], *CHECK[2]))
-            fg_a = max(0.0, min(1.0, 0.5 - (d1 - STROKE / 2) / (px_unit / scale)))
+            d1 = crown_sdf(cu, cv)
+            fg_a = max(0.0, min(1.0, 0.5 - d1 / (px_unit / scale)))
             fg_a *= bg_a
             r = BG[0] * (1 - fg_a) + FG[0] * fg_a
             g = BG[1] * (1 - fg_a) + FG[1] * fg_a

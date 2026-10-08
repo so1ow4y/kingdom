@@ -31,11 +31,25 @@ export function weekStats(data, tz, dates) {
   return out;
 }
 
-export function DayStrip({ date, onGo }) {
+/** Точки дня для полосы задач: { dots, mark, title }. */
+function taskMarks(days) {
+  const stats = weekStats(store.data, store.data.settings.timeZone, days);
+  return new Map(days.map((d) => {
+    const s = stats.get(d);
+    const title = [s.planned ? 'запланировано ' + countLabel(s.planned, ['задача', 'задачи', 'задач']) : '', s.done ? 'выполнено ' + s.done : ''].filter(Boolean).join(', ');
+    return [d, { dots: Math.min(3, s.planned), mark: s.done && !s.planned ? '✓' : '', title: title || 'Свободный день' }];
+  }));
+}
+
+/**
+ * Полоса недели. marksFn(days) → Map(дата → { dots, mark, title }) — свои точки (0.11: Feast показывает,
+ * записан ли день и не превышен ли лимит калорий); по умолчанию — задачи.
+ */
+export function DayStrip({ date, onGo, marksFn = taskMarks }) {
   const today = store.now.today;
   const monday = mondayOf(date);
   const days = weekDates(monday);
-  const stats = useMemo(() => weekStats(store.data, store.data.settings.timeZone, days), [store.version, monday]);
+  const stats = useMemo(() => marksFn(days), [store.version, monday, marksFn]);
   const picker = useRef(null);
   const touch = useRef(null);
   const [y, m] = date.split('-');
@@ -82,13 +96,12 @@ export function DayStrip({ date, onGo }) {
       </div>
       <div class="ds-days" role="tablist" aria-label=${thisWeek ? 'Эта неделя' : 'Неделя'} onKeyDown=${onKey}>
         ${days.map((d, i) => {
-          const s = stats.get(d);
+          const s = stats.get(d) || { dots: 0, mark: '', title: '' };
           const cls = 'ds-day' + (d === date ? ' selected' : '') + (d === today ? ' is-today' : '') + (d < today ? ' past' : '') + (i > 4 ? ' weekend' : '');
-          const title = [s.planned ? 'запланировано ' + countLabel(s.planned, ['задача', 'задачи', 'задач']) : '', s.done ? 'выполнено ' + s.done : ''].filter(Boolean).join(', ');
           return html`<button role="tab" aria-selected=${d === date} tabindex=${d === date ? 0 : -1} class=${cls} key=${d}
-            onClick=${() => onGo(d)} title=${title || 'Свободный день'}>
+            onClick=${() => onGo(d)} title=${s.title}>
             <small>${WEEKDAY_SHORT[i]}</small><b>${+d.slice(8)}</b>
-            <span class="ds-dots" aria-hidden="true">${Array.from({ length: Math.min(3, s.planned) }, (_, k) => html`<i key=${k}></i>`)}${s.done && !s.planned ? html`<em>✓</em>` : null}</span>
+            <span class="ds-dots" aria-hidden="true">${Array.from({ length: s.dots }, (_, k) => html`<i key=${k}></i>`)}${s.mark ? html`<em class=${s.markClass || ''}>${s.mark}</em>` : null}</span>
           </button>`;
         })}
       </div>

@@ -1,6 +1,9 @@
 // Открытие локальной базы, первый запуск, проверка и миграция версии формата, загрузка в память.
 
-import { openRepo } from './localRepo.js';
+import { openRepo, openFeastRepo } from './localRepo.js';
+import { initFeastActions, refreshFeastDirty, feastEarnings } from './feastActions.js';
+import { setExtraEarnings } from '../core/earnings.js';
+import { defaultFeastSettings, defaultMeals, FEAST_COLLECTIONS } from '../core/feast.js';
 import { store, bumpData, setUi, refreshNow } from './appState.js';
 import { initActions, refreshDirty, purgeExpiredTrash, syncDeviceInfo } from './actions.js';
 import { createClock } from '../core/clock.js';
@@ -31,10 +34,45 @@ async function migrateLocal(repo, loaded, fromVersion) {
   });
 }
 
+/**
+ * Feast (0.11): своя база IndexedDB. Не открылась — задачи работают как обычно, Feast — только для чтения.
+ * → { repo, loaded } или null.
+ */
+async function openFeast() {
+  try {
+    const repo = await openFeastRepo();
+    let loaded = await repo.loadAll();
+    const puts = [];
+    if (!loaded.settings.length) puts.push(['settings', defaultFeastSettings()]);
+    // основные рационы (0.12): одинаковые на всех устройствах — создаются, если их ещё нет
+    const have = new Set(loaded.meals.map((m) => m.id));
+    for (const m of defaultMeals()) if (!have.has(m.id)) puts.push(['meals', m]);
+    if (puts.length) {
+      await repo.commit({ puts, meta: loaded.settings.length ? {} : { createdAt: new Date().toISOString() } });
+      loaded = await repo.loadAll();
+    }
+    return { repo, loaded };
+  } catch (e) {
+    console.error('Feast', e);
+    setUi({ feastReadOnly: `Не открылась локальная база Crimson Harvest: ${e?.message || e}. Задачи работают как обычно.` });
+    return null;
+  }
+}
+
+function loadFeast(f) {
+  const d = store.feast;
+  d.settings = f.loaded.settings[0] || defaultFeastSettings();
+  for (const c of FEAST_COLLECTIONS) if (c !== 'settings') d[c] = new Map((f.loaded[c] || []).map((x) => [x.id, x]));
+  store.sync.feastLayout = f.loaded.meta['sync.layout'] || null;
+  store.sync.feastRevisionId = f.loaded.meta['sync.lastRevisionId'] || null;
+}
+
 export async function bootstrap() {
   const repo = await openRepo();
   let loaded = await repo.loadAll();
-  const clock = createClock(loaded.meta['clock.lastStamp'] || 0);
+  const feast = await openFeast();
+  // Одни часы меток на оба приложения: метки растут и после правок то в задачах, то в Feast
+  const clock = createClock(Math.max(loaded.meta['clock.lastStamp'] || 0, feast?.loaded.meta['clock.lastStamp'] || 0));
 
   if (!loaded.meta.deviceId) {
     // Первый запуск на этом устройстве.
@@ -79,6 +117,7 @@ export async function bootstrap() {
   store.auth = m.auth || null;
   Object.assign(store.sync, {
     layout: m['sync.layout'] || null,
+    kingdomId: m['sync.kingdomId'] || null,
     lastRevisionId: m['sync.lastRevisionId'] || null,
     lastPullAt: m['sync.lastPullAt'] || null,
     lastPushAt: m['sync.lastPushAt'] || null,
@@ -92,6 +131,13 @@ export async function bootstrap() {
   for (const c of ['priorities', 'coinEvents', 'rewards', 'doneArchive']) store.data[c] = new Map(loaded[c].map((x) => [x.id, x]));
 
   initActions({ repo, clock, deviceId: store.deviceId });
+  if (feast) {
+    loadFeast(feast);
+    initFeastActions({ repo: feast.repo, clock, deviceId: store.deviceId });
+    // опыт, монеты и 💎 за еду (0.12) — в общий баланс игры
+    setExtraEarnings(feastEarnings);
+    await refreshFeastDirty();
+  }
   refreshNow();
   bumpData();
   await refreshDirty();

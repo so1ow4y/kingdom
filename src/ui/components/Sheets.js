@@ -19,6 +19,9 @@ import { RecorderSheet } from './Attachments.js';
 import { FocusStartSheet } from './Focus.js';
 import { RepeatSheet } from './Repeat.js';
 import { describeRule } from '../../core/repeat.js';
+import { ShortcutsSheet } from './Shortcuts.js';
+import { AddFoodSheet, EntrySheet, ScanSheet } from './AddFood.js';
+import { MealSheet, MealNoteSheet } from './Meals.js';
 
 function WhenSheet({ taskId, mode }) {
   const t = A.getTask(taskId);
@@ -256,6 +259,12 @@ export function SheetHost() {
     case 'parentPicker': return html`<${ParentPickerSheet} ...${s}/>`;
     case 'focus': return html`<${FocusStartSheet} ...${s}/>`;
     case 'repeat': return html`<${RepeatSheet} ...${s}/>`;
+    case 'shortcuts': return html`<${ShortcutsSheet}/>`;
+    case 'addFood': return html`<${AddFoodSheet} key=${(s.entryId || '') + (s.foodId || s.scan || 'pick')} ...${s}/>`;
+    case 'meal': return html`<${MealSheet} key=${s.id || 'new'} ...${s}/>`;
+    case 'mealNote': return html`<${MealNoteSheet} key=${s.date + s.meal} ...${s}/>`;
+    case 'entry': return html`<${EntrySheet} key=${s.id} ...${s}/>`;
+    case 'scan': return html`<${ScanSheet} ...${s}/>`;
     default: return null;
   }
 }

@@ -1,0 +1,120 @@
+// Crimson Harvest (0.11, «Feast»): «Дневник» питания в духе FatSecret — день недели, сводка «Осталось 247 / −247»,
+// рационы с записями, итоги дня по всем веществам. 0.12: свои рационы (на каждый день или только на этот),
+// время и заметка у рациона и записи, записи из нескольких продуктов.
+
+import { html, useMemo, useState } from '../html.js';
+import { Icon } from '../icons.js';
+import { DayStrip } from '../components/DayStrip.js';
+import { Banner } from '../components/Overlays.js';
+import { DaySummary, NutrientTable, macroLine, feastGoals, rewardLine } from '../components/FeastParts.js';
+import { openAddFood } from '../components/AddFood.js';
+import { openMealMenu } from '../components/Meals.js';
+import { navigate, Link } from '../router.js';
+import { store, openSheet } from '../../store/appState.js';
+import * as FA from '../../store/feastActions.js';
+import * as F from '../../core/feast.js';
+import { entryNutrients, itemNutrients, sumNutrients, nv, fmt, amountLabel } from '../../core/nutrition.js';
+import { addDays, humanDate } from '../../core/dates.js';
+import { planningDate } from '../../core/planning.js';
+import { countLabel } from '../../core/plural.js';
+
+/** Точки полосы недели для Feast: день записан — точка, сверх лимита — «!». */
+function feastMarks(days) {
+  const goal = feastGoals().kcal;
+  const series = new Map(F.dailySeries(store.feast, days[0], days.at(-1)).map((d) => [d.date, d]));
+  return new Map(days.map((d) => {
+    const s = series.get(d);
+    if (!s || !s.count) return [d, { dots: 0, mark: '', title: 'Записей нет' }];
+    const kcal = Math.round(nv(s.totals, 'kcal'));
+    const over = kcal > goal;
+    return [d, { dots: over ? 0 : 1, mark: over ? '!' : '', markClass: 'over', title: `${kcal} ккал${over ? ' — сверх лимита' : ''}` }];
+  }));
+}
+
+/** Запись дневника: время, продукт (или несколько — списком), заметка; нажатие — изменить. */
+function EntryRow({ e }) {
+  const n = entryNutrients(e);
+  const items = F.entryItems(e);
+  const multi = items.length > 1;
+  return html`<button type="button" class=${'entry-row' + (multi ? ' multi' : '')} onClick=${() => openSheet('entry', { id: e.id })}>
+    ${e.time ? html`<span class="er-time">${e.time}</span>` : null}
+    <span class="er-main">
+      ${multi ? html`
+        <span class="er-items">${items.map((it) => html`<span class="er-item" key=${it.id}>
+          <span class="er-name">${it.name}</span><small class="muted">${amountLabel(it)} · ${fmt(nv(itemNutrients(it), 'kcal'), 'kcal')}</small></span>`)}</span>
+        <small class="muted">${macroLine(n)}</small>` : html`
+        <span class="er-name">${items[0]?.name || 'Запись'}</span>
+        <small class="muted">${items[0] ? amountLabel(items[0]) + ' · ' : ''}${macroLine(n)}</small>`}
+      ${e.note ? html`<small class="er-note">${e.note}</small>` : null}
+    </span>
+    <b class="er-kcal">${fmt(nv(n, 'kcal'), 'kcal')}</b>
+  </button>`;
+}
+
+/** Рацион дня: заголовок (значок, название, время, калории, «+», ⋮), заметка к рациону, записи. */
+export function MealBlock({ meal, list, date, readOnly, link = true }) {
+  const kcal = nv(sumNutrients(list.map(entryNutrients)), 'kcal');
+  const note = F.mealNoteOf(store.feast, date, meal.id);
+  const label = meal.name.toLowerCase();
+  const tomorrow = addDays(date, 1);
+  return html`
+    <section class=${'meal card-block' + (meal.date ? ' day-only' : '')} aria-label=${meal.name}>
+      <header class="meal-head">
+        <span class="meal-icon" aria-hidden="true">${meal.icon}</span>
+        <span class="meal-title">
+          ${link && !meal.missing ? html`<${Link} to=${`/meal/${meal.id}${date === store.now.today || meal.date ? '' : '?date=' + date}`}
+            className="meal-name" title="Открыть рацион (Ctrl+клик — в новой вкладке)">${meal.name}<//>` : html`<b class="meal-name">${meal.name}</b>`}
+          ${meal.time || meal.date ? html`<small class="meal-meta">
+            ${meal.time ? html`<span class="meal-time" title="Время рациона">${meal.time}</span>` : null}
+            ${meal.date ? html`<span class="meal-tag" title="Этот рацион — только на этот день">только этот день</span>` : null}
+          </small>` : null}
+        </span>
+        <span class="meal-kcal">${list.length ? `${fmt(kcal, 'kcal')} ккал` : ''}</span>
+        <button type="button" class="icon-btn small" disabled=${readOnly} aria-label=${'Записать: ' + label}
+          data-hint=${'Записать: ' + label} onClick=${() => openAddFood({ date, meal: meal.id })}><${Icon} name="plus" size=${20}/></button>
+        <button type="button" class="icon-btn small" aria-label=${'Ещё: ' + label} aria-haspopup="menu" data-hint="Рацион: заметка, изменить, новый"
+          onClick=${(ev) => openMealMenu(ev, meal, date, { onCopy: list.length ? () => FA.copyEntries(date, tomorrow, meal.id) : null })}>
+          <${Icon} name="dots" size=${18}/></button>
+      </header>
+      ${note ? html`<button type="button" class="meal-note" disabled=${readOnly} onClick=${() => openSheet('mealNote', { date, meal: meal.id })}
+        aria-label=${'Заметка к рациону: ' + note.text}><${Icon} name="edit" size=${14}/><span>${note.text}</span></button>` : null}
+      ${list.length ? list.map((e) => html`<${EntryRow} key=${e.id} e=${e}/>`)
+        : html`<button type="button" class="meal-empty" disabled=${readOnly} onClick=${() => openAddFood({ date, meal: meal.id })}>+ Записать</button>`}
+    </section>`;
+}
+
+export function DiaryScreen({ query = {} }) {
+  const date = planningDate(query.date, store.now.today);
+  const go = (d) => navigate(d === store.now.today ? '/diary' : '/diary?date=' + d);
+  const day = useMemo(() => F.dayTotals(store.feast, date), [store.version, date]);
+  const meals = useMemo(() => F.mealsForDay(store.feast, date, new Set(Object.keys(day.entries))), [day]);
+  const [details, setDetails] = useState(false);
+  const yesterday = addDays(date, -1);
+  const prevCount = useMemo(() => Object.values(F.dayEntries(store.feast, yesterday)).flat().length, [store.version, yesterday]);
+  const readOnly = !!store.ui.feastReadOnly;
+  const dayReward = useMemo(() => F.dayRewards(store.feast, date), [store.version, date]);
+
+  return html`
+    <div class="screen diary">
+      ${store.ui.feastReadOnly ? html`<${Banner} tone="danger">${store.ui.feastReadOnly}<//>` : null}
+      <${DayStrip} date=${date} onGo=${go} marksFn=${feastMarks}/>
+      <${DaySummary} totals=${day.totals}/>
+      ${store.data.settings?.gameEnabled && F.hasRewards(dayReward) ? html`<p class="day-rewards" title="Награды за еду этого дня — в общий баланс игры">
+        За еду: ${rewardLine(dayReward)}</p>` : null}
+      ${day.archived ? html`<p class="hint">Записи этого дня удалены лимитом хранения — итоги остались в аналитике.</p>` : null}
+
+      ${meals.map((m) => html`<${MealBlock} key=${m.id} meal=${m} list=${day.entries[m.id] || []} date=${date} readOnly=${readOnly}/>`)}
+
+      <div class="form-actions wrap">
+        ${!day.count && prevCount ? html`<button type="button" class="btn" disabled=${readOnly}
+          onClick=${() => FA.copyEntries(yesterday, date)}><${Icon} name="copy2" size=${16}/> Как ${humanDate(yesterday, store.now.today).toLowerCase()}: ${countLabel(prevCount, ['запись', 'записи', 'записей'])}</button>` : null}
+        <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, scan: true })}><${Icon} name="barcode" size=${16}/> Сканировать</button>
+        <button type="button" class="btn" disabled=${readOnly} onClick=${() => openSheet('meal', { date })}><${Icon} name="plus" size=${16}/> Рацион</button>
+        ${day.count ? html`<button type="button" class="btn ghost" onClick=${() => setDetails(!details)} aria-expanded=${details}>
+          <${Icon} name=${details ? 'chevronDown' : 'chevron'} size=${16}/> Витамины и минералы за день</button>` : null}
+      </div>
+      ${details ? html`<section class="card-block"><${NutrientTable} values=${day.totals} groups=${['more', 'vitamins', 'minerals']}/>
+        ${!Object.keys(day.totals).some((k) => !['kcal', 'protein', 'fat', 'carbs'].includes(k) && day.totals[k] > 0)
+          ? html`<p class="muted small">У записанных продуктов витамины и минералы не указаны — их можно заполнить в карточке продукта.</p>` : null}</section>` : null}
+    </div>`;
+}

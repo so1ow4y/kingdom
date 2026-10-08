@@ -1,0 +1,761 @@
+// Crimson Harvest (счётчик калорий; 0.11 — «Feast»): модель данных. Чистые функции, как core/model.js у задач.
+// Формат — DATA_FORMAT §19–20: отдельная база в отдельной папке Диска, те же правила слияния
+// (last-write-wins по полю, надгробия), коллекции:
+//   settings   — одна запись: цели (калории, БЖУ), лимит записей дневника, данные «Обо мне»;
+//   foods      — продукты: название, бренд, единица, порция, значения на 100 г/мл, штрихкоды (словарь);
+//   entries    — записи дневника: дата, рацион, время, заметка и продукты (items — снимки продуктов с количеством);
+//   meals      — рационы (0.12): общие для всех дней (date = null) и только для одного дня; порядок — дробные ключи;
+//   mealNotes  — заметки к рациону на конкретный день (0.12);
+//   dayArchive — сводки дней, чьи записи удалены лимитом (статистика остаётся);
+//   body       — замеры: вес, обхваты, процент жира.
+
+import { uuidv7 } from './ids.js';
+import { touch, touchNested, removeNested } from './model.js';
+import { keyBetween, byOrder } from './order.js';
+import {
+  cleanNutrients, num, entryNutrients, itemNutrients, sumNutrients, addNutrients, nv, MEALS, NUTRIENT_KEYS,
+} from './nutrition.js';
+import { addDays, daysBetween } from './dates.js';
+import { normalizeBarcode } from './barcode.js';
+import { DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, FEAST_RETENTION } from '../config.js';
+
+export const FEAST_SETTINGS_ID = '00000000-0000-7000-8000-00000000f001';
+export const FEAST_COLLECTIONS = ['settings', 'foods', 'entries', 'dayArchive', 'body', 'meals', 'mealNotes'];
+
+// 0.12: награды за еду по умолчанию (rewardXp, rewardCoins, rewardGems) и настройка рекомендации калорий
+// (loseKcal — дефицит для похудения, gainKcal — профицит для набора, minKcal — нижняя граница, recKcal — своя рекомендация).
+export const FEAST_SETTINGS_FIELDS = ['kcalGoal', 'proteinGoal', 'fatGoal', 'carbsGoal', 'entryLimit',
+  'rewardXp', 'rewardCoins', 'rewardGems', 'loseKcal', 'gainKcal', 'minKcal', 'recKcal',
+  'macroMode', 'proteinPct', 'fatPct', 'carbsPct',
+  'sex', 'birthDate', 'heightCm', 'activity', 'goal', 'targetWeightKg', 'deletedAt'];
+// rewards (0.12) — опыт, монеты и 💎 за каждую запись продукта; не задано — по умолчанию из настроек
+export const FOOD_FIELDS = ['name', 'brand', 'unit', 'servingName', 'servingSize', 'nutrients', 'favorite', 'note', 'rewards', 'deletedAt'];
+// Записи 0.11 хранили один продукт в своих полях (foodId, name, amount, unit, nutrients) — они читаются как есть;
+// с 0.12 продукты — во вложенном массиве items (сливается поэлементно), у записи — время и заметка.
+export const ENTRY_FIELDS = ['date', 'meal', 'time', 'note', 'deletedAt'];
+export const LEGACY_ENTRY_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients'];
+// order — порядок продуктов в записи (как добавляли), дробный ключ
+export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'deletedAt'];
+export const MEAL_FIELDS = ['name', 'icon', 'time', 'order', 'date', 'archived', 'deletedAt'];
+export const MEAL_NOTE_FIELDS = ['date', 'meal', 'text', 'deletedAt'];
+export const BODY_FIELDS = ['date', 'weightKg', 'waistCm', 'neckCm', 'hipCm', 'bodyFatPct', 'note', 'deletedAt'];
+export const DAY_ARCHIVE_FIELDS = ['date', 'count', 'totals', 'meals', 'foods', 'rewards', 'deletedAt'];
+
+export const FOOD_NAME_MAX = 120;
+export const MEAL_NAME_MAX = 40;
+export const NOTE_MAX = 2000;
+export const UNITS = [{ key: 'g', label: 'граммы' }, { key: 'ml', label: 'миллилитры' }];
+
+const iso = (ctx) => new Date(ctx.now).toISOString();
+const timesFor = (names, t) => Object.fromEntries(names.map((k) => [k, t]));
+
+function create(id, fields, names, ctx) {
+  const at = iso(ctx);
+  return { id, createdAt: at, updatedAt: at, updatedBy: ctx.deviceId, deletedAt: null, fieldTimes: timesFor(names, ctx.stamp()), ...fields };
+}
+
+export const normalizeName = (s) => String(s ?? '').replace(/\s+/g, ' ').trim().slice(0, FOOD_NAME_MAX);
+
+/** Настройки по умолчанию: метки 1, как у настроек задач, — два устройства сливаются без конфликтов. */
+export function defaultFeastSettings() {
+  return {
+    id: FEAST_SETTINGS_ID,
+    createdAt: DEFAULTS_CREATED_AT,
+    updatedAt: DEFAULTS_CREATED_AT,
+    updatedBy: DEFAULTS_DEVICE_ID,
+    deletedAt: null,
+    fieldTimes: timesFor(FEAST_SETTINGS_FIELDS, 1),
+    kcalGoal: 2000,
+    proteinGoal: null,
+    fatGoal: null,
+    carbsGoal: null,
+    entryLimit: FEAST_RETENTION.entryDefault,
+    sex: null,
+    birthDate: null,
+    heightCm: null,
+    activity: 'light',
+    goal: 'keep',
+    targetWeightKg: null,
+    rewardXp: null,
+    rewardCoins: null,
+    rewardGems: null,
+    loseKcal: null,
+    gainKcal: null,
+    minKcal: null,
+    recKcal: null,
+    macroMode: null, // 'pct' | 'grams'; null — как в 0.11 (по граммам, если заданы)
+    proteinPct: null,
+    fatPct: null,
+    carbsPct: null,
+  };
+}
+
+// ---------- Награды за еду (0.12) ----------
+
+export const REWARD_KEYS = ['xp', 'coins', 'gems'];
+/** По умолчанию — мало: опыт 1, монеты 0,2, 💎 0,05 за каждую запись продукта (целые копятся из дробных). */
+export const REWARD_DEFAULTS = { xp: 1, coins: 0.2, gems: 0.05 };
+export const REWARD_LABELS = { xp: 'Опыт', coins: 'Монеты', gems: 'Алмазы' };
+export const REWARD_ICONS = { xp: '✨', coins: '🪙', gems: '💎' };
+const REWARD_MAX = 1000;
+const SETTING_OF = { xp: 'rewardXp', coins: 'rewardCoins', gems: 'rewardGems' };
+
+/** Число награды: ≥ 0, до сотых (0,05), пусто и мусор — null (значит «по умолчанию»). */
+export function cleanReward(v) {
+  if (v === null || v === undefined || v === '') return null;
+  const n = typeof v === 'number' ? v : parseFloat(String(v).replace(',', '.').replace(/\s+/g, ''));
+  if (!Number.isFinite(n) || n < 0) return null;
+  return Math.round(Math.min(n, REWARD_MAX) * 100) / 100;
+}
+
+/** Награды по умолчанию из настроек (не заданы — REWARD_DEFAULTS). */
+export function rewardDefaults(settings) {
+  const out = {};
+  for (const k of REWARD_KEYS) out[k] = cleanReward(settings?.[SETTING_OF[k]]) ?? REWARD_DEFAULTS[k];
+  return out;
+}
+
+/** Чистый словарь наград продукта: только заданные ключи. */
+export function cleanRewards(r = {}) {
+  const out = {};
+  for (const k of REWARD_KEYS) {
+    const v = cleanReward(r?.[k]);
+    if (v !== null) out[k] = v;
+  }
+  return out;
+}
+
+/** Награда за запись продукта: его значения, недостающие — по умолчанию. */
+export function rewardsOf(food, settings) {
+  const d = rewardDefaults(settings);
+  const own = cleanRewards(food?.rewards);
+  return { xp: own.xp ?? d.xp, coins: own.coins ?? d.coins, gems: own.gems ?? d.gems };
+}
+
+// суммы — в тысячных, чтобы 20 × 0,05 было ровно 1, а не 0,999…
+const milli = (v) => (Number.isFinite(v) && v > 0 ? Math.round(v * 1000) : 0);
+const fromMilli = (m) => Object.fromEntries(REWARD_KEYS.map((k) => [k, m[k] / 1000]));
+
+function addRewardsMilli(acc, r) {
+  for (const k of REWARD_KEYS) acc[k] += milli(r?.[k]);
+  return acc;
+}
+
+const zeroMilli = () => ({ xp: 0, coins: 0, gems: 0 });
+
+/** Награды за запись (сумма по её продуктам; у записей 0.11 наград нет). */
+export function entryRewards(e) {
+  const acc = zeroMilli();
+  for (const it of entryItems(e)) addRewardsMilli(acc, it.rewards);
+  return fromMilli(acc);
+}
+
+export const hasRewards = (r) => !!r && REWARD_KEYS.some((k) => (r[k] || 0) > 0);
+
+/** Награды за день: живые записи + сводка дня, если записи удалены лимитом. */
+export function dayRewards(data, date) {
+  const acc = zeroMilli();
+  for (const e of data.entries.values()) if (isLiveEntry(e) && e.date === date) for (const it of entryItems(e)) addRewardsMilli(acc, it.rewards);
+  const arch = data.dayArchive.get(archiveId(date));
+  if (arch && !arch.deletedAt) addRewardsMilli(acc, arch.rewards);
+  return fromMilli(acc);
+}
+
+/** Всё заработанное едой за всё время (для баланса игры — core/earnings.js). */
+export function feastRewards(data) {
+  const acc = zeroMilli();
+  for (const e of data.entries.values()) if (isLiveEntry(e)) for (const it of entryItems(e)) addRewardsMilli(acc, it.rewards);
+  for (const a of data.dayArchive.values()) if (!a.deletedAt) addRewardsMilli(acc, a.rewards);
+  return fromMilli(acc);
+}
+
+// ---------- Продукты ----------
+
+export function newFood({ name, brand = '', unit = 'g', servingName = '', servingSize = null, nutrients = {}, note = '', barcodes = [], rewards = {} }, ctx) {
+  const n = normalizeName(name);
+  if (!n) throw new Error('newFood: пустое название');
+  let f = create(uuidv7(ctx.now), {
+    name: n,
+    brand: normalizeName(brand),
+    unit: unit === 'ml' ? 'ml' : 'g',
+    servingName: normalizeName(servingName).slice(0, 40),
+    servingSize: num(servingSize) || null,
+    nutrients: cleanNutrients(nutrients),
+    favorite: false,
+    note: String(note || '').slice(0, 2000),
+    rewards: cleanRewards(rewards),
+    barcodes: {},
+  }, FOOD_FIELDS, ctx);
+  for (const b of barcodes) f = setBarcode(f, b, true, ctx);
+  return f;
+}
+
+/** Правка продукта: значения чистятся, название и бренд нормализуются. */
+export function editFood(food, changes, ctx) {
+  const c = { ...changes };
+  if ('rewards' in c) c.rewards = cleanRewards(c.rewards);
+  if ('name' in c) c.name = normalizeName(c.name) || food.name;
+  if ('brand' in c) c.brand = normalizeName(c.brand);
+  if ('nutrients' in c) c.nutrients = cleanNutrients(c.nutrients);
+  if ('servingSize' in c) c.servingSize = num(c.servingSize) || null;
+  if ('servingName' in c) c.servingName = normalizeName(c.servingName).slice(0, 40);
+  if ('unit' in c) c.unit = c.unit === 'ml' ? 'ml' : 'g';
+  return touch(food, c, ctx);
+}
+
+/** Привязать (on) или отвязать штрихкод: элемент словаря со своей меткой — сливается по коду. */
+export function setBarcode(food, raw, on, ctx) {
+  const code = normalizeBarcode(raw);
+  if (!code) return food;
+  const cur = food.barcodes?.[code];
+  if (cur && !!cur.in === !!on) return food;
+  return {
+    ...food,
+    barcodes: { ...(food.barcodes || {}), [code]: { in: !!on, t: ctx.stamp(), by: ctx.deviceId } },
+    updatedAt: iso(ctx),
+    updatedBy: ctx.deviceId,
+  };
+}
+
+/** Привязанные штрихкоды продукта (по порядку). */
+export const foodBarcodes = (food) => Object.entries(food?.barcodes || {}).filter(([, v]) => v && v.in).map(([k]) => k).sort();
+
+/** Живой продукт по штрихкоду (любой из привязанных). */
+export function findByBarcode(data, raw) {
+  const code = normalizeBarcode(raw);
+  if (!code) return null;
+  for (const f of data.foods.values()) if (!f.deletedAt && f.barcodes?.[code]?.in) return f;
+  return null;
+}
+
+/** Порция в граммах (или мл), если задана. */
+export const servingOf = (food) => (num(food?.servingSize) ? food.servingSize : null);
+
+// ---------- Рационы (0.12) ----------
+
+/** Время «ЧЧ:ММ» или null. */
+export function cleanTime(v) {
+  const m = String(v ?? '').trim().match(/^(\d{1,2}):(\d{2})$/);
+  if (!m || +m[1] > 23 || +m[2] > 59) return null;
+  return `${m[1].padStart(2, '0')}:${m[2]}`;
+}
+
+const cleanNote = (v) => String(v ?? '').replace(/\r\n?/g, '\n').slice(0, NOTE_MAX);
+const cleanMealName = (v) => normalizeName(v).slice(0, MEAL_NAME_MAX);
+const cleanIcon = (v) => [...String(v ?? '').trim()].slice(0, 4).join('');
+
+/** Основные рационы — фиксированные id и метки 1: на всех устройствах одинаковые, сливаются без конфликтов. */
+export const DEFAULT_MEAL_IDS = MEALS.map((m) => m.key);
+
+export function defaultMeals() {
+  let order = null;
+  return MEALS.map((m) => {
+    order = keyBetween(order, null);
+    return {
+      id: m.key,
+      createdAt: DEFAULTS_CREATED_AT,
+      updatedAt: DEFAULTS_CREATED_AT,
+      updatedBy: DEFAULTS_DEVICE_ID,
+      deletedAt: null,
+      fieldTimes: timesFor(MEAL_FIELDS, 1),
+      name: m.label,
+      icon: m.icon,
+      time: null,
+      order,
+      date: null,
+      archived: false,
+    };
+  });
+}
+
+export const isDefaultMeal = (m) => DEFAULT_MEAL_IDS.includes(m?.id ?? m);
+
+/** Новый рацион: date = null — общий для всех дней, иначе — только для этого дня. */
+export function newMeal({ name, icon = '🍽️', time = null, order, date = null }, ctx) {
+  const n = cleanMealName(name);
+  if (!n) throw new Error('newMeal: пустое название');
+  return create(uuidv7(ctx.now), {
+    name: n, icon: cleanIcon(icon) || '🍽️', time: cleanTime(time), order, date: date || null, archived: false,
+  }, MEAL_FIELDS, ctx);
+}
+
+export function editMeal(meal, changes, ctx) {
+  const c = { ...changes };
+  if ('name' in c) c.name = cleanMealName(c.name) || meal.name;
+  if ('icon' in c) c.icon = cleanIcon(c.icon) || meal.icon;
+  if ('time' in c) c.time = cleanTime(c.time);
+  if ('date' in c) c.date = c.date || null;
+  if ('archived' in c) c.archived = !!c.archived;
+  return touch(meal, c, ctx);
+}
+
+/** Все живые общие рационы по порядку (и скрытые — для настроек). */
+export const globalMeals = (data) => [...data.meals.values()].filter((m) => !m.deletedAt && !m.date).sort(byOrder);
+
+/** Рацион по id; если его нет (удалён на другом устройстве) — запасной с понятным названием. */
+export function mealInfo(data, id) {
+  const m = data.meals.get(id);
+  if (m && !m.deletedAt) return m;
+  const d = MEALS.find((x) => x.key === id);
+  return { id, name: d ? d.label : 'Другое', icon: d ? d.icon : '🍽️', time: null, order: m?.order || '~', date: null, archived: false, missing: true };
+}
+
+/**
+ * Рационы дня по порядку: общие (кроме скрытых) и рационы этого дня; скрытые и удалённые — только если в них
+ * есть записи этого дня (запись не пропадает из дневника).
+ */
+export function mealsForDay(data, date, used = null) {
+  const ids = used || new Set([...data.entries.values()].filter((e) => isLiveEntry(e) && e.date === date).map((e) => e.meal || 'snack'));
+  const out = new Map();
+  for (const m of data.meals.values()) {
+    if (m.deletedAt) continue;
+    if (m.date ? m.date === date : !m.archived || ids.has(m.id)) out.set(m.id, m);
+  }
+  for (const id of ids) if (!out.has(id)) out.set(id, mealInfo(data, id));
+  return [...out.values()].sort(byOrder);
+}
+
+/** Ключ порядка для нового рациона сразу после afterId (null — в начало) среди рационов дня. */
+export function orderAfter(list, afterId) {
+  const i = afterId ? list.findIndex((m) => m.id === afterId) : -1;
+  const prev = i >= 0 ? list[i].order : null;
+  let j = i + 1;
+  while (prev != null && j < list.length && list[j].order <= prev) j++;
+  const next = j < list.length ? list[j].order : null;
+  try {
+    return keyBetween(prev, next);
+  } catch {
+    return keyBetween(prev, null);
+  }
+}
+
+/**
+ * Рацион по времени (для «Записать еду»): последний из рационов дня, у кого время уже наступило.
+ * Если времени ни у кого нет — по часам, как раньше (завтрак до 11, обед до 16, ужин до 21, иначе перекус).
+ */
+export function mealByTime(data, date, time) {
+  const list = mealsForDay(data, date).filter((m) => !m.missing);
+  const timed = list.filter((m) => m.time).sort((a, b) => (a.time < b.time ? -1 : 1));
+  if (timed.length) {
+    const past = timed.filter((m) => m.time <= time);
+    return (past.at(-1) || timed.at(-1)).id;
+  }
+  const h = parseInt(time, 10);
+  const key = h >= 4 && h < 11 ? 'breakfast' : h >= 11 && h < 16 ? 'lunch' : h >= 16 && h < 21 ? 'dinner' : 'snack';
+  return list.some((m) => m.id === key) ? key : list[0]?.id || 'snack';
+}
+
+/**
+ * Рацион за период [from, to] (страница рациона): дни с записями (ккал и число записей, сводки дней — тоже),
+ * средние калории за день с записями, частые продукты.
+ */
+export function mealStats(data, mealId, from, to) {
+  const days = new Map();
+  const day = (date) => days.get(date) || days.set(date, { date, count: 0, kcal: 0 }).get(date);
+  const foods = new Map();
+  for (const e of data.entries.values()) {
+    if (!isLiveEntry(e) || (e.meal || 'snack') !== mealId || e.date < from || e.date > to) continue;
+    const d = day(e.date);
+    d.count++;
+    d.kcal += nv(entryNutrients(e), 'kcal');
+    for (const it of entryItems(e)) {
+      const key = it.foodId || 'quick:' + it.name;
+      const f = foods.get(key) || { key, foodId: it.foodId || null, name: it.name, count: 0, kcal: 0 };
+      f.count++;
+      f.kcal += nv(itemNutrients(it), 'kcal');
+      foods.set(key, f);
+    }
+  }
+  for (const a of data.dayArchive.values()) {
+    if (a.deletedAt || a.date < from || a.date > to || !a.meals?.[mealId]) continue;
+    day(a.date).kcal += a.meals[mealId];
+  }
+  const list = [...days.values()].sort((a, b) => (a.date < b.date ? 1 : -1));
+  const total = list.reduce((s, d) => s + d.kcal, 0);
+  return {
+    days: list,
+    avgKcal: list.length ? total / list.length : 0,
+    entries: list.reduce((s, d) => s + d.count, 0),
+    topFoods: [...foods.values()].sort((a, b) => b.count - a.count || b.kcal - a.kcal).slice(0, 8),
+  };
+}
+
+// ---------- Заметки к рациону на день (0.12) ----------
+
+/** id детерминированный: два устройства, написавшие заметку к одному рациону дня, правят одну запись. */
+export const mealNoteId = (date, meal) => `mn:${date}:${meal}`;
+
+export function mealNoteOf(data, date, meal) {
+  const n = data.mealNotes.get(mealNoteId(date, meal));
+  return n && !n.deletedAt && n.text ? n : null;
+}
+
+export function newMealNote(date, meal, text, ctx) {
+  return create(mealNoteId(date, meal), { date, meal, text: cleanNote(text) }, MEAL_NOTE_FIELDS, ctx);
+}
+
+// ---------- Записи дневника ----------
+
+function nestedItem(fields, ctx) {
+  const at = iso(ctx);
+  return { id: uuidv7(ctx.now), createdAt: at, updatedAt: at, deletedAt: null, fieldTimes: timesFor(ITEM_FIELDS, ctx.stamp()), ...fields };
+}
+
+/**
+ * Продукт записи. Из продукта — снимок его названия и значений (правка продукта прошлые дни не меняет),
+ * amount в граммах/мл. Быстрая запись без продукта — unit 'portion', amount — число порций, значения — на порцию.
+ * snapshot — копия продукта другой записи («как вчера»).
+ */
+export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null }) {
+  // награда — снимок на момент записи (правка продукта или настроек прошлые записи не меняет)
+  const withRewards = (f, r) => (hasRewards(r) ? { ...f, rewards: cleanRewards(r) } : f);
+  if (snapshot) {
+    return withRewards({
+      foodId: snapshot.foodId ?? null, name: normalizeName(snapshot.name) || 'Запись',
+      amount: num(snapshot.amount), unit: ['g', 'ml', 'portion'].includes(snapshot.unit) ? snapshot.unit : 'g',
+      nutrients: cleanNutrients(snapshot.nutrients || {}),
+    }, rewards ?? snapshot.rewards);
+  }
+  if (food) {
+    return withRewards({
+      foodId: food.id, name: food.name + (food.brand ? ` (${food.brand})` : ''),
+      amount: num(amount) || 100, unit: food.unit === 'ml' ? 'ml' : 'g', nutrients: cleanNutrients(food.nutrients),
+    }, rewards);
+  }
+  return withRewards({
+    foodId: null, name: normalizeName(quick?.name) || 'Быстрая запись',
+    amount: num(amount) || 1, unit: quick?.unit === 'g' || quick?.unit === 'ml' ? quick.unit : 'portion',
+    nutrients: cleanNutrients(quick?.nutrients || {}),
+  }, rewards);
+}
+
+export const newItem = (spec, ctx, order = null) => nestedItem({ ...itemFields(spec), ...(order ? { order } : {}) }, ctx);
+
+/** Ключи порядка для count новых продуктов после last. */
+function nextOrders(last, count) {
+  const out = [];
+  let k = last || null;
+  for (let i = 0; i < count; i++) out.push((k = keyBetween(k, null)));
+  return out;
+}
+
+/** Порядок продуктов: по ключу (без ключа — раньше), затем по созданию и id. */
+function byItemOrder(a, b) {
+  const x = a.order || '';
+  const y = b.order || '';
+  if (x !== y) return x < y ? -1 : 1;
+  return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1;
+}
+
+const cleanMealId = (m) => (typeof m === 'string' && m && m.length <= 64 ? m : 'snack');
+
+/**
+ * Запись дневника (0.12): рацион, время (по умолчанию — переданное «сейчас»), заметка и продукты.
+ * items — [{ food, amount } | { quick, amount }]; для краткости можно передать один продукт: { food, amount }.
+ */
+export function newEntry({ date, meal, time = null, note = '', items = null, food = null, amount, quick = null }, ctx) {
+  const specs = items || [{ food, amount, quick }];
+  const orders = nextOrders(null, specs.length);
+  const list = specs.map((x, i) => newItem(x, ctx, orders[i])).sort((a, b) => (a.id < b.id ? -1 : 1));
+  return create(uuidv7(ctx.now), {
+    date, meal: cleanMealId(meal), time: cleanTime(time), note: cleanNote(note), items: list,
+  }, ENTRY_FIELDS, ctx);
+}
+
+export const isLiveEntry = (e) => !!e && !e.deletedAt;
+
+/**
+ * Продукты записи по порядку добавления. У записи 0.11 продукт один и лежит в её полях — отдаём его как
+ * элемент с id записи (legacy: true).
+ */
+export function entryItems(e) {
+  if (!e || e.deletedAt) return [];
+  if (Array.isArray(e.items)) return e.items.filter((x) => x && !x.deletedAt).sort(byItemOrder);
+  return [{ id: e.id, createdAt: e.createdAt, foodId: e.foodId ?? null, name: e.name || 'Запись', amount: e.amount, unit: e.unit, nutrients: e.nutrients || {}, legacy: true }];
+}
+
+/** Название записи: продукт или «Творог, банан и ещё 2». */
+export function entryTitle(e) {
+  const items = entryItems(e);
+  if (!items.length) return 'Пустая запись';
+  if (items.length === 1) return items[0].name;
+  if (items.length <= 3) return items.map((x) => x.name).join(', ');
+  return `${items.slice(0, 2).map((x) => x.name).join(', ')} и ещё ${items.length - 2}`;
+}
+
+/**
+ * Перевести запись 0.11 на продукты-элементы (перед правкой состава). id элемента = id записи: два устройства,
+ * сделавшие это одновременно, получат один и тот же продукт, а не два.
+ */
+export function upgradeEntry(e, ctx) {
+  if (!e || Array.isArray(e.items)) return e;
+  const at = iso(ctx);
+  const item = {
+    id: e.id, createdAt: e.createdAt || at, updatedAt: at, deletedAt: null, fieldTimes: timesFor(ITEM_FIELDS, 1),
+    foodId: e.foodId ?? null, name: e.name || 'Запись', amount: Number.isFinite(e.amount) ? e.amount : 0,
+    unit: e.unit || 'g', nutrients: e.nutrients || {},
+  };
+  return { ...e, items: [item], updatedAt: at, updatedBy: ctx.deviceId };
+}
+
+/** Добавить продукты в запись. */
+export function addItems(e, specs, ctx) {
+  const base = upgradeEntry(e, ctx);
+  const last = (base.items || []).map((x) => x.order).filter(Boolean).sort().at(-1) || null;
+  const orders = nextOrders(last, specs.length);
+  const added = specs.map((x, i) => newItem(x, ctx, orders[i]));
+  return { ...base, items: [...base.items, ...added].sort((a, b) => (a.id < b.id ? -1 : 1)), updatedAt: iso(ctx), updatedBy: ctx.deviceId };
+}
+
+/** Изменить количество продукта в записи. */
+export function setItemAmount(e, itemId, amount, ctx) {
+  const base = upgradeEntry(e, ctx);
+  return touchNested(base, 'items', itemId, { amount: num(amount) || 0 }, ctx);
+}
+
+export function removeItem(e, itemId, ctx) {
+  return removeNested(upgradeEntry(e, ctx), 'items', itemId, ctx);
+}
+
+/** Правка полей записи: время, заметка, рацион, дата. */
+export function editEntry(e, changes, ctx) {
+  const c = {};
+  if ('time' in changes) c.time = cleanTime(changes.time);
+  if ('note' in changes) c.note = cleanNote(changes.note);
+  if ('meal' in changes) c.meal = cleanMealId(changes.meal);
+  if ('date' in changes) c.date = changes.date;
+  return touch(e, c, ctx);
+}
+
+/** Порядок записей в рационе: по времени (без времени — раньше), затем по созданию. */
+export function byEntryTime(a, b) {
+  const x = a.time || '';
+  const y = b.time || '';
+  if (x !== y) return x < y ? -1 : 1;
+  return a.createdAt < b.createdAt ? -1 : a.createdAt > b.createdAt ? 1 : a.id < b.id ? -1 : 1;
+}
+
+/** Живые записи дня по рационам: { [id рациона]: [...] } — только рационы, где записи есть. */
+export function dayEntries(data, date) {
+  const out = {};
+  for (const e of data.entries.values()) if (isLiveEntry(e) && e.date === date) (out[e.meal || 'snack'] ||= []).push(e);
+  for (const k of Object.keys(out)) out[k].sort(byEntryTime);
+  return out;
+}
+
+/** Итоги дня: всего и по рационам; учитывает сводку дня, если его записи удалены лимитом. */
+export function dayTotals(data, date) {
+  const byMeal = dayEntries(data, date);
+  const meals = {};
+  let count = 0;
+  for (const [k, list] of Object.entries(byMeal)) {
+    meals[k] = sumNutrients(list.map(entryNutrients));
+    count += list.length;
+  }
+  let totals = sumNutrients(Object.values(meals));
+  const arch = data.dayArchive.get(archiveId(date));
+  if (arch && !arch.deletedAt) {
+    totals = addNutrients(totals, arch.totals || {});
+    for (const [k, kcal] of Object.entries(arch.meals || {})) meals[k] = addNutrients(meals[k] || {}, { kcal: kcal || 0 });
+    count += arch.count || 0;
+  }
+  return { totals, meals, count, entries: byMeal, archived: !!arch && !arch.deletedAt };
+}
+
+/** Как часто ели продукт (для «Недавних» и «Частых»): foodId → { count, last, amount }. */
+export function foodUsage(data) {
+  const out = new Map();
+  for (const e of data.entries.values()) {
+    if (!isLiveEntry(e)) continue;
+    for (const it of entryItems(e)) {
+      if (!it.foodId) continue;
+      const u = out.get(it.foodId) || { count: 0, last: '', amount: 0 };
+      u.count++;
+      const when = e.date + (e.time || '') + e.createdAt;
+      if (when > u.last) {
+        u.last = when;
+        u.amount = it.amount;
+      }
+      out.set(it.foodId, u);
+    }
+  }
+  return out;
+}
+
+// ---------- Замеры ----------
+
+export function newBodyLog({ date, weightKg = null, waistCm = null, neckCm = null, hipCm = null, bodyFatPct = null, note = '' }, ctx) {
+  return create(uuidv7(ctx.now), {
+    date, weightKg: num(weightKg) || null, waistCm: num(waistCm) || null, neckCm: num(neckCm) || null,
+    hipCm: num(hipCm) || null, bodyFatPct: num(bodyFatPct) || null, note: String(note || '').slice(0, 500),
+  }, BODY_FIELDS, ctx);
+}
+
+/** Живой замер на дату (последний изменённый, если вдруг их два — с двух устройств). */
+export function bodyLogOn(data, date) {
+  let best = null;
+  for (const b of data.body.values()) {
+    if (b.deletedAt || b.date !== date) continue;
+    if (!best || (b.updatedAt || '') > (best.updatedAt || '')) best = b;
+  }
+  return best;
+}
+
+export const liveBodyLogs = (data) => [...data.body.values()].filter((b) => !b.deletedAt).sort((a, b) => (a.date < b.date ? 1 : -1));
+
+// ---------- Лимит записей дневника ----------
+
+export const archiveId = (date) => 'd:' + date;
+
+/** Сколько живых записей хранится. */
+export function entryCount(data) {
+  let n = 0;
+  for (const e of data.entries.values()) if (isLiveEntry(e)) n++;
+  return n;
+}
+
+/**
+ * Что удалить, чтобы живых записей стало не больше limit: самые старые дни целиком, кроме последних
+ * keepRecentDays. → { dates, entries, over, total }. Сводки дней — archiveFor.
+ */
+export function purgePlan(data, today, limit = data.settings?.entryLimit || FEAST_RETENTION.entryDefault) {
+  const byDate = new Map();
+  let total = 0;
+  for (const e of data.entries.values()) {
+    if (!isLiveEntry(e)) continue;
+    total++;
+    if (!byDate.has(e.date)) byDate.set(e.date, []);
+    byDate.get(e.date).push(e);
+  }
+  const lim = Math.max(FEAST_RETENTION.entryMin, limit || 0);
+  const over = total - lim;
+  const plan = { dates: [], entries: [], over: Math.max(0, over), total };
+  if (over <= 0) return plan;
+  const keepFrom = addDays(today, -FEAST_RETENTION.keepRecentDays);
+  let removed = 0;
+  for (const date of [...byDate.keys()].sort()) {
+    if (removed >= over || date >= keepFrom) break;
+    plan.dates.push(date);
+    plan.entries.push(...byDate.get(date));
+    removed += byDate.get(date).length;
+  }
+  return plan;
+}
+
+/**
+ * Сводка дня из удаляемых записей (с уже существующей сводкой, если день чистили раньше).
+ * id = 'd:<дата>': два устройства, удалившие один и тот же день, пишут одну и ту же запись.
+ */
+export function archiveFor(date, entries, prev, ctx) {
+  const totals = sumNutrients(entries.map(entryNutrients));
+  const meals = {};
+  for (const e of entries) {
+    const k = e.meal || 'snack';
+    meals[k] = (meals[k] || 0) + nv(entryNutrients(e), 'kcal');
+  }
+  for (const k of Object.keys(meals)) meals[k] = Math.round(meals[k]);
+  const foods = {};
+  for (const e of entries) {
+    for (const it of entryItems(e)) {
+      const key = it.foodId || 'quick:' + it.name;
+      const f = foods[key] || (foods[key] = { name: it.name, count: 0, kcal: 0 });
+      f.count++;
+      f.kcal = Math.round(f.kcal + nv(itemNutrients(it), 'kcal'));
+    }
+  }
+  const round = (n) => Object.fromEntries(Object.entries(n).map(([k, v]) => [k, Math.round(v * 1000) / 1000]));
+  const rw = zeroMilli();
+  for (const e of entries) for (const it of entryItems(e)) addRewardsMilli(rw, it.rewards);
+  if (prev && !prev.deletedAt) addRewardsMilli(rw, prev.rewards);
+  const rewards = fromMilli(rw);
+  if (prev && !prev.deletedAt) {
+    const pm = { ...(prev.meals || {}) };
+    for (const [k, v] of Object.entries(meals)) pm[k] = (pm[k] || 0) + v;
+    const pf = { ...(prev.foods || {}) };
+    for (const [k, v] of Object.entries(foods)) pf[k] = pf[k] ? { ...pf[k], count: pf[k].count + v.count, kcal: pf[k].kcal + v.kcal } : v;
+    return touch(prev, {
+      count: (prev.count || 0) + entries.length,
+      totals: round(addNutrients(prev.totals || {}, totals)),
+      meals: pm,
+      foods: pf,
+      rewards,
+    }, ctx);
+  }
+  return create(archiveId(date), { date, count: entries.length, totals: round(totals), meals, foods, rewards }, DAY_ARCHIVE_FIELDS, ctx);
+}
+
+// ---------- Статистика за период ----------
+
+/** Итоги по дням [from, to]: живые записи + сводки. Пустые дни — без записей. */
+export function dailySeries(data, from, to) {
+  const days = new Map();
+  const get = (date) => {
+    if (!days.has(date)) days.set(date, { date, totals: {}, count: 0, meals: {} });
+    return days.get(date);
+  };
+  for (const e of data.entries.values()) {
+    if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
+    const d = get(e.date);
+    const n = entryNutrients(e);
+    d.totals = addNutrients(d.totals, n);
+    d.count++;
+    const m = e.meal || 'snack';
+    d.meals[m] = (d.meals[m] || 0) + nv(n, 'kcal');
+  }
+  for (const a of data.dayArchive.values()) {
+    if (a.deletedAt || a.date < from || a.date > to) continue;
+    const d = get(a.date);
+    d.totals = addNutrients(d.totals, a.totals || {});
+    d.count += a.count || 0;
+    for (const [k, kcal] of Object.entries(a.meals || {})) d.meals[k] = (d.meals[k] || 0) + (kcal || 0);
+  }
+  return [...days.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** Самый ранний день с записями (или сводкой). */
+export function firstDay(data) {
+  let first = null;
+  for (const e of data.entries.values()) if (isLiveEntry(e) && (!first || e.date < first)) first = e.date;
+  for (const a of data.dayArchive.values()) if (!a.deletedAt && (!first || a.date < first)) first = a.date;
+  return first;
+}
+
+/**
+ * Сводка периода: дни с записями, средние за день (по дням с записями), дни сверх лимита,
+ * средние значения всех веществ, топ продуктов по калориям и по числу записей.
+ */
+export function periodStats(data, from, to, goal) {
+  const series = dailySeries(data, from, to);
+  const logged = series.filter((d) => d.count > 0);
+  const n = logged.length || 1;
+  const sum = sumNutrients(logged.map((d) => d.totals));
+  const avg = Object.fromEntries(NUTRIENT_KEYS.map((k) => [k, nv(sum, k) / n]));
+  const over = logged.filter((d) => nv(d.totals, 'kcal') > goal).length;
+  const foods = new Map();
+  const add = (key, name, kcal, count) => {
+    const f = foods.get(key) || { key, name, kcal: 0, count: 0 };
+    f.kcal += kcal;
+    f.count += count;
+    foods.set(key, f);
+  };
+  for (const e of data.entries.values()) {
+    if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
+    for (const it of entryItems(e)) add(it.foodId || 'quick:' + it.name, it.name, nv(itemNutrients(it), 'kcal'), 1);
+  }
+  for (const a of data.dayArchive.values()) {
+    if (a.deletedAt || a.date < from || a.date > to) continue;
+    for (const [key, f] of Object.entries(a.foods || {})) add(key, f.name, f.kcal || 0, f.count || 0);
+  }
+  const top = [...foods.values()];
+  return {
+    series,
+    days: daysBetween(from, to) + 1,
+    logged: logged.length,
+    over,
+    avg,
+    total: sum,
+    entries: logged.reduce((s, d) => s + d.count, 0),
+    topByKcal: [...top].sort((a, b) => b.kcal - a.kcal).slice(0, 10),
+    topByCount: [...top].sort((a, b) => b.count - a.count || b.kcal - a.kcal).slice(0, 10),
+  };
+}

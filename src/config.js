@@ -7,6 +7,8 @@ export const GOOGLE_SCOPES = ['https://www.googleapis.com/auth/drive.file'];
 
 export const APP_NAME = 'lifetasks-web';
 export const DB_NAME = 'lifetasks';
+// Feast (0.11, счётчик калорий): своя локальная база и своя папка на Диске
+export const FEAST_DB_NAME = 'lifetasks-feast';
 
 // Ограничения приложения. Экран «Настройки → Ограничения и хранилище» показывает их отсюда же.
 export const LIMITS = {
@@ -40,6 +42,14 @@ export const RETENTION = {
   completedMin: 100,
   completedMax: 10000,
   keepRecentDays: 7, // выполненные за последние 7 дней не удаляются никогда
+};
+
+// Feast (0.11): лимит записей дневника — старые дни удаляются, их итоги остаются сводками (DATA_FORMAT §19).
+export const FEAST_RETENTION = {
+  entryDefault: 5000,
+  entryMin: 500,
+  entryMax: 50000,
+  keepRecentDays: 30, // записи последних 30 дней не удаляются никогда
 };
 
 export const DRIVE_QUOTA_URL = 'https://console.cloud.google.com/apis/api/drive.googleapis.com/quotas';

@@ -227,12 +227,12 @@ export async function testNotification() {
   const opts = { body: 'Так будут выглядеть напоминания о задачах.', tag: 'lt-test', icon: 'icons/icon-192.png' };
   try {
     const reg = await navigator.serviceWorker?.getRegistration?.();
-    if (reg?.showNotification) return await reg.showNotification('🔔 LifeTasks', opts);
+    if (reg?.showNotification) return await reg.showNotification('🔔 Chronicle', opts);
   } catch {
     // ниже — запасной путь
   }
   try {
-    new Notification('🔔 LifeTasks', opts);
+    new Notification('🔔 Chronicle', opts);
   } catch (e) {
     showSnackbar('Не получилось показать уведомление');
   }

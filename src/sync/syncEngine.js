@@ -7,7 +7,7 @@ import { syncHooks, refreshDirty, markDevicePushed, restoreDeviceSession } from 
 import { createDrive } from '../google/drive.js';
 import { tokenValid, startLogin, completeLogin, endLocalSession } from '../google/auth.js';
 import { sessionRevoked } from '../core/sessions.js';
-import { ensureLayout, recreateDb } from '../google/layout.js';
+import { ensureLayout, recreateDb, ensureKingdom, renameLegacyRoot, SPACES } from '../google/layout.js';
 import { buildDb, buildManifest, extrasOf } from '../data/envelope.js';
 import { gzipJson } from '../data/serialize.js';
 import { parseDbBytes, mergeRemote, writeDbChecked, pushedKeys, baseFrom } from './protocol.js';
@@ -18,6 +18,7 @@ import { MERGE_COLLECTIONS } from '../core/merge.js';
 import { countLabel } from '../core/plural.js';
 import { SCHEMA_VERSION } from '../version.js';
 import { TOMBSTONE_TTL_DAYS } from '../config.js';
+import { feastPush, feastPull, feastRemoteNewer, feastSoftError, resetFeastSync, recreateFeastDb } from './feastSync.js';
 
 export const drive = createDrive();
 const POLL_MS = 5 * 60000;
@@ -128,11 +129,31 @@ function reportConflicts(res) {
   if (n) setUi({ conflictsNew: (store.ui.conflictsNew || 0) + n });
 }
 
+let kingdomChecked = false;
+let renameChecked = false;
+
+/**
+ * Общая папка Kingdom (0.12): найти или создать — раз за запуск. Новые папки приложений создаются в ней;
+ * уже существующие остаются, где лежат (их переносят руками — папки находятся по меткам где угодно).
+ */
+async function kingdom() {
+  if (kingdomChecked && store.sync.kingdomId) return store.sync.kingdomId;
+  const id = await ensureKingdom(drive, store.sync.kingdomId);
+  if (id !== store.sync.kingdomId) {
+    await getRepo().setMeta('sync.kingdomId', id);
+    setSync({ kingdomId: id });
+  }
+  kingdomChecked = true;
+  return id;
+}
+
 /** Найти или создать папку на Диске. Если база создана из локальных данных — это уже пуш. */
 async function ensure() {
   const repo = getRepo();
   let createdSnapshot = null;
+  const parentId = await kingdom();
   const r = await ensureLayout(drive, {
+    parentId,
     cached: store.sync.layout,
     makeDbBytes: async () => {
       createdSnapshot = localData();
@@ -148,6 +169,15 @@ async function ensure() {
   }
   setSync({ extraRoots: (r.extraRoots || []).map((f) => ({ id: f.id, createdTime: f.createdTime })) });
   if (r.created && createdSnapshot) await finishWrite(createdSnapshot, r.dbMeta.headRevisionId);
+  // 0.12: папка «LifeTasks» → «Chronicle» (раз за запуск; своё имя, данное человеком, не трогаем)
+  if (!renameChecked) {
+    try {
+      await renameLegacyRoot(drive, r.layout.rootId, SPACES.tasks);
+      renameChecked = true;
+    } catch (e) {
+      console.warn('Chronicle: папку не переименовать — попробуем при следующей синхронизации', e);
+    }
+  }
   return r;
 }
 
@@ -232,7 +262,8 @@ async function handleError(e, kind, silent) {
   getRepo()?.logError({ at: new Date().toISOString(), code, message: String(e?.message || e), stack: e?.stack || null });
   console.error(e);
   if (code === 'E-DB-MISSING') {
-    offerRecreate();
+    if (e.space === 'feast') offerRecreateFeast();
+    else offerRecreate();
     return;
   }
   if (!silent || !SOFT_CODES.has(code)) showSnackbar(text);
@@ -264,105 +295,142 @@ async function offerRecreate() {
   });
 }
 
+async function offerRecreateFeast() {
+  const v = await ask({
+    title: 'Файл базы Crimson Harvest на Диске не найден',
+    text: 'Его удалили или переместили в корзину Google Диска. Можно восстановить его из корзины Диска и нажать «Обновить» — '
+      + 'или создать базу Crimson Harvest заново из данных этого устройства.',
+    buttons: [{ label: 'Отмена', value: null }, { label: 'Создать заново', value: 'yes', kind: 'primary' }],
+  });
+  if (v !== 'yes') return;
+  await run('push', async () => {
+    await recreateFeastDb(drive);
+    setSync({ lastError: null });
+    showSnackbar('База Crimson Harvest на Диске создана заново');
+  });
+}
+
 // ---------- Пуш и забор ----------
 
-/** «Пуш» (docs/TZ.md §9.3). */
+/** Итог пуша обоих приложений одной строкой (0.11). */
+function pushSummary(t, f) {
+  const parts = [];
+  const folders = [t.created && 'Chronicle', f?.created && 'Crimson Harvest'].filter(Boolean);
+  if (t.pushed) parts.push(`Chronicle — ${countLabel(t.pushed, CHANGES)}`);
+  else if (t.migrated) parts.push('Chronicle — формат данных обновлён');
+  if (f?.pushed) parts.push(`Crimson Harvest — ${countLabel(f.pushed, CHANGES)}`);
+  if (folders.length) return `На Диске создана папка ${folders.join(' и ')}, данные отправлены`;
+  return parts.length ? `Запушено: ${parts.join(', ')}` : 'Нечего пушить — всё уже на Диске';
+}
+
+/** Feast внутри общей операции: мягкие ошибки (база новее приложения) не мешают задачам. */
+async function withFeast(fn) {
+  try {
+    return await fn();
+  } catch (e) {
+    if (feastSoftError(e)) return null;
+    throw e;
+  }
+}
+
+/** «Пуш» (docs/TZ.md §9.3) — с 0.11 обеих баз: задачи Chronicle и Feast. */
 export function push() {
   return run('push', async () => {
-    const before = store.ui.dirtyCount;
-    const r = await ensure();
-    if (r.created) {
-      showSnackbar('На Диске создана папка LifeTasks, данные отправлены');
-      return;
-    }
-    let expected = store.sync.lastRevisionId;
-    let migratedFrom = null;
-    if (r.dbMeta.headRevisionId !== expected) {
-      step('Слияние с Диском');
-      const parsed = await readRemote(r.layout.dbId);
-      migratedFrom = parsed.migratedFrom;
-      reportConflicts(await mergeIntoLocal(parsed.db, r.dbMeta.headRevisionId));
-      expected = r.dbMeta.headRevisionId;
-    }
-    if (!migratedFrom && store.ui.dirtyCount === 0) {
-      setSync({ remoteNewer: false });
-      showSnackbar('Нечего пушить — всё уже на Диске');
-      return;
-    }
-    // Медиа (обновление 0.5): новые вложения — на Диск до записи базы, чтобы в базе уже был driveFileId
-    step('Медиа');
-    const media = await uploadPending(drive, r.layout, (text) => step(text));
-    if (media.missing) console.info(`LifeTasks: ${media.missing} медиа нет на этом устройстве — их зальёт устройство, где они есть`);
-    try {
-      await collectGarbage(drive);
-    } catch (e) {
-      console.warn('Сборка мусора медиа не удалась — повторится при следующем пуше', e);
-    }
-    step('Бэкап');
-    await makeBackup(drive, r.layout, migratedFrom ? `pre-migration-v${SCHEMA_VERSION}` : 'push', store.deviceId);
-    try {
-      await rotateBackups(drive, r.layout);
-    } catch (e) {
-      console.warn('Ротация бэкапов не удалась — повторится при следующем пуше', e);
-    }
-    await purgeOldTombstones();
-    const pushedAt = new Date().toISOString();
-    await markDevicePushed(pushedAt);
-    step('Запись базы');
-    const { meta, snapshot, verified } = await writeDbChecked({
-      drive,
-      dbId: r.layout.dbId,
-      expectedPrevRev: expected,
-      makeBytes: async () => {
-        const data = localData();
-        const { bytes } = await dbFile(data);
-        return { bytes, snapshot: data };
-      },
-      onForeign: async (bytes) => {
-        step('Слияние с параллельной записью');
-        const parsed = await parseDbBytes(bytes);
-        reportConflicts(await mergeIntoLocal(parsed.db, null));
-        step('Запись базы');
-      },
-    });
-    if (!verified) console.info('LifeTasks: проверка параллельной записи пропущена (ревизия не найдена в списке)');
-    checkClock(meta.modifiedTime);
-    step('Манифест');
-    try {
-      await drive.updateContent(r.layout.manifestId, buildManifest({
-        layout: r.layout,
-        deviceId: store.deviceId,
-        createdAt: await getRepo().getMeta('db.createdAt'),
-        lastPush: { at: pushedAt, deviceId: store.deviceId, dbRevisionId: meta.headRevisionId },
-      }), 'application/json');
-    } catch (e) {
-      console.warn('manifest.json не обновлён — не критично', e);
-    }
-    await finishWrite(snapshot, meta.headRevisionId);
-    showSnackbar(before ? `Запушено: ${countLabel(before, CHANGES)}` : 'Запушено (формат данных обновлён)');
+    const t = await pushTasks();
+    const f = await withFeast(() => feastPush(drive, step));
+    if (!t.pushed && !f?.pushed && !t.created && !f?.created) setSync({ remoteNewer: false });
+    showSnackbar(pushSummary(t, f));
   });
+}
+
+/** Пуш базы задач → { created, pushed, migrated }. */
+async function pushTasks() {
+  const before = store.ui.dirtyCount;
+  const r = await ensure();
+  if (r.created) return { created: true, pushed: before };
+  let expected = store.sync.lastRevisionId;
+  let migratedFrom = null;
+  if (r.dbMeta.headRevisionId !== expected) {
+    step('Слияние с Диском');
+    const parsed = await readRemote(r.layout.dbId);
+    migratedFrom = parsed.migratedFrom;
+    reportConflicts(await mergeIntoLocal(parsed.db, r.dbMeta.headRevisionId));
+    expected = r.dbMeta.headRevisionId;
+  }
+  if (!migratedFrom && store.ui.dirtyCount === 0) return { pushed: 0 };
+  // Медиа (обновление 0.5): новые вложения — на Диск до записи базы, чтобы в базе уже был driveFileId
+  step('Медиа');
+  const media = await uploadPending(drive, r.layout, (text) => step(text));
+  if (media.missing) console.info(`LifeTasks: ${media.missing} медиа нет на этом устройстве — их зальёт устройство, где они есть`);
+  try {
+    await collectGarbage(drive);
+  } catch (e) {
+    console.warn('Сборка мусора медиа не удалась — повторится при следующем пуше', e);
+  }
+  step('Бэкап');
+  await makeBackup(drive, r.layout, migratedFrom ? `pre-migration-v${SCHEMA_VERSION}` : 'push', store.deviceId);
+  try {
+    await rotateBackups(drive, r.layout);
+  } catch (e) {
+    console.warn('Ротация бэкапов не удалась — повторится при следующем пуше', e);
+  }
+  await purgeOldTombstones();
+  const pushedAt = new Date().toISOString();
+  await markDevicePushed(pushedAt);
+  step('Запись базы');
+  const { meta, snapshot, verified } = await writeDbChecked({
+    drive,
+    dbId: r.layout.dbId,
+    expectedPrevRev: expected,
+    makeBytes: async () => {
+      const data = localData();
+      const { bytes } = await dbFile(data);
+      return { bytes, snapshot: data };
+    },
+    onForeign: async (bytes) => {
+      step('Слияние с параллельной записью');
+      const parsed = await parseDbBytes(bytes);
+      reportConflicts(await mergeIntoLocal(parsed.db, null));
+      step('Запись базы');
+    },
+  });
+  if (!verified) console.info('LifeTasks: проверка параллельной записи пропущена (ревизия не найдена в списке)');
+  checkClock(meta.modifiedTime);
+  step('Манифест');
+  try {
+    await drive.updateContent(r.layout.manifestId, buildManifest({
+      layout: r.layout,
+      deviceId: store.deviceId,
+      createdAt: await getRepo().getMeta('db.createdAt'),
+      lastPush: { at: pushedAt, deviceId: store.deviceId, dbRevisionId: meta.headRevisionId },
+    }), 'application/json');
+  } catch (e) {
+    console.warn('manifest.json не обновлён — не критично', e);
+  }
+  await finishWrite(snapshot, meta.headRevisionId);
+  return { pushed: before, migrated: !!migratedFrom };
 }
 
 /** «Обновить» — забрать данные с Диска и слить с локальными (docs/TZ.md §9.4). */
 export function pull({ silent = false } = {}) {
   return run('pull', async () => {
     const r = await ensure();
-    if (r.created) {
-      showSnackbar('На Диске создана папка LifeTasks, данные отправлены');
-      return;
-    }
     const now = new Date().toISOString();
-    if (r.dbMeta.headRevisionId !== store.sync.lastRevisionId) {
+    let n = 0;
+    if (!r.created && r.dbMeta.headRevisionId !== store.sync.lastRevisionId) {
       step('Загрузка базы');
       const parsed = await readRemote(r.layout.dbId);
       step('Слияние');
       const res = await mergeIntoLocal(parsed.db, r.dbMeta.headRevisionId);
       reportConflicts(res);
-      const n = res.changes.length;
-      if (n || !silent) showSnackbar(n ? `Обновлено с Диска: ${countLabel(n, CHANGES)}` : 'Уже актуально');
-    } else if (!silent) {
-      showSnackbar('Уже актуально');
+      n = res.changes.length;
     }
+    // Feast (0.11): своя база в своей папке — тем же «Обновить»
+    const f = await withFeast(() => feastPull(drive, step));
+    const folders = [r.created && 'Chronicle', f?.created && 'Crimson Harvest'].filter(Boolean);
+    const total = n + (f?.changes || 0);
+    if (folders.length) showSnackbar(`На Диске создана папка ${folders.join(' и ')}, данные отправлены`);
+    else if (total || !silent) showSnackbar(total ? `Обновлено с Диска: ${countLabel(total, CHANGES)}` : 'Уже актуально');
     await getRepo().setMeta('sync.lastPullAt', now);
     setSync({ lastPullAt: now, remoteNewer: false });
   }, { silent });
@@ -374,7 +442,9 @@ export async function checkRemote() {
   if (busy || !tokenValid() || !navigator.onLine || !store.sync.layout || document.visibilityState !== 'visible') return;
   try {
     const m = await drive.getMeta(store.sync.layout.dbId, 'headRevisionId,trashed');
-    setSync({ remoteNewer: !!m.headRevisionId && m.headRevisionId !== store.sync.lastRevisionId, offline: false });
+    let newer = !!m.headRevisionId && m.headRevisionId !== store.sync.lastRevisionId;
+    if (!newer) newer = await feastRemoteNewer(drive).catch(() => false);
+    setSync({ remoteNewer: newer, offline: false });
   } catch (e) {
     if (e.code === 'E-OFFLINE') setSync({ offline: true });
     else if (e.code === 'E-AUTH-EXPIRED' && store.auth) {
@@ -405,8 +475,11 @@ async function checkAccount(email) {
   });
   if (v === 'switch') {
     await repo.setMeta('account.email', email);
-    await repo.applySync({ base: new Map(), meta: { 'sync.layout': null, 'sync.lastRevisionId': null } });
-    setSync({ layout: null, lastRevisionId: null });
+    await repo.applySync({ base: new Map(), meta: { 'sync.layout': null, 'sync.lastRevisionId': null, 'sync.kingdomId': null } });
+    setSync({ layout: null, lastRevisionId: null, kingdomId: null });
+    kingdomChecked = false;
+    renameChecked = false;
+    await resetFeastSync();
     return true;
   }
   await startLogin({ action: 'pull', selectAccount: true });

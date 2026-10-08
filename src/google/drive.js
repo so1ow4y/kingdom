@@ -121,6 +121,21 @@ export function createDrive() {
     },
 
     /** В корзину Google Диска (не окончательное удаление). */
+    /**
+     * Переименовать и/или перенести файл (0.12: папка Kingdom). changes — { name }; addParents/removeParents —
+     * id папок через запятую. Права drive.file позволяют это только для файлов, созданных приложением.
+     */
+    async updateMeta(id, changes = {}, { addParents = '', removeParents = '' } = {}) {
+      const p = { fields: FILE_FIELDS };
+      if (addParents) p.addParents = addParents;
+      if (removeParents) p.removeParents = removeParents;
+      return gfetch(`${API}/files/${encodeURIComponent(id)}?${qs(p)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json; charset=UTF-8' },
+        body: JSON.stringify(changes),
+      });
+    },
+
     async trash(id) {
       return gfetch(`${API}/files/${encodeURIComponent(id)}?${qs({ fields: 'id,trashed' })}`, {
         method: 'PATCH',

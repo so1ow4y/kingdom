@@ -9,11 +9,12 @@ export function backupName(kind, deviceId, now = new Date()) {
   return `db-${ts}-${kind}-${String(deviceId).slice(-8)}.json.gz`;
 }
 
-export async function makeBackup(drive, layout, kind, deviceId, now = new Date()) {
+/** appKey — ключ appProperties папки (lifetasks у задач, feast у Feast — google/layout.js SPACES). */
+export async function makeBackup(drive, layout, kind, deviceId, now = new Date(), appKey = 'lifetasks') {
   return drive.copy(layout.dbId, {
     name: backupName(kind, deviceId, now),
     parentId: layout.backupsFolderId,
-    appProperties: { lifetasks: 'backup', backupKind: kind },
+    appProperties: { [appKey]: 'backup', backupKind: kind },
   });
 }
 

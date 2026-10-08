@@ -10,6 +10,11 @@ export const store = {
     priorities: new Map(), coinEvents: new Map(), rewards: new Map(), // формат v2
     doneArchive: new Map(), // формат v3: сводки удалённых выполненных задач
   },
+  // Feast (0.11): данные счётчика калорий — своя база и своя папка на Диске (core/feast.js)
+  feast: {
+    settings: null, foods: new Map(), entries: new Map(), dayArchive: new Map(), body: new Map(),
+    meals: new Map(), mealNotes: new Map(), // 0.12: рационы и заметки к ним
+  },
   version: 0, // растёт при каждом изменении data — по нему мемоизируются выборки
   now: { today: '', time: '', ms: 0 },
   deviceId: null,
@@ -24,10 +29,13 @@ export const store = {
     lastPullAt: null,
     lastPushAt: null,
     layout: null, // id файлов и папок на Диске
+    kingdomId: null, // 0.12: общая папка Kingdom на Диске
     lastRevisionId: null,
     extraRoots: [],
     clockSkewMin: 0,
     everLoggedIn: false,
+    feastLayout: null, // 0.11: id папки и файлов Feast на Диске
+    feastRevisionId: null,
   },
   ui: {
     snackbar: null, // { id, text, actionLabel, onAction }
@@ -35,6 +43,8 @@ export const store = {
     sheet: null, // { type, ...props }
     quickAdd: null, // { listId, scheduledDate } | null
     dirtyCount: 0,
+    feastDirty: 0, // 0.11: непушнутые правки Feast (в индикаторе — сумма)
+    feastReadOnly: null, // 0.11: база Feast на Диске новее приложения — текст причины
     readOnly: null, // null или текст причины
     update: null, // { version } — доступно обновление
     fatal: null,
@@ -70,6 +80,9 @@ export function bumpData() {
   store.version++;
   notify();
 }
+
+/** Непушнутые правки обоих приложений (0.11: задачи + Feast). */
+export const totalDirty = () => (store.ui.dirtyCount || 0) + (store.ui.feastDirty || 0);
 
 export function setUi(patch) {
   Object.assign(store.ui, patch);

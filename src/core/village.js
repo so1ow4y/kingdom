@@ -9,6 +9,7 @@
 import { localDateOf, addDays } from './dates.js';
 import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
+import { extraEarnings } from './earnings.js';
 
 // ---------- Каталог ----------
 
@@ -164,9 +165,9 @@ export function gemsForFocus(minutes, gemLevel = 0) {
   return Math.max(1, Math.round(minutes / 25)) + (gemLevel >= 2 ? 1 : 0);
 }
 
-/** Баланс изумрудов: добыча шахт по начислениям + фокус-сессии + траты (поле gems у событий). */
+/** Баланс изумрудов: добыча шахт по начислениям + фокус-сессии + 💎 за еду (0.12) + траты (поле gems у событий). */
 export function gemBalance(data) {
-  let s = 0;
+  let s = extraEarnings().gems;
   for (const e of liveEvents(data)) {
     if (e.type === 'award') s += gemsForAward(e.amount | 0, levelAt(data, 'gemmine', e.at));
     if (Number.isFinite(e.gems)) s += e.gems | 0;
@@ -176,7 +177,7 @@ export function gemBalance(data) {
 
 /** Сколько изумрудов добыто всего (без трат) — для статистики деревни. */
 export function gemsEarned(data) {
-  let s = 0;
+  let s = extraEarnings().gems;
   for (const e of liveEvents(data)) {
     if (e.type === 'award') s += gemsForAward(e.amount | 0, levelAt(data, 'gemmine', e.at));
     if ((e.gems | 0) > 0) s += e.gems | 0;

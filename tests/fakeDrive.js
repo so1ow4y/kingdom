@@ -42,7 +42,8 @@ export function createFakeDrive() {
 
     async findFiles(q, { orderBy = 'createdTime' } = {}) {
       let list = [...files.values()];
-      if (/value='root'/.test(q)) list = list.filter((f) => f.appProperties?.lifetasks === 'root' && f.mimeType === FOLDER);
+      const root = q.match(/key='(\w+)' and value='root'/); // lifetasks — задачи, feast — еда (0.11), kingdom — общая (0.12)
+      if (root) list = list.filter((f) => f.appProperties?.[root[1]] === 'root' && f.mimeType === FOLDER);
       const parent = q.match(/'([^']+)' in parents/);
       if (parent) list = list.filter((f) => f.parents?.includes(parent[1]));
       const sha = q.match(/key='sha256' and value='([0-9a-f]+)'/);
@@ -104,6 +105,15 @@ export function createFakeDrive() {
     async copy(id, { name, parentId, appProperties }) {
       const src = get(id);
       return drive.createFile({ name, parentId, mimeType: src.mimeType, appProperties }, src.content);
+    },
+
+    async updateMeta(id, changes = {}, { addParents = '', removeParents = '' } = {}) {
+      const f = get(id);
+      if (changes.name) f.name = changes.name;
+      const remove = new Set(String(removeParents).split(',').filter(Boolean));
+      f.parents = [...f.parents.filter((p) => !remove.has(p)), ...String(addParents).split(',').filter(Boolean)];
+      drive.calls.push(['meta', id]);
+      return meta(f);
     },
 
     async trash(id) {

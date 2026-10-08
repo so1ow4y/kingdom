@@ -113,13 +113,13 @@ async function remoteDb(drive, d) {
 
 const title = (d, id) => d.data.tasks.get(id)?.title;
 
-test('первый пуш создаёт папку LifeTasks с media/, backups/, db.json.gz и manifest.json', async () => {
+test('первый пуш создаёт папку Chronicle (в общей Kingdom) с media/, backups/, db.json.gz и manifest.json', async () => {
   const drive = createFakeDrive();
   const A = device('A', 'Europe/Moscow');
   put(A, 'tasks', newTask({ title: 'Билеты 1–5' }, A.ctx()));
   await push(A, drive);
   const names = [...drive.files.values()].map((f) => f.name).sort();
-  assert.deepEqual(names, ['LifeTasks', 'backups', 'db.json.gz', 'manifest.json', 'media']);
+  assert.deepEqual(names, ['Chronicle', 'Kingdom', 'backups', 'db.json.gz', 'manifest.json', 'media']);
   assert.equal(A.dirty.size, 0, 'после создания всё запушено');
   const db = await remoteDb(drive, A);
   assert.equal(db.data.tasks.length, 1);

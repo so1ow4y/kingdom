@@ -6,6 +6,9 @@ import { html } from './html.js';
 
 const ROUTES = {
   today: 0, inbox: 0, lists: 0, list: 1, task: 1, archive: 0, trash: 0, settings: 0, more: 0, quick: 0, journal: 0, analytics: 0, shop: 0, village: 0,
+  tasks: 0,
+  diary: 0, foods: 0, food: 1, nutrition: 0, body: 0, // Crimson Harvest (0.11)
+  meals: 0, meal: 1, // рационы — как списки у задач (0.12)
 };
 
 export function parseHash(hash = location.hash) {
@@ -53,9 +56,22 @@ export function currentTaskId() {
   return m ? decodeURIComponent(m[1]) : null;
 }
 
-/** Закрыть карточку: шаг назад по истории (или на базовый экран, если пришли по прямой ссылке). */
+/** Открытая карточка продукта Feast (0.11) — тоже маршрут поверх базового экрана, справа на широком. */
+export function currentFoodId() {
+  const m = location.hash.match(/^#\/food\/([^?]+)/);
+  return m ? decodeURIComponent(m[1]) : null;
+}
+
+/** Закрыть карточку (задачи или продукта): шаг назад по истории или на базовый экран. */
 export function closeTask() {
-  if (currentTaskId()) goBack(basePath);
+  if (currentTaskId() || currentFoodId()) goBack(basePath);
+}
+
+/** Открыть карточку продукта; та же — закрыть; другая — заменить без новой записи в истории. */
+export function openFood(id) {
+  const cur = currentFoodId();
+  if (cur === id) closeTask();
+  else navigate('/food/' + encodeURIComponent(id), { replace: !!cur });
 }
 
 /**

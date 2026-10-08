@@ -26,6 +26,7 @@ import * as V from '../core/village.js';
 import * as SK from '../core/skills.js';
 import * as RP from '../core/repeat.js';
 import { getFocus, setFocus, claimFocus, focusElapsed } from './focus.js';
+import { bulkSummary } from '../core/explore.js';
 import { buildMap, suggestPlace } from '../village/map.js';
 import { emitVillage } from '../village/bus.js';
 
@@ -166,7 +167,7 @@ export async function removeDevices(ids) {
     .filter(d => d && !d.deletedAt && d.id !== deviceId);
   if (!devices.length) return false;
   if (!await confirm({ title: devices.length === 1 ? `Удалить устройство «${devices[0].name}»?` : 'Очистить все сессии, кроме текущей?',
-    text: 'После отправки на Диск эти устройства выйдут из LifeTasks при следующей синхронизации. Локальные задачи сохранятся. Старые версии приложения могут не поддерживать выход. Доступ Google не отзывается.',
+    text: 'После отправки на Диск эти устройства выйдут из Kingdom при следующей синхронизации. Локальные задачи сохранятся. Старые версии приложения могут не поддерживать выход. Доступ Google не отзывается.',
     confirmLabel: 'Удалить и отправить', danger: true })) return false;
   if (!tokenValid()) { showSnackbar('Сессия истекла — войди заново'); return false; }
   return commit(devices.map(d => change('devices', d.id, x => M.tombstone(x, ctx()))));
@@ -455,6 +456,80 @@ export async function emptyTrash() {
   const c0 = ctx();
   await commit(withDescendantsForPurge(list).map((t) => ({ coll: 'tasks', prev: t, next: M.tombstone(t, c0) })));
   showSnackbar('Корзина очищена');
+}
+
+const BULK_VERB = {
+  complete: 'Выполнено', reopen: 'Возвращено в работу', trash: 'В корзине', restore: 'Восстановлено',
+  purge: 'Удалено навсегда', move: 'Перенесено', priority: 'Приоритет изменён',
+};
+
+/**
+ * Массовое действие над задачами (обновление 0.10; как массовые операции license-store, common/bulk/bulk.ts):
+ * всё одной записью в базу, отказ по одной задаче не отменяет остальные. action: complete | reopen | trash |
+ * restore | purge | move (arg — id списка или null = «Входящие») | priority (arg — id приоритета).
+ * Итог — { total, succeeded, failed: [{ id, code }] } (коды — core/explore.js BULK_REASONS) и снэкбар
+ * «сколько прошло, сколько нет и почему» с «Отменить» (кроме удаления навсегда). null — запись не удалась.
+ */
+export async function bulkTasks(action, ids, arg = null) {
+  const c0 = ctx();
+  const at = new Date(c0.now).toISOString();
+  const result = { total: ids.length, succeeded: 0, failed: [] };
+  const changes = [];
+  const touched = new Set();
+  const fail = (id, code) => result.failed.push({ id, code });
+  const once = (x) => !touched.has(x.id) && touched.add(x.id);
+  for (const id of ids) {
+    const t = getTask(id);
+    if (!t || t.deletedAt) {
+      fail(id, 'NOT_FOUND');
+      continue;
+    }
+    if (action === 'complete') {
+      if (t.trashedAt) { fail(id, 'IN_TRASH'); continue; }
+      if (t.status === 'done') { fail(id, 'ALREADY_DONE'); continue; }
+      if (t.repeat) { fail(id, 'REPEATING'); continue; }
+      changes.push(change('tasks', id, (x) => M.completeTask(x, c0)), ...coinChanges(t, true, c0));
+    } else if (action === 'reopen') {
+      if (t.trashedAt) { fail(id, 'IN_TRASH'); continue; }
+      if (t.status !== 'done') { fail(id, 'NOT_DONE'); continue; }
+      changes.push(change('tasks', id, (x) => M.reopenTask(x, c0)), ...coinChanges(t, false, c0));
+    } else if (action === 'trash') {
+      if (t.trashedAt) { fail(id, 'IN_TRASH'); continue; }
+      for (const x of [t, ...S.descendants(store.data, id)]) if (!x.trashedAt && once(x)) changes.push(change('tasks', x.id, (y) => M.trashTask(y, c0, at)));
+    } else if (action === 'restore') {
+      if (!t.trashedAt) { fail(id, 'NOT_IN_TRASH'); continue; }
+      const kids = S.descendants(store.data, id, { includeTrash: true }).filter((d) => d.trashedAt && d.trashedAt === t.trashedAt);
+      for (const x of [t, ...kids]) if (once(x)) changes.push(change('tasks', x.id, (y) => M.restoreTask(y, c0)));
+    } else if (action === 'purge') {
+      if (!t.trashedAt) { fail(id, 'NOT_IN_TRASH'); continue; }
+      for (const x of withDescendantsForPurge([t])) if (once(x)) changes.push({ coll: 'tasks', prev: x, next: M.tombstone(x, c0) });
+    } else if (action === 'move') {
+      if (t.trashedAt) { fail(id, 'IN_TRASH'); continue; }
+      const c = change('tasks', id, (x) => {
+        let y = x;
+        for (const l of M.taskListIds(x)) if (l !== arg) y = M.setListMembership(y, l, false, c0);
+        return arg ? M.setListMembership(y, arg, true, c0) : y;
+      });
+      if (c.next === c.prev) { fail(id, 'UNCHANGED'); continue; }
+      changes.push(c);
+    } else if (action === 'priority') {
+      if (t.priorityId === arg) { fail(id, 'UNCHANGED'); continue; }
+      const c = change('tasks', id, (x) => M.touch(x, { priorityId: arg }, c0));
+      changes.push(c);
+      // у выполненной задачи с начислением монеты пересчитываются по новому приоритету (как setPriority)
+      const ev = store.data.coinEvents.get(G.awardId(id));
+      if (c.next.status === 'done' && ev && !ev.deletedAt && ev.active) changes.push(...coinChanges(c.next, true, c0));
+    } else {
+      fail(id, 'UNKNOWN');
+      continue;
+    }
+    result.succeeded++;
+  }
+  if (changes.length && !(await commit(changes))) return null;
+  const text = bulkSummary(result, BULK_VERB[action] || 'Готово');
+  if (action === 'purge' || !result.succeeded) showSnackbar(text);
+  else offerUndo(text, changes);
+  return result;
 }
 
 /** Автоочистка корзины при запуске (TZ §6.9). */

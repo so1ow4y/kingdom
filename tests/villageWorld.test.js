@@ -328,7 +328,8 @@ test('0.9: в экран стучат только хранители с дел�
     for (const a of w.actors) if (a.task?.type === 'chore') seen.add(a.task.act);
   }
   assert.ok(seen.size >= 4, 'разные дела: ' + [...seen].join(', '));
-  // нажатия на окружение
+  // нажатия на окружение (жителей убираем: стоящий у колодца перехватил бы нажатие)
+  for (const a of w.actors) a.hidden = true;
   const well = w.decor.find((d) => d.type === 'well');
   assert.equal(w.hit(well.x, well.y - 6)?.what, 'well');
   const pond = w.map.pond;

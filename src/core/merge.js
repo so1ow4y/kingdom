@@ -9,9 +9,10 @@ import { canonicalJson, sameValue } from './canonical.js';
 const SERVICE = new Set(['id', 'createdAt', 'updatedAt', 'updatedBy', 'fieldTimes']);
 // Вложенные коллекции: массивы элементов с id, сливаются поэлементно (subtasks — только формат v1,
 // focusSessions — с 0.7.1: две сессии на разных устройствах не затирают друг друга).
-export const NESTED_ARRAYS = ['subtasks', 'notes', 'attachments', 'reminders', 'focusSessions'];
-// Словари «ключ → значение с меткой t», сливаются по ключу: экземпляры повторов и членство в списках (v2).
-export const KEYED_MAPS = ['occurrences', 'lists'];
+export const NESTED_ARRAYS = ['subtasks', 'notes', 'attachments', 'reminders', 'focusSessions', 'items']; // items — продукты записи дневника (0.12)
+// Словари «ключ → значение с меткой t», сливаются по ключу: экземпляры повторов и членство в списках (v2),
+// штрихкоды продукта Feast (0.11).
+export const KEYED_MAPS = ['occurrences', 'lists', 'barcodes'];
 const STRUCTURAL = new Set([...SERVICE, ...NESTED_ARRAYS, ...KEYED_MAPS]);
 export const MERGE_COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards', 'doneArchive'];
 

@@ -26,4 +26,8 @@ await run([
   './villageWorld.test.js',
   './skills.test.js',
   './repeat.test.js',
+  './query.test.js',
+  './keys.test.js',
+  './feast.test.js',
+  './meals.test.js',
 ]);

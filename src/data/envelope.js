@@ -36,7 +36,7 @@ export function buildDb(data, { createdAt, deviceId, extraEnvelope = {}, extraCo
 /** Проверить конверт прочитанной базы. Бросает E-DB-CORRUPT. */
 export function checkDb(obj) {
   if (!obj || typeof obj !== 'object' || obj.format !== DB_FORMAT) {
-    throw new SyncError('E-DB-CORRUPT', 'Это не файл базы LifeTasks (неверный format)');
+    throw new SyncError('E-DB-CORRUPT', 'Это не файл базы задач Chronicle (неверный format)');
   }
   if (!Number.isInteger(obj.schemaVersion) || obj.schemaVersion < 1) {
     throw new SyncError('E-DB-CORRUPT', 'В базе нет корректного schemaVersion');

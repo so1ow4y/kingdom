@@ -15,8 +15,8 @@ import { DEFAULT_PRIORITIES, PRIORITY_NONE_ID } from './priorities.js';
 export const SERVICE_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'updatedBy', 'fieldTimes']);
 // Вложенные массивы и словари с метками на уровне элементов — через touch не меняются.
 // focusSessions — с 0.7.1: фокус-сессии по задаче (необязательное поле, у новых задач его нет до первой сессии).
-export const NESTED_ARRAYS = ['notes', 'attachments', 'reminders', 'focusSessions'];
-export const KEYED_MAPS = ['occurrences', 'lists'];
+export const NESTED_ARRAYS = ['notes', 'attachments', 'reminders', 'focusSessions', 'items']; // items — продукты записи дневника Crimson Harvest (0.12)
+export const KEYED_MAPS = ['occurrences', 'lists', 'barcodes']; // barcodes — штрихкоды продукта Feast (0.11)
 export const NESTED_FIELDS = new Set([...NESTED_ARRAYS, ...KEYED_MAPS, 'subtasks']);
 
 export const TASK_FIELDS = ['title', 'priorityId', 'parentId', 'status', 'completedAt', 'trashedAt',

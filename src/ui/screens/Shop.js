@@ -22,7 +22,7 @@ export function GameHeader({ st }) {
   return html`
     <div class="game-head">
       <div class="gh-balance"><span class="gh-coin">🪙</span><b>${st.balance}</b><small>монет</small>
-        <span class="gh-gem" title="Изумруды — из изумрудной шахты и фокус-сессий">💎 <b>${gemBalance(store.data)}</b></span></div>
+        <span class="gh-gem" title="Изумруды (алмазы) — из изумрудной шахты, фокус-сессий и за еду в Crimson Harvest">💎 <b>${gemBalance(store.data)}</b></span></div>
       <div class="gh-level">
         <div class="gh-row"><b>Уровень ${lv.level}</b><small>${lv.xp} / ${lv.to} опыта</small></div>
         <div class="progress"><i style=${{ width: Math.round(lv.progress * 100) + '%' }}></i></div>

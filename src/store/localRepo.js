@@ -2,22 +2,27 @@
 // Версия IDB-схемы (IDB_VERSION) — это не schemaVersion формата данных: она меняется только при добавлении сторов.
 
 import { openDb, req, txDone, deleteDb } from './idb.js';
-import { DB_NAME } from '../config.js';
+import { DB_NAME, FEAST_DB_NAME } from '../config.js';
+import { FEAST_COLLECTIONS } from '../core/feast.js';
 
 const IDB_VERSION = 3;
 const V1_STORES = ['settings', 'lists', 'tasks', 'media', 'devices'];
 const V2_STORES = ['priorities', 'coinEvents', 'rewards']; // формат данных v2 (обновление 0.3)
 const V3_STORES = ['doneArchive']; // формат данных v3 (обновление 0.5)
 export const ENTITY_STORES = [...V1_STORES, ...V2_STORES, ...V3_STORES];
+// Счётчик калорий (0.11) — отдельная база IndexedDB с тем же устройством сторов (без медиа);
+// версия 2 (0.12) — сторы рационов и заметок к ним
+const FEAST_IDB_VERSION = 2;
+export const FEAST_STORES = FEAST_COLLECTIONS;
 
 /** Создаёт все недостающие сторы — независимо от старой версии (переживает и «пустую» базу без сторов). */
-function upgrade(db) {
+const upgradeFor = (stores) => (db) => {
   const make = (name, opts, index = null) => {
     if (db.objectStoreNames.contains(name)) return;
     const s = db.createObjectStore(name, opts);
     if (index) s.createIndex(index, index);
   };
-  for (const s of ENTITY_STORES) make(s, { keyPath: 'id' });
+  for (const s of stores) make(s, { keyPath: 'id' });
   make('dirty', { keyPath: 'key' });
   make('base', { keyPath: 'key' });
   make('meta', { keyPath: 'key' });
@@ -25,33 +30,49 @@ function upgrade(db) {
   make('conflicts', { keyPath: 'id', autoIncrement: true }, 'at');
   make('errors', { keyPath: 'id', autoIncrement: true });
   make('blobs', { keyPath: 'id' }, 'lastAccess');
-}
+};
 
 let current = null;
+let feastCurrent = null;
 
-/** Открытый репозиторий (после bootstrap). */
+/** Открытый репозиторий задач (после bootstrap). */
 export function getRepo() {
   return current;
 }
 
+/** Открытый репозиторий Feast (0.11). */
+export function getFeastRepo() {
+  return feastCurrent;
+}
+
 export async function openRepo() {
-  const db = await openDb(DB_NAME, IDB_VERSION, upgrade);
+  current = await createRepo(DB_NAME, IDB_VERSION, ENTITY_STORES);
+  return current;
+}
+
+export async function openFeastRepo() {
+  feastCurrent = await createRepo(FEAST_DB_NAME, FEAST_IDB_VERSION, FEAST_STORES);
+  return feastCurrent;
+}
+
+async function createRepo(name, version, stores) {
+  const db = await openDb(name, version, upgradeFor(stores));
   // Другая вкладка удаляет базу («Очистить локальный кэш») — закрываемся и перезагружаемся.
   db.onversionchange = () => {
     db.close();
     location.reload();
   };
 
-  current = {
+  return {
     async loadAll() {
-      const tx = db.transaction([...ENTITY_STORES, 'meta'], 'readonly');
+      const tx = db.transaction([...stores, 'meta'], 'readonly');
       // Все запросы ставятся сразу, в одной транзакции, — получаем согласованный снимок.
       const [metaRows, ...lists] = await Promise.all([
         req(tx.objectStore('meta').getAll()),
-        ...ENTITY_STORES.map((s) => req(tx.objectStore(s).getAll())),
+        ...stores.map((s) => req(tx.objectStore(s).getAll())),
       ]);
       const out = {};
-      ENTITY_STORES.forEach((s, i) => { out[s] = lists[i]; });
+      stores.forEach((s, i) => { out[s] = lists[i]; });
       out.meta = {};
       for (const { key, value } of metaRows) out.meta[key] = value;
       return out;
@@ -140,7 +161,7 @@ export async function openRepo() {
      * поэтому правки пользователя, сделанные после вызова, гарантированно запишутся позже.
      */
     applySync({ puts = [], deletes = [], dirtyAdd = [], dirtyRemove = [], base = null, conflicts = [], meta = {} }) {
-      const tx = db.transaction([...ENTITY_STORES, 'dirty', 'base', 'conflicts', 'meta'], 'readwrite');
+      const tx = db.transaction([...stores, 'dirty', 'base', 'conflicts', 'meta'], 'readwrite');
       const done = txDone(tx);
       for (const [s, value] of puts) tx.objectStore(s).put(value);
       for (const [s, key] of deletes) tx.objectStore(s).delete(key);
@@ -159,9 +180,9 @@ export async function openRepo() {
 
     /** Полная замена данных (миграция локальной базы). snapshot — копия до миграции. */
     async replaceAll(data, { meta = {}, snapshot = null } = {}) {
-      const tx = db.transaction([...ENTITY_STORES, 'meta', 'snapshots'], 'readwrite');
+      const tx = db.transaction([...stores, 'meta', 'snapshots'], 'readwrite');
       const done = txDone(tx);
-      for (const s of ENTITY_STORES) {
+      for (const s of stores) {
         const st = tx.objectStore(s);
         st.clear();
         for (const e of data[s] || []) st.put(e);
@@ -232,9 +253,9 @@ export async function openRepo() {
       db.close();
     },
   };
-  return current;
 }
 
 export async function deleteLocalDatabase() {
   await deleteDb(DB_NAME);
+  await deleteDb(FEAST_DB_NAME);
 }
