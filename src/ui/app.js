@@ -70,10 +70,10 @@ function titleFor(route) {
     case 'shop': return tr('Магазин');
     case 'village': return tr('Деревня');
     case 'diary': return tr('Дневник · ') + humanDate(planningDate(route.query.date, store.now.today), store.now.today).toLowerCase();
-    case 'foods': return tr('Продукты и лекарства');
-    case 'nutrition': return route.param === 'meds' ? tr('Аналитика · лекарства') : route.param === 'body' ? tr('Аналитика · тело') : tr('Аналитика · питание');
+    case 'foods': return route.param === 'meds' ? tr('Лекарства') : route.param === 'measures' ? tr('Замеры') : tr('Продукты');
+    case 'nutrition': return route.param === 'meds' ? tr('Аналитика · лекарства') : route.param === 'measures' ? tr('Аналитика · замеры') : route.param === 'body' ? tr('Аналитика · тело') : tr('Аналитика · питание');
     case 'body': return tr('Обо мне');
-    case 'food': return F.isMed(store.feast.foods.get(route.param)) ? tr('Лекарство') : tr('Продукт');
+    case 'food': return F.isMed(store.feast.foods.get(route.param)) ? tr('Лекарство') : F.isMeasure(store.feast.foods.get(route.param)) ? tr('Замер') : tr('Продукт');
     case 'meals': return tr('Рационы');
     case 'meal': {
       const m = store.feast.meals.get(route.param);
@@ -99,7 +99,7 @@ function Screen({ route }) {
     case 'shop': return html`<${ShopScreen}/>`;
     case 'village': return html`<${VillageScreen}/>`;
     case 'diary': return html`<${DiaryScreen} query=${route.query}/>`;
-    case 'foods': return html`<${FoodsScreen} query=${route.query}/>`;
+    case 'foods': return html`<${FoodsScreen} query=${route.query} tab=${route.param}/>`;
     case 'food': return html`<${FoodCard} key=${route.param} id=${route.param} onClose=${closeTask}/>`;
     case 'nutrition': return html`<${NutritionScreen} tab=${route.param}/>`;
     case 'body': return html`<${BodyScreen}/>`;

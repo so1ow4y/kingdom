@@ -138,9 +138,10 @@ export function rdiPct(v, key, goals = null) {
 
 /** Значения продукта в записи: на 100 г/мл × количество, у «порции» (быстрая запись) — × число порций. */
 export function itemNutrients(it) {
-  if (!it || it.deletedAt) return {};
+  if (!it || it.deletedAt || it.kind === 'measure') return {};
   const amount = Number.isFinite(it.amount) ? it.amount : 0;
-  return scaleNutrients(it.nutrients || {}, it.unit === 'portion' ? amount : amount / 100);
+  // лекарство (0.13): значения — на 1 единицу формы (таблетку, мл сиропа)
+  return scaleNutrients(it.nutrients || {}, it.unit === 'portion' || it.kind === 'med' ? amount : amount / 100);
 }
 
 /**
@@ -170,6 +171,7 @@ export const MED_UNIT = Object.fromEntries(MED_UNITS.map((u) => [u.key, u]));
 
 /** Подпись количества: «150 г», «200 мл», «2 порции», у лекарств — «4 ед.», «1 табл.». */
 export function amountLabel(e) {
+  if (e?.kind === 'measure') return `${(Array.isArray(e.values) ? e.values : [e.amount]).map((v) => (v == null ? '—' : fmt(v, 'x'))).join('/')}${e.unit ? ' ' + tr(e.unit) : ''}`;
   const a = Number.isFinite(e?.amount) ? e.amount : 0;
   if (e?.unit === 'portion') return a === 1 ? tr('1 порция') : tr('{p0} порц.', { p0: fmt(a, 'x') });
   if (MED_UNIT[e?.unit]) return `${fmt(a, 'x')} ${MED_UNIT[e.unit].short}`;

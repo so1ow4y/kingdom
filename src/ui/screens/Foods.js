@@ -3,11 +3,13 @@
 // открывается справа (на широком экране) или на весь экран: КБЖУ, витамины и минералы (по умолчанию нули),
 // несколько штрихкодов (сканер или вручную), дата создания. 0.12.5: каталог общий — продукты и лекарства (фильтр
 // «Всё / Продукты / Лекарства», поле «тип:»); у лекарства — форма, обычная доза, без КБЖУ и наград; к продукту можно
-// привязать лекарства, которые предлагаются при записи.
+// привязать лекарства, которые предлагаются при записи. 0.13: три раздела — «Продукты» (#/foods), «Лекарства»
+// (#/foods/meds), «Замеры» (#/foods/measures); у лекарства — скрытое описание и КБЖУ с витаминами на 1 единицу формы,
+// у продукта и лекарства — замеры, которые предлагаются при записи; карточка замера — единица, части, норма.
 
 import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
-import { openFood, currentFoodId, Link } from '../router.js';
+import { openFood, currentFoodId, Link, navigate } from '../router.js';
 import { store, openSheet, confirm } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
 import * as F from '../../core/feast.js';
@@ -15,7 +17,8 @@ import { FOOD_FIELDS, FOOD_PLACEHOLDER, makeFoodContext, searchFoods, foodFacets
 import { withTerm } from '../../core/query.js';
 import { nv, fmt, num, MACROS, NUTRIENT, MED_UNITS, MED_UNIT, amountLabel } from '../../core/nutrition.js';
 import { encodeEan, normalizeBarcode, barcodeWarning } from '../../core/barcode.js';
-import { formatMoment, localDateOf, longDate } from '../../core/dates.js';
+import { formatMoment, localDateOf, longDate, humanDate } from '../../core/dates.js';
+import * as MS from '../../core/measures.js';
 import { countLabel } from '../../core/plural.js';
 import { useSelection } from '../components/Explorer.js';
 import { NutrientEditor, NutrientTable, macroLine, RewardEditor } from '../components/FeastParts.js';
@@ -60,20 +63,80 @@ function Facets({ list, onFilter }) {
 }
 
 const SORTS = [['created', tr('Сначала новые')], ['name', tr('По названию')], ['kcal', tr('Калорийнее')], ['protein', tr('Больше белка')], ['uses', tr('Чаще ем')]];
-const KINDS = [['all', tr('Всё')], ['food', tr('Продукты')], ['med', tr('💊 Лекарства')]];
-const kindOk = (kind, f) => kind === 'all' || (kind === 'med') === F.isMed(f);
+export const CATALOG_TABS = [['food', tr('Продукты'), '/foods'], ['med', tr('Лекарства'), '/foods/meds'], ['measure', tr('Замеры'), '/foods/measures']];
+const kindOk = (kind, f) => (kind === 'med' ? F.isMed(f) : kind === 'measure' ? F.isMeasure(f) : !F.isMed(f) && !F.isMeasure(f));
 const catalogLabel = (n) => countLabel(n, ['запись', 'записи', 'записей']);
 
-/** Новый продукт или лекарство — сразу открыть карточку. */
-export async function createCatalogItem(kind = 'food') {
-  const f = await FA.createFood(kind === 'med' ? { name: tr('Новое лекарство'), kind: 'med', unit: 'tab', dose: 1 } : { name: tr('Новый продукт') });
+/** Новый продукт, лекарство или замер (preset — известный замер) — сразу открыть карточку. */
+export async function createCatalogItem(kind = 'food', preset = null) {
+  const f = await FA.createFood(kind === 'med' ? { name: tr('Новое лекарство'), kind: 'med', unit: 'tab', dose: 1 }
+    : kind === 'measure' ? (preset ? { kind: 'measure', name: preset.name, unit: preset.unit, parts: preset.parts || [], ranges: preset.ranges || [], icon: preset.icon, desc: preset.hint || '' }
+      : { kind: 'measure', name: tr('Новый замер'), unit: '' })
+      : { name: tr('Новый продукт') });
   if (f) openFood(f.id);
 }
 
-export function FoodsScreen({ query = {} }) {
+/** Вкладки раздела сверху — как у «Аналитики»; в доке те же три пункта. */
+function CatalogTabs({ kind }) {
+  return html`<div class="section-tabs" role="tablist" aria-label="Каталог">
+    ${CATALOG_TABS.map(([k, l, to]) => html`<button type="button" role="tab" key=${k} aria-selected=${kind === k}
+      class=${'section-tab' + (kind === k ? ' active' : '')} onClick=${() => navigate(to, { replace: true })}>${l}</button>`)}
+  </div>`;
+}
+
+/** Раздел «Замеры»: свои и известные замеры, сколько показаний и последнее. */
+function MeasuresCatalog() {
+  const today = store.now.today;
+  const list = [...store.feast.foods.values()].filter((f) => !f.deletedAt && F.isMeasure(f)).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const st = useMemo(() => F.measureStats(store.feast, '0000-01-01', today), [store.version, today]);
+  const statOf = (id) => st.types.find((t) => t.key === id);
+  const presets = MS.MEASURE_PRESETS.filter((p) => !list.some((f) => f.name.toLowerCase() === p.name.toLowerCase()));
+  return html`
+    <header class="page-header">
+      <p class="page-desc">Замеры — глюкоза, давление, пульс, температура, анализы — с единицей и нормой. Показания записываются в «Дневнике»
+        (отдельно или вместе с едой и лекарствами), их видно в «Аналитике → Замеры». Можно создать свой замер с любой единицей.</p>
+      <div class="page-actions">
+        <button type="button" class="btn primary" disabled=${readOnly()} onClick=${() => createCatalogItem('measure')}><${Icon} name="plus" size=${16}/> Новый замер</button>
+      </div>
+    </header>
+    ${presets.length ? html`<section class="card-block">
+      <h2 class="block-title">Известные замеры</h2>
+      <div class="chip-row wrap">${presets.map((p) => html`<button type="button" class="chip" key=${p.key} disabled=${readOnly()} title=${p.hint || ''}
+        onClick=${() => createCatalogItem('measure', p)}>${p.icon} ${p.name} <small class="muted">${p.unit}</small></button>`)}</div>
+      <p class="muted small">Нажми — замер появится в списке; единицу, норму и название можно поменять в его карточке.</p>
+    </section>` : null}
+    <div class="ex-table-wrap"><table class="ex-table foods-table measures-table">
+      <thead><tr><th>Замер</th><th>Единица</th><th>Норма</th><th class="num">Показаний</th><th>Последнее</th></tr></thead>
+      <tbody>
+        ${!list.length ? html`<tr><td colSpan="5" class="ex-empty-row">Замеров пока нет — добавь известный или создай свой.</td></tr>` : null}
+        ${list.map((f) => {
+          const s = statOf(f.id);
+          const st2 = s?.last ? MS.readingStatus(s.last.values, f.ranges) : null;
+          return html`<tr key=${f.id} class="ex-row" onClick=${() => openFood(f.id)}>
+            <td class="ex-title-cell"><button type="button" class="ex-title" onClick=${(e) => { e.stopPropagation(); openFood(f.id); }}>${f.icon || '📏'} ${f.name}</button>
+              ${f.parts?.length ? html`<div class="ex-narrow-meta"><span>${f.parts.join(' / ')}</span></div>` : null}</td>
+            <td>${f.unit ? tr(f.unit) : html`<span class="muted">—</span>`}</td>
+            <td>${MS.normText({ ...f, unit: '' }) || html`<span class="muted">—</span>`}</td>
+            <td class="num">${s?.count || 0}</td>
+            <td>${s?.last ? html`${MS.valuesText(s.last.values)}${st2 === 'low' || st2 === 'high' ? html` <span class="tone-danger">⚠</span>` : null}
+              <small class="muted"> · ${humanDate(s.last.date, today)}${s.last.time ? ' ' + s.last.time : ''}</small>` : html`<span class="muted">—</span>`}</td>
+          </tr>`;
+        })}
+      </tbody>
+    </table></div>`;
+}
+
+export function FoodsScreen({ query = {}, tab = null }) {
+  const kind = tab === 'meds' || query.kind === 'med' ? 'med' : tab === 'measures' ? 'measure' : 'food';
+  if (kind === 'measure') {
+    return html`<div class="screen foods"><${CatalogTabs} kind=${kind}/><${MeasuresCatalog}/></div>`;
+  }
+  return html`<${FoodsExplorer} key=${kind} kind=${kind} query=${query}/>`;
+}
+
+function FoodsExplorer({ kind, query = {} }) {
   const [draft, setDraft] = useState(query.q || '');
   const [q, setQ] = useState(query.q || '');
-  const [kind, setKind] = useState(['food', 'med'].includes(query.kind) ? query.kind : 'all');
   const [sort, setSort] = useState('created');
   const [skip, setSkip] = useState(0);
   const [open, setOpen] = useState(() => new Set());
@@ -110,25 +173,22 @@ export function FoodsScreen({ query = {} }) {
   const current = currentFoodId();
   const picked = page.map((f) => f.id);
   const pickedOnPage = picked.filter((id) => selection.has(id)).length;
-  const all = [...store.feast.foods.values()].filter((f) => !f.deletedAt);
-  const medCount = all.filter(F.isMed).length;
+  const count = [...store.feast.foods.values()].filter((f) => !f.deletedAt && kindOk(kind, f)).length;
+  const med = kind === 'med';
 
   return html`
     <div class="screen foods">
+      <${CatalogTabs} kind=${kind}/>
       <header class="page-header">
-        <p class="page-desc">Твоя база: ${countLabel(all.length - medCount, ['продукт', 'продукта', 'продуктов'])} и ${countLabel(medCount, ['лекарство', 'лекарства', 'лекарств'])}.
-          У продуктов значения — на 100 г (или 100 мл), чего не указано — ноль. У лекарства — форма и обычная доза. Можно привязать несколько штрихкодов.</p>
+        <p class="page-desc">${med
+          ? tr('Твои лекарства: {p0}. У лекарства — форма и обычная доза; если нужно — описание, КБЖУ и витамины на 1 единицу (сиропы, витамины) и замеры, которые предлагаются при приёме.', { p0: count })
+          : tr('Твои продукты: {p0}. Значения — на 100 г (или 100 мл), чего не указано — ноль. Можно привязать несколько штрихкодов, лекарства и замеры.', { p0: count })}</p>
         <div class="page-actions">
           <button type="button" class="btn" disabled=${readOnly()} onClick=${() => openSheet('scan', { target: 'open' })}><${Icon} name="barcode" size=${16}/> Сканировать</button>
-          <button type="button" class="btn" disabled=${readOnly()} onClick=${() => createCatalogItem('med')}>💊 Новое лекарство</button>
-          <button type="button" class="btn primary" disabled=${readOnly()} onClick=${() => createCatalogItem('food')}>
-            <${Icon} name="plus" size=${16}/> Новый продукт</button>
+          <button type="button" class="btn primary" disabled=${readOnly()} onClick=${() => createCatalogItem(kind)}>
+            <${Icon} name="plus" size=${16}/> ${med ? tr('Новое лекарство') : tr('Новый продукт')}</button>
         </div>
       </header>
-      <div class="chip-row wrap foods-kinds" role="tablist" aria-label="Что показывать">
-        ${KINDS.map(([k, l]) => html`<button type="button" role="tab" key=${k} aria-selected=${kind === k} class=${'chip' + (kind === k ? ' selected' : '')}
-          onClick=${() => { setKind(k); setSkip(0); }}>${l}</button>`)}
-      </div>
       <div class="explorer">
         <form class="ex-query" onSubmit=${(e) => { e.preventDefault(); apply(draft); }}>
           <div class="ex-query-row">
@@ -166,7 +226,7 @@ export function FoodsScreen({ query = {} }) {
                     checked=${pickedOnPage > 0 && pickedOnPage === picked.length} ref=${(el) => el && (el.indeterminate = pickedOnPage > 0 && pickedOnPage < picked.length)}
                     onChange=${() => selection.togglePage(picked)}/></th>
                   <th class="ex-w-chev"></th>
-                  <th>${kind === 'med' ? tr('Лекарство') : kind === 'food' ? tr('Продукт') : tr('Продукт / лекарство')}</th>
+                  <th>${kind === 'med' ? tr('Лекарство') : tr('Продукт')}</th>
                   <th class="num">${kind === 'med' ? tr('доза') : tr('ккал')}</th>
                   ${MACROS.map((k) => html`<th class="num ex-col-list" key=${k}>${NUTRIENT[k].short}</th>`)}
                   <th class="ex-col-prio">Штрихкоды</th>
@@ -284,6 +344,75 @@ function LinkedMedsEditor({ f, ro }) {
     </div>` : html`<button type="button" class="btn small" disabled=${ro} onClick=${() => createCatalogItem('med')}>💊 Новое лекарство</button>`}`;
 }
 
+/** Замеры, которые предлагаются при записи продукта или лекарства (сколько угодно; значение вводится при записи). */
+function LinkedMeasuresEditor({ f, ro }) {
+  const [pick, setPick] = useState('');
+  const links = (f.measures || []).map((l) => ({ ...l, m: store.feast.foods.get(l.measureId) })).filter((l) => l.m && !l.m.deletedAt);
+  const all = [...store.feast.foods.values()].filter((m) => !m.deletedAt && F.isMeasure(m) && !links.some((l) => l.measureId === m.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const save = (list) => FA.updateFood(f.id, { measures: list.map(({ measureId }) => ({ measureId })) });
+  return html`
+    <h3 class="set-sub">${F.isMed(f) ? tr('Замеры вместе с лекарством') : tr('Замеры вместе с продуктом')}</h3>
+    ${links.length ? html`<ul class="fc-meds">${links.map((l) => html`<li key=${l.measureId}>
+      <button type="button" class="link-btn" onClick=${() => openFood(l.measureId)}>${l.m.icon || '📏'} ${l.m.name}</button>
+      <small class="muted">${l.m.unit ? tr(l.m.unit) : ''}</small>
+      <button type="button" class="icon-btn small" disabled=${ro} aria-label=${tr('Отвязать ') + l.m.name} data-hint="Отвязать"
+        onClick=${() => save(links.filter((x) => x.measureId !== l.measureId))}><${Icon} name="close" size=${16}/></button>
+    </li>`)}</ul>` : html`<p class="muted small">Например, глюкоза к инсулину: при записи появится поле для показания — его можно оставить пустым.</p>`}
+    ${all.length ? html`<div class="bc-add">
+      <select value=${pick} disabled=${ro} aria-label="Замер" onChange=${(e) => setPick(e.target.value)}>
+        <option value="">Выбери замер…</option>
+        ${all.map((m) => html`<option value=${m.id} key=${m.id}>${m.name}</option>`)}
+      </select>
+      <button type="button" class="btn" disabled=${ro || !pick} onClick=${() => { if (pick) save([...links, { measureId: pick }]); setPick(''); }}>Привязать</button>
+    </div>` : html`<button type="button" class="btn small" disabled=${ro} onClick=${() => navigate('/foods/measures')}>📏 Замеры…</button>`}`;
+}
+
+/** Скрытое описание: свёрнуто, пока его не откроют (0.13). */
+function HiddenDesc({ f, ro, set, label = tr('Описание') }) {
+  const [open, setOpen] = useState(false);
+  return html`<div class="fc-desc">
+    <button type="button" class="link-btn" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+      <${Icon} name=${open ? 'chevronDown' : 'chevron'} size=${16}/> ${label}${f.desc ? '' : tr(' (необязательно)')}</button>
+    ${open ? html`<${AreaField} label="" value=${f.desc} placeholder="Подробное описание: состав, показания, побочные эффекты, назначение врача… Видно только здесь." disabled=${ro}
+      onCommit=${(v) => set({ desc: v })}/>` : f.desc ? html`<p class="muted small fc-desc-hint">${tr('Есть описание — нажми, чтобы открыть.')}</p>` : null}
+  </div>`;
+}
+
+/** Карточка замера: значок, единица, одно или несколько значений (как у давления), норма, описание, заметка. */
+function MeasureFields({ f, ro, set }) {
+  const parts = f.parts || [];
+  const count = Math.max(1, parts.length);
+  const ranges = MS.cleanRanges(f.ranges, count);
+  const setCount = (n) => set({ parts: n === 1 ? [] : Array.from({ length: n }, (_, i) => parts[i] || [tr('Верхнее'), tr('Нижнее'), tr('Третье')][i]) });
+  const setRange = (i, k, v) => set({ ranges: ranges.map((r, j) => (j === i ? { ...(r || {}), [k]: v } : r)) });
+  return html`
+    <div class="field-row">
+      <${TextField} label="Значок" value=${f.icon} placeholder="📏" maxLength=${8} disabled=${ro} onCommit=${(v) => set({ icon: v })}/>
+      <label class="field"><span>Единица</span>
+        <input list="measure-units" value=${f.unit || ''} maxlength=${MS.MEASURE_UNIT_MAX} disabled=${ro} placeholder="ммоль/л, мм рт. ст., балл…"
+          onChange=${(e) => set({ unit: e.target.value })}/>
+        <datalist id="measure-units">${MS.UNIT_SUGGESTIONS.map((u) => html`<option value=${u} key=${u}></option>`)}</datalist></label>
+    </div>
+    <div class="field"><span>Значение</span>
+      <div class="chip-row" role="radiogroup" aria-label="Сколько чисел">
+        ${[[1, tr('Одно число')], [2, tr('Два (как давление)')], [3, tr('Три')]].map(([n, l]) => html`<button type="button" role="radio" key=${n} aria-checked=${count === n}
+          class=${'chip' + (count === n ? ' selected' : '')} disabled=${ro} onClick=${() => setCount(n)}>${l}</button>`)}
+      </div>
+    </div>
+    ${Array.from({ length: count }, (_, i) => html`<div class="field-row measure-part" key=${i}>
+      ${count > 1 ? html`<${TextField} label=${tr('Часть {n}', { n: i + 1 })} value=${parts[i]} maxLength=${MS.PART_NAME_MAX} disabled=${ro}
+        onCommit=${(v) => set({ parts: parts.map((p, j) => (j === i ? v : p)) })}/>` : null}
+      <${TextField} label=${count > 1 ? tr('Норма от') : tr('Норма от (необязательно)')} value=${ranges[i]?.min != null ? dec(ranges[i].min) : ''} placeholder="—" maxLength=${10} disabled=${ro}
+        onCommit=${(v) => setRange(i, 'min', v)}/>
+      <${TextField} label="до" value=${ranges[i]?.max != null ? dec(ranges[i].max) : ''} placeholder="—" maxLength=${10} disabled=${ro}
+        onCommit=${(v) => setRange(i, 'max', v)}/>
+    </div>`)}
+    <p class="muted small">Норма — для подсветки: показания вне её отмечаются ⚠ в дневнике и аналитике. Это ориентир, а не диагноз.</p>
+    <${HiddenDesc} f=${f} ro=${ro} set=${set}/>
+    <${AreaField} label="Заметка" value=${f.note} placeholder="Когда мерить, каким прибором, что важно…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>`;
+}
+
 /** Карточка лекарства: название, производитель, форма, обычная доза, заметка, штрихкоды; без КБЖУ и наград. */
 function MedFields({ f, ro, set }) {
   const unit = MED_UNIT[f.unit] || MED_UNITS[0];
@@ -298,7 +427,22 @@ function MedFields({ f, ro, set }) {
       <${TextField} label=${tr('Обычная доза, {short}', { short: unit.short })} value=${dec(f.dose || 1)} maxLength=${8} disabled=${ro} onCommit=${(v) => set({ dose: num(v) || 1 })}/>
     </div>
     <${AreaField} label="Заметка" value=${f.note} placeholder="Как принимать, назначение, что важно помнить…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>
+    <${HiddenDesc} f=${f} ro=${ro} set=${set}/>
+    <${MedNutrients} f=${f} ro=${ro} set=${set}/>
     ${foods.length ? html`<p class="muted small">Предлагается вместе с: ${foods.map((x, i) => html`${i ? ', ' : ''}<button type="button" class="link-btn" key=${x.id} onClick=${() => openFood(x.id)}>${x.name}</button>`)}</p>` : null}`;
+}
+
+/** КБЖУ, витамины и минералы лекарства — на 1 единицу формы (сироп, витамины), свёрнуто, пока не нужно (0.13). */
+function MedNutrients({ f, ro, set }) {
+  const has = Object.keys(f.nutrients || {}).length > 0;
+  const [open, setOpen] = useState(has);
+  const short = MED_UNIT[f.unit]?.short || '';
+  return html`<div class="fc-desc">
+    <button type="button" class="link-btn" aria-expanded=${open} onClick=${() => setOpen(!open)}>
+      <${Icon} name=${open ? 'chevronDown' : 'chevron'} size=${16}/> ${tr('КБЖУ, витамины и минералы')}${has ? '' : tr(' (необязательно)')}</button>
+    ${open ? html`<${NutrientEditor} key=${'m' + f.id} nutrients=${f.nutrients || {}} unit="g" per=${tr('1 {u}', { u: short })} disabled=${ro} onChange=${(n) => set({ nutrients: n })}/>
+      <p class="muted small">${tr('Для сиропов, витаминов и всего, что даёт калории или вещества: значения на 1 {u}. В дневнике они складываются с едой.', { u: short })}</p>` : null}
+  </div>`;
 }
 
 export function FoodCard({ id, panel = false, onClose }) {
@@ -311,6 +455,7 @@ export function FoodCard({ id, panel = false, onClose }) {
   }
   const ro = readOnly();
   const med = F.isMed(f);
+  const measure = F.isMeasure(f);
   const codes = F.foodBarcodes(f);
   const uses = F.foodUsage(store.feast).get(f.id);
   const typed = normalizeBarcode(code);
@@ -326,19 +471,32 @@ export function FoodCard({ id, panel = false, onClose }) {
     e?.preventDefault();
     if (typed && (await FA.attachBarcode(f.id, typed))) setCode('');
   };
-  return html`
-    <div class=${'screen food-card' + (panel ? ' in-panel' : '')}>
+  const head = html`
       <div class="task-header">
         <button class="icon-btn" onClick=${onClose} aria-label="Закрыть"><${Icon} name=${panel ? 'close' : 'back'}/></button>
-        <span class="fc-kind">${med ? tr('💊 Лекарство') : tr('Продукт')}</span>
+        <span class="fc-kind">${med ? tr('💊 Лекарство') : measure ? tr('📏 Замер') : tr('Продукт')}</span>
         <span class="ds-spacer"></span>
         <button class=${'icon-btn' + (f.favorite ? ' fav' : '')} disabled=${ro} onClick=${() => FA.toggleFavorite(f.id)}
           aria-pressed=${!!f.favorite} title=${f.favorite ? tr('Убрать из избранного') : tr('В избранное')} aria-label="Избранное"><${Icon} name="star" filled=${!!f.favorite}/></button>
         <button class="icon-btn" disabled=${ro} onClick=${() => FA.duplicateFood(f.id).then((c) => c && openFood(c.id))} title="Копия" aria-label="Копия"><${Icon} name="copy2"/></button>
         <button class="icon-btn danger" disabled=${ro} onClick=${remove} title="Удалить" aria-label="Удалить"><${Icon} name="trash"/></button>
       </div>
-      <${TextField} label="Название" value=${f.name} disabled=${ro} onCommit=${(v) => set({ name: v })}/>
-      ${med ? html`<${MedFields} f=${f} ro=${ro} set=${set}/>` : html`
+      <${TextField} label="Название" value=${f.name} disabled=${ro} onCommit=${(v) => set({ name: v })}/>`;
+  if (measure) {
+    return html`<div class=${'screen food-card' + (panel ? ' in-panel' : '')}>
+      ${head}
+      <${MeasureFields} f=${f} ro=${ro} set=${set}/>
+      <div class="form-actions">
+        <button type="button" class="btn primary" disabled=${ro} onClick=${() => openAddFood({ foodId: f.id })}><${Icon} name="plus" size=${16}/> Записать замер</button>
+        <button type="button" class="btn" onClick=${() => navigate('/nutrition/measures')}>Аналитика замеров</button>
+      </div>
+      <p class="muted small fc-meta">Создан ${longDate(localDateOf(f.createdAt, tz))} ${localDateOf(f.createdAt, tz).slice(0, 4)} · ${tr('показаний: {n}', { n: uses?.count || 0 })}</p>
+    </div>`;
+  }
+  return html`
+    <div class=${'screen food-card' + (panel ? ' in-panel' : '')}>
+      ${head}
+      ${med ? html`<${MedFields} f=${f} ro=${ro} set=${set}/><${LinkedMeasuresEditor} f=${f} ro=${ro}/>` : html`
       <div class="field-row">
         <${TextField} label="Бренд" value=${f.brand} placeholder="необязательно" disabled=${ro} onCommit=${(v) => set({ brand: v })}/>
         <label class="field"><span>Единица</span>
@@ -352,7 +510,8 @@ export function FoodCard({ id, panel = false, onClose }) {
 
       <h3 class="set-sub">Пищевая ценность</h3>
       <${NutrientEditor} key=${f.id} nutrients=${f.nutrients} unit=${f.unit} disabled=${ro} onChange=${(n) => set({ nutrients: n })}/>
-      <${LinkedMedsEditor} f=${f} ro=${ro}/>`}
+      <${LinkedMedsEditor} f=${f} ro=${ro}/>
+      <${LinkedMeasuresEditor} f=${f} ro=${ro}/>`}
 
       <h3 class="set-sub">Штрихкоды</h3>
       ${codes.length ? html`<ul class="bc-list">${codes.map((c) => html`<li key=${c}>

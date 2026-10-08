@@ -80,13 +80,22 @@ function feastMenu() {
               .map((m) => ({ title: F.mealName(m), emoji: m.icon, to: '/meal/' + m.id, match: ['meal', m.id] })),
           ],
         },
-        { title: tr('Продукты и лекарства'), icon: 'food', to: '/foods', match: ['foods'], key: 'goFoods' },
+        // 0.13: продукты, лекарства и замеры — ветка, как «Аналитика»
+        {
+          id: 'catalog', title: tr('Продукты и лекарства'), icon: 'food',
+          items: [
+            { title: tr('Продукты'), icon: 'food', to: '/foods', match: ['foods', null], key: 'goFoods' },
+            { title: tr('Лекарства'), icon: 'pill', to: '/foods/meds', match: ['foods', 'meds'] },
+            { title: tr('Замеры'), icon: 'gauge', to: '/foods/measures', match: ['foods', 'measures'] },
+          ],
+        },
         // аналитика (0.12.5) — ветка, как «Рационы»: питание, лекарства, тело
         {
           id: 'nutrition', title: tr('Аналитика'), icon: 'chart',
           items: [
             { title: tr('Питание'), icon: 'chart', to: '/nutrition', match: ['nutrition', null], key: 'goNutrition' },
             { title: tr('Лекарства'), icon: 'pill', to: '/nutrition/meds', match: ['nutrition', 'meds'] },
+            { title: tr('Замеры'), icon: 'gauge', to: '/nutrition/measures', match: ['nutrition', 'measures'] },
             { title: tr('Тело'), icon: 'body', to: '/nutrition/body', match: ['nutrition', 'body'] },
           ],
         },

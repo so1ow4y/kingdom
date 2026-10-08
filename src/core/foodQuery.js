@@ -2,7 +2,7 @@
 // топ значений, массовые действия. Чистые функции.
 
 import { parseQuery, evaluate, textMatch, textContains } from './query.js';
-import { foodBarcodes, foodUsage, isMed } from './feast.js';
+import { foodBarcodes, foodUsage, isMed, isMeasure } from './feast.js';
 import { nv, NUTRIENTS, NUTRIENT } from './nutrition.js';
 import { localDateOf } from './dates.js';
 import { LANG, tr } from './i18n.js';
@@ -26,8 +26,9 @@ export const FOOD_FIELDS = {
 const KIND_WORDS = {
   med: ['лекарство', 'лекарства', 'лекарств', 'med', 'meds', 'medicine', 'таблетки', 'препарат'],
   food: ['продукт', 'продукты', 'еда', 'food', 'product', 'products'],
+  measure: ['замер', 'замеры', 'measure', 'measures', 'measurement'],
 };
-export const kindWord = (f) => (isMed(f) ? tr('лекарство') : tr('продукт'));
+export const kindWord = (f) => (isMed(f) ? tr('лекарство') : isMeasure(f) ? tr('замер') : tr('продукт'));
 /** Поле запроса для показа: по-английски — английский синоним (запрос понимает оба). */
 export const foodFieldLabel = (f) => (LANG === 'en' ? (FOOD_FIELDS[f] || []).find((x) => /^[a-z]+$/.test(x)) || f : f);
 
@@ -84,13 +85,14 @@ export function matchFood(ctx, f, { field, value }) {
     case 'тип': {
       const v = value.toLowerCase();
       if (KIND_WORDS.med.includes(v)) return isMed(f);
-      if (KIND_WORDS.food.includes(v)) return !isMed(f);
+      if (KIND_WORDS.measure.includes(v)) return isMeasure(f);
+      if (KIND_WORDS.food.includes(v)) return !isMed(f) && !isMeasure(f);
       return false;
     }
     case 'доза': return isMed(f) && numMatch(f.dose || 1, value);
     case 'бренд': return textMatch(f.brand || '', value) || textContains(f.brand || '', value);
     case 'штрихкод': return foodBarcodes(f).some((c) => (value.includes('*') ? textMatch(c, value) : c.startsWith(value)));
-    case 'ккал': return !isMed(f) && numMatch(nv(f.nutrients, 'kcal'), value);
+    case 'ккал': return !isMed(f) && !isMeasure(f) && numMatch(nv(f.nutrients, 'kcal'), value);
     case 'белки': return numMatch(nv(f.nutrients, 'protein'), value);
     case 'жиры': return numMatch(nv(f.nutrients, 'fat'), value);
     case 'углеводы': return numMatch(nv(f.nutrients, 'carbs'), value);
@@ -153,7 +155,7 @@ export function foodFacets(ctx, rows, limit = 8) {
   return [
     { field: 'тип', values: count(kindWord) },
     { field: 'бренд', values: count((f) => f.brand || tr('без бренда')) },
-    { field: 'ккал', label: tr('калорийность'), values: count((f) => (isMed(f) ? [] : bandOf(nv(f.nutrients, 'kcal')))) },
+    { field: 'ккал', label: tr('калорийность'), values: count((f) => (isMed(f) || isMeasure(f) ? [] : bandOf(nv(f.nutrients, 'kcal')))) },
     { field: 'есть', label: tr('штрихкод'), values: count((f) => (foodBarcodes(f).length ? tr('штрихкод') : tr('без штрихкода'))) },
     { field: 'создан', values: count((f) => localDateOf(f.createdAt, ctx.tz).slice(0, 7)) },
   ];

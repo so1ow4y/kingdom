@@ -1,12 +1,13 @@
 // Crimson Harvest (0.11, «Feast»): «Обо мне» — параметры (пол, дата рождения, рост, активность, цель, желаемый вес),
-// замеры (вес, обхваты, процент жира), состав тела с пиксельной фигурой «сейчас» и «при цели», расход калорий
+// замеры (вес, обхваты, процент жира), состав тела с фигурой «сейчас» и «при цели» (0.13 — схема с мышцами и жиром,
+// шкалы процента жира и ИМТ, свой процент жира), расход калорий
 // и рекомендуемый лимит, график веса. 0.12.2: параметры и расчёт — общие с «Настройки → Цели и лимиты»
 // (components/FeastProfile.js), здесь же — лимит калорий и БЖУ с кнопкой «Рассчитать».
 
 import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { LineChart } from '../components/FeastCharts.js';
-import { BodyFigure } from '../components/BodyFigure.js';
+import { BodyFigure, FigureLegend } from '../components/BodyFigure.js';
 import { NumField } from '../components/FeastParts.js';
 import { bodyState, ProfileCard, EnergyCard } from '../components/FeastProfile.js';
 import { FeastGoalsSection } from '../components/FeastSettings.js';
@@ -43,25 +44,58 @@ function figureColor() {
   return (SCHEMES[p.scheme] || SCHEMES.crimson).light;
 }
 
-/** Шкала процента жира: ступени для пола и отметка. */
-export function BodyFatScale({ sex, pct }) {
-  const list = B.BF_CLASSES[sex] || B.BF_CLASSES.male;
+/**
+ * Цветная шкала со ступенями (0.13: и для процента жира, и для ИМТ): границы — числами над полосой, подписи — под
+ * полосой в два ряда (соседние не наезжают), текущая ступень выделена, отметка — где ты сейчас.
+ */
+export function RangeScale({ title, list, value, unit = '', fmtV = (v) => String(v) }) {
   const lo = list[0].from;
   const hi = list.at(-1).to;
   const pos = (v) => ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * 100;
-  const cur = B.bfClass(sex, pct);
-  return html`<div class="bf-scale">
+  const cur = Number.isFinite(value) ? list.find((c) => value < c.to) || list.at(-1) : null;
+  return html`<div class="bf-scale" role="img" aria-label=${`${title}: ${Number.isFinite(value) ? fmtV(value) + (unit ? ' ' + unit : '') : '—'}${cur ? ' — ' + cur.label : ''}`}>
+    ${title ? html`<p class="bf-title">${title}${cur ? html` · <b>${cur.label}</b>` : null}</p>` : null}
+    <div class="bf-bounds">${list.slice(1).map((c) => html`<span key=${c.key} style=${{ left: pos(c.from) + '%' }}>${fmtV(c.from)}</span>`)}</div>
     <div class="bf-track">
       ${list.map((c) => html`<span key=${c.key} class=${'bf-seg bf-' + c.key + (cur?.key === c.key ? ' on' : '')} style=${{ left: pos(c.from) + '%', width: pos(c.to) - pos(c.from) + '%' }}
-        title=${`${c.label}: ${c.from}–${c.to} %`}></span>`)}
-      ${Number.isFinite(pct) ? html`<i class="bf-mark" style=${{ left: pos(pct) + '%' }} aria-hidden="true"></i>` : null}
+        title=${`${c.label}: ${fmtV(c.from)}–${fmtV(c.to)}${unit ? ' ' + unit : ''}`}></span>`)}
+      ${Number.isFinite(value) ? html`<i class="bf-mark" style=${{ left: pos(value) + '%' }} aria-hidden="true"></i>` : null}
     </div>
-    <div class="bf-labels">${list.map((c) => html`<span key=${c.key} class=${cur?.key === c.key ? 'on' : ''} style=${{ left: pos((c.from + c.to) / 2) + '%' }}>${c.label}</span>`)}</div>
+    <div class="bf-labels">${list.map((c, i) => html`<span key=${c.key} class=${(cur?.key === c.key ? 'on ' : '') + (i % 2 ? 'lane2' : '')}
+      style=${{ left: pos((c.from + c.to) / 2) + '%' }}>${c.label}</span>`)}</div>
+  </div>`;
+}
+
+/** Шкала процента жира: ступени для пола и отметка. */
+export function BodyFatScale({ sex, pct }) {
+  const list = B.BF_CLASSES[sex] || B.BF_CLASSES.male;
+  return html`<${RangeScale} title=${tr('Процент жира')} list=${list} value=${pct} unit="%" fmtV=${(v) => f1(v)}/>`;
+}
+
+/** Шкала ИМТ (0.13): недостаток, норма, избыточный вес, ожирение — с границами 18,5 / 25 / 30. */
+export function BmiScale({ bmi }) {
+  const keys = ['bmi-low', 'bmi-ok', 'bmi-over', 'bmi-high'];
+  let from = 15;
+  const list = B.BMI_CLASSES.map((c, i) => {
+    const seg = { key: keys[i], label: c.label, from, to: Number.isFinite(c.max) ? c.max : 40 };
+    from = seg.to;
+    return seg;
+  });
+  return html`<${RangeScale} title=${tr('ИМТ')} list=${list} value=${bmi} fmtV=${(v) => f1(v)}/>`;
+}
+
+/** «Знаю свой процент жира» (0.13): замер на сегодня — с ним фигура и расчёты точнее. */
+function ManualFat({ st, ro }) {
+  const today = store.now.today;
+  const cur = F.bodyLogOn(store.feast, today);
+  return html`<div class="manual-fat">
+    <${NumField} label=${tr('Знаю свой процент жира')} unit="%" value=${cur?.bodyFatPct} disabled=${ro} onCommit=${(v) => FA.saveBodyLog(today, { bodyFatPct: v })}/>
+    <p class="muted small">${tr('Если известен по весам с анализатором, калиперу или DEXA — впиши, и фигура нарисуется по нему (сухой — рельефнее).')}${st.est?.method === 'measured' ? ' ' + tr('Сейчас используется он.') : ''}</p>
   </div>`;
 }
 
 /** Состав тела: ИМТ, процент жира, фигуры «сейчас» и «при цели». */
-export function CompositionCard({ st }) {
+export function CompositionCard({ st, ro = !!store.ui.feastReadOnly }) {
   const { s, p, bmi, est } = st;
   const sex = s.sex || 'male';
   const cls = B.bmiClass(bmi);
@@ -87,10 +121,15 @@ export function CompositionCard({ st }) {
       ${comp ? html`<div class="stat-tile"><span>Жир / остальное</span><b>${f1(comp.fatKg)} / ${f1(comp.leanKg)} кг</b><small>при весе ${f1(p.weightKg)} кг</small></div>` : null}
     </div>
     ${est ? html`<${BodyFatScale} sex=${sex} pct=${est.pct}/>` : null}
+    <${BmiScale} bmi=${bmi}/>
+    <${ManualFat} st=${st} ro=${ro}/>
     ${est ? html`<div class="figures">
-      <${BodyFigure} sex=${sex} bf=${est.pct} heightCm=${p.heightCm} accent=${figureColor()} label=${tr('Сейчас · {p0} %', { p0: f1(est.pct) })}/>
-      ${target != null ? html`<${BodyFigure} sex=${sex} bf=${target} heightCm=${p.heightCm} accent=${figureColor()} label=${tr('При {p0} кг · ≈{p1} %', { p0: f1(s.targetWeightKg), p1: f1(target) })}/>` : null}
-    </div>` : null}
+      <${BodyFigure} sex=${sex} bf=${est.pct} heightCm=${p.heightCm} weightKg=${p.weightKg} accent=${figureColor()}
+        m=${{ chestCm: p.chestCm, waistCm: p.waistCm, hipCm: p.hipCm, armCm: p.armCm, thighCm: p.thighCm, neckCm: p.neckCm }}
+        label=${tr('Сейчас · {p0} %', { p0: f1(est.pct) })}/>
+      ${target != null ? html`<${BodyFigure} sex=${sex} bf=${target} heightCm=${p.heightCm} weightKg=${s.targetWeightKg} accent=${figureColor()} label=${tr('При {p0} кг · ≈{p1} %', { p0: f1(s.targetWeightKg), p1: f1(target) })}/>` : null}
+    </div>
+    <${FigureLegend} accent=${figureColor()}/>` : null}
     <p class="muted small">Это оценка для ориентира, а не диагноз. Точнее всего — по обхватам талии и шеи (у женщин и бёдер) или по замеру на весах с анализатором.</p>
   </section>`;
 }
@@ -100,19 +139,21 @@ function MeasureCard({ st, ro }) {
   const today = store.now.today;
   const [date, setDate] = useState(today);
   const cur = F.bodyLogOn(store.feast, date);
-  const female = st.s.sex === 'female';
   const save = (k) => (v) => FA.saveBodyLog(date, { [k]: v });
   return html`<section class="set-section">
-    <h2>Замеры</h2>
+    <h2>Вес и обхваты</h2>
     <label class="field inline"><span>Дата</span><input type="date" value=${date} max=${today} onChange=${(e) => e.target.value && setDate(e.target.value)}/></label>
     <div class="ne-main measure-grid" key=${date}>
       <${NumField} big label="Вес" unit="кг" value=${cur?.weightKg} disabled=${ro} onCommit=${save('weightKg')}/>
       <${NumField} big label="Талия" unit="см" value=${cur?.waistCm} disabled=${ro} onCommit=${save('waistCm')}/>
       <${NumField} big label="Шея" unit="см" value=${cur?.neckCm} disabled=${ro} onCommit=${save('neckCm')}/>
-      ${female || cur?.hipCm ? html`<${NumField} big label="Бёдра" unit="см" value=${cur?.hipCm} disabled=${ro} onCommit=${save('hipCm')}/>` : null}
-      <${NumField} big label="Жир (замер)" unit="%" value=${cur?.bodyFatPct} disabled=${ro} onCommit=${save('bodyFatPct')}/>
+      <${NumField} big label="Бёдра" unit="см" value=${cur?.hipCm} disabled=${ro} onCommit=${save('hipCm')}/>
+      <${NumField} big label="Грудь" unit="см" value=${cur?.chestCm} disabled=${ro} onCommit=${save('chestCm')}/>
+      <${NumField} big label="Бицепс" unit="см" value=${cur?.armCm} disabled=${ro} onCommit=${save('armCm')}/>
+      <${NumField} big label="Бедро" unit="см" value=${cur?.thighCm} disabled=${ro} onCommit=${save('thighCm')}/>
+      <${NumField} big label="Процент жира" unit="%" value=${cur?.bodyFatPct} disabled=${ro} onCommit=${save('bodyFatPct')}/>
     </div>
-    <p class="muted small">Сохраняется сразу. Талию меряют на уровне пупка, шею — под кадыком${female ? tr(', бёдра — по самой широкой части') : ''}. «Жир (замер)» — если есть весы с анализатором.</p>
+    <p class="muted small">Сохраняется сразу. Талию меряют на уровне пупка, шею — под кадыком, бёдра — по самой широкой части, грудь — по соскам, бицепс — напряжённый, бедро — под ягодицей. «Процент жира» — если знаешь его (весы с анализатором, калипер). Обхваты уточняют фигуру; талия, шея и бёдра — ещё и расчёт жира.</p>
   </section>`;
 }
 
@@ -154,11 +195,12 @@ function HistoryCard({ st, ro }) {
   return html`<section class="set-section">
     <h2>История замеров</h2>
     <div class="fchart-table"><table>
-      <thead><tr><th>Дата</th><th class="num">Вес</th><th class="num">Талия</th><th class="num">Шея</th><th class="num">Бёдра</th><th class="num">Жир</th><th></th></tr></thead>
+      <thead><tr><th>Дата</th><th class="num">Вес</th><th class="num">Талия</th><th class="num">Шея</th><th class="num">Бёдра</th><th class="num">Грудь</th><th class="num">Бицепс</th><th class="num">Бедро</th><th class="num">Жир</th><th></th></tr></thead>
       <tbody>${logs.map((l) => html`<tr key=${l.id}>
         <td>${longDate(l.date, store.now.today)} ${l.date.slice(0, 4)}</td>
         <td class="num">${l.weightKg ? f1(l.weightKg) : '—'}</td><td class="num">${l.waistCm ? f1(l.waistCm) : '—'}</td>
         <td class="num">${l.neckCm ? f1(l.neckCm) : '—'}</td><td class="num">${l.hipCm ? f1(l.hipCm) : '—'}</td>
+        <td class="num">${l.chestCm ? f1(l.chestCm) : '—'}</td><td class="num">${l.armCm ? f1(l.armCm) : '—'}</td><td class="num">${l.thighCm ? f1(l.thighCm) : '—'}</td>
         <td class="num">${l.bodyFatPct ? f1(l.bodyFatPct) + ' %' : '—'}</td>
         <td><button type="button" class="icon-btn small danger" disabled=${ro} aria-label="Удалить замер" title="Удалить замер"
           onClick=${async () => { if (await confirm({ title: tr('Удалить замер?'), text: longDate(l.date) + ' ' + l.date.slice(0, 4), confirmLabel: tr('Удалить'), danger: true })) FA.deleteBodyLog(l.id); }}>

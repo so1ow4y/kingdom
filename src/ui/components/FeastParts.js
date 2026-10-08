@@ -110,11 +110,11 @@ export function NumField({ label, value, unit = '', onCommit, step = 'any', disa
  * Пищевая ценность на 100 г/мл: КБЖУ крупно, остальное — раскрывающимися группами (по умолчанию нули).
  * onChange(nextNutrients) — при каждом изменённом поле.
  */
-export function NutrientEditor({ nutrients, unit = 'g', onChange, disabled = false, open = false }) {
+export function NutrientEditor({ nutrients, unit = 'g', onChange, disabled = false, open = false, per = null }) {
   const [shown, setShown] = useState(open);
   const set = (key, raw) => onChange({ ...nutrients, [key]: raw });
   const auto = kcalFromMacros(nutrients);
-  const base = unit === 'ml' ? tr('100 мл') : tr('100 г');
+  const base = per || (unit === 'ml' ? tr('100 мл') : tr('100 г'));
   return html`<div class="nutrient-editor">
     <div class="ne-main">
       ${['kcal', ...MACROS].map((k) => html`<${NumField} key=${k} big label=${NUTRIENT[k].label} unit=${NUTRIENT[k].unit}

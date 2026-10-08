@@ -3,9 +3,11 @@
 // лимитом); вкладка «Тело»: процент жира во времени, фигура, вес. 0.12.5: вкладка «Лекарства» — приёмы по дням,
 // по каждому лекарству (сколько раз, сколько всего, последний приём) и журнал приёмов. Вкладка — в адресе
 // (#/nutrition, #/nutrition/meds, #/nutrition/body), в доке «Аналитика» — ветка из трёх пунктов.
+// 0.13: у лекарств — группировка (дни, месяцы, часы суток, годы), приёмы или количество, все лекарства на одном графике
+// (у количества — одной единицы); вкладка «Замеры» (#/nutrition/measures) — показания с нормой и журнал.
 
 import { html, useState, useMemo } from '../html.js';
-import { CalorieChart, LineChart, MacroSplitBar, DayBars } from '../components/FeastCharts.js';
+import { CalorieChart, LineChart, MacroSplitBar, StackedBars, ReadingsChart, SERIES } from '../components/FeastCharts.js';
 import { openAddFood } from '../components/AddFood.js';
 import { MACRO_COLOR, Meter, feastGoals } from '../components/FeastParts.js';
 import { bodyState, bodyFatSeries, CompositionCard, WeightCard } from './Body.js';
@@ -13,10 +15,11 @@ import { navigate } from '../router.js';
 import { readLocal, writeLocal } from '../hooks.js';
 import { store, openSheet } from '../../store/appState.js';
 import * as F from '../../core/feast.js';
-import { NUTRIENTS, NUTRIENT, MACROS, nv, fmt, rdiPct, amountLabel } from '../../core/nutrition.js';
+import { NUTRIENTS, NUTRIENT, MACROS, nv, fmt, rdiPct, amountLabel, MED_UNIT } from '../../core/nutrition.js';
+import * as M from '../../core/measures.js';
 import { addDays, longDate, humanDate, daysBetween } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
-import { tr, locale } from '../../core/i18n.js';
+import { tr, locale, dec } from '../../core/i18n.js';
 
 const PERIODS = [['7', tr('7 дней')], ['30', tr('30 дней')], ['90', tr('3 месяца')], ['365', tr('Год')], ['all', tr('Всё время')]];
 const num = (v) => Math.round(v).toLocaleString(locale());
@@ -101,17 +104,75 @@ const whenLabel = (last, today) => {
   const [d, t] = last.split(' ');
   return d ? `${humanDate(d, today)}${t ? tr(' в ') + t : ''}` : '—';
 };
+const unitShort = (u) => MED_UNIT[u]?.short || u || '';
+const GROUPS = [['day', tr('По дням')], ['month', tr('По месяцам')], ['hour', tr('По часам')], ['year', tr('По годам')]];
+const METRICS = [['count', tr('Приёмы')], ['amount', tr('Количество')]];
+const r2 = (v) => Math.round(v * 100) / 100;
 
-/** Вкладка «Лекарства»: приёмы за период — всего, по каждому лекарству, по дням и журналом. */
+/** Цвет лекарства — по его месту в списке всех лекарств по названию (не меняется при фильтрах). */
+function colorMap(meds) {
+  const keys = [...meds].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((m) => m.key);
+  return (key) => SERIES[Math.max(0, keys.indexOf(key)) % SERIES.length];
+}
+
+function Chips({ list, value, onChange, label }) {
+  return html`<div class="chip-row wrap" role="tablist" aria-label=${label}>
+    ${list.map(([k, l]) => html`<button type="button" role="tab" key=${k} aria-selected=${value === k} class=${'chip' + (value === k ? ' selected' : '')} onClick=${() => onChange(k)}>${l}</button>`)}
+  </div>`;
+}
+
+/**
+ * Вкладка «Лекарства» (0.12.5, графики — 0.13): приёмы или количество по дням, месяцам, часам суток или годам;
+ * одно лекарство или все сразу (ряды наложены, у количества — только лекарства одной единицы), по каждому — сколько
+ * всего, средняя доза, в среднем в день; журнал приёмов.
+ */
 function MedsTab() {
   const { period, setPeriod, from, today } = usePeriod();
   const [pick, setPick] = useState('all');
+  const [group, setGroupState] = useState(() => readLocal('feastMedGroup', 'day'));
+  const [metric, setMetricState] = useState(() => readLocal('feastMedMetric', 'count'));
+  const [unitPick, setUnitPick] = useState(null);
+  const setGroup = (g) => {
+    setGroupState(g);
+    writeLocal('feastMedGroup', g);
+  };
+  const setMetric = (m) => {
+    setMetricState(m);
+    writeLocal('feastMedMetric', m);
+  };
   const st = useMemo(() => F.medStats(store.feast, from, today), [store.version, from, today]);
   const catalog = [...store.feast.foods.values()].filter((f) => !f.deletedAt && F.isMed(f));
   const span = daysBetween(from, today) + 1;
   const sel = st.meds.find((m) => m.key === pick) || null;
-  const points = sel ? sel.days.map((d) => ({ date: d.date, value: d.count }))
-    : [...st.meds.flatMap((m) => m.days).reduce((acc, d) => acc.set(d.date, (acc.get(d.date) || 0) + d.count), new Map())].map(([date, value]) => ({ date, value }));
+  const color = colorMap(st.meds);
+  // единицы, которые есть за период: у «Количества» по всем — только лекарства одной единицы
+  const units = [...new Set(st.meds.map((m) => m.unit))];
+  const unit = sel ? sel.unit : unitPick && units.includes(unitPick) ? unitPick : (st.meds.find((m) => m.amount) || st.meds[0])?.unit;
+  // порядок рядов — по названию, как и цвета: соседние части столбика — соседние цвета палитры
+  let shown = (sel ? [sel] : metric === 'amount' ? st.meds.filter((m) => m.unit === unit) : st.meds).slice().sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  // больше 8 рядов — остальные в «Другое»
+  let series = shown.map((m) => ({ key: m.key, label: m.name, color: color(m.key), unit: m.unit }));
+  let fold = null;
+  if (series.length > 8) {
+    const keep = [...shown].sort((a, b) => (metric === 'amount' ? b.amount - a.amount : b.count - a.count)).slice(0, 7).map((m) => m.key);
+    fold = shown.filter((m) => !keep.includes(m.key)).map((m) => m.key);
+    series = [...series.filter((x) => keep.includes(x.key)), { key: 'other', label: tr('Другое'), color: 'var(--muted)', unit }];
+  }
+  const buckets = useMemo(() => {
+    const keys = shown.map((m) => m.key);
+    const list = F.medBuckets({ log: st.log, extra: st.extra, from, to: today, group, metric, keys });
+    if (!fold) return list;
+    return list.map((b) => {
+      const values = { ...b.values };
+      for (const k of fold) {
+        if (values[k]) values.other = r2((values.other || 0) + values[k]);
+        delete values[k];
+      }
+      return { ...b, values };
+    });
+  }, [st, from, today, group, metric, shown.map((m) => m.key).join()]);
+  const fmtValue = (v, s) => (metric === 'amount' ? `${dec(r2(v))} ${unitShort(s?.unit || unit)}` : timesLabel(v));
+  const groupTitle = { day: tr('по дням'), month: tr('по месяцам'), hour: tr('по часам суток'), year: tr('по годам') }[group];
   const log = (sel ? st.log.filter((l) => l.key === sel.key) : st.log).slice(0, 60);
   const byDay = [];
   for (const l of log) {
@@ -119,41 +180,62 @@ function MedsTab() {
     if (last?.date === l.date) last.items.push(l);
     else byDay.push({ date: l.date, items: [l] });
   }
-  const max = Math.max(1, ...st.meds.map((m) => m.count));
+  // сравнение: внутри одной единицы — по количеству, иначе по приёмам
+  const byUnit = units.map((u) => ({ unit: u, meds: st.meds.filter((m) => m.unit === u).sort((a, b) => b.amount - a.amount) }));
   return html`
     <${PeriodChips} period=${period} setPeriod=${setPeriod}/>
     <div class="page-actions meds-actions">
       <button type="button" class="btn primary" disabled=${!!store.ui.feastReadOnly} onClick=${() => openAddFood({ kind: 'med' })}>💊 Записать приём</button>
-      <button type="button" class="btn" onClick=${() => navigate('/foods?kind=med')}>Все лекарства${catalog.length ? ` (${catalog.length})` : ''}</button>
+      <button type="button" class="btn" onClick=${() => navigate('/foods/meds')}>Все лекарства${catalog.length ? ` (${catalog.length})` : ''}</button>
     </div>
     ${!st.intakes ? html`<div class="card-block"><p class="muted">${catalog.length
       ? tr('За этот период приёмов нет. Записывай лекарства в «Дневнике» — отдельно или вместе с едой, — и здесь появится статистика.')
       : tr('Лекарств пока нет. Создай лекарство в «Продуктах и лекарствах» или прямо при записи — и отмечай приёмы в «Дневнике».')}</p></div>` : html`
       <div class="stat-tiles">
-        <div class="stat-tile"><span>Приёмов</span><b>${num(st.intakes)}</b><small>за период</small></div>
-        <div class="stat-tile"><span>Дней с приёмами</span><b>${st.days}</b><small>из ${span}</small></div>
-        <div class="stat-tile"><span>Лекарств</span><b>${st.meds.length}</b><small>принимались</small></div>
-        <div class="stat-tile"><span>Последний приём</span><b class="tile-text">${st.log[0] ? whenLabel(st.log[0].date + ' ' + (st.log[0].time || ''), today) : '—'}</b>
-          <small>${st.log[0]?.name || ''}</small></div>
+        ${sel ? html`
+          <div class="stat-tile"><span>Всего</span><b>${dec(r2(sel.amount))} ${unitShort(sel.unit)}</b><small>${timesLabel(sel.count)}</small></div>
+          <div class="stat-tile"><span>Средняя доза</span><b>${dec(r2(sel.amount / Math.max(1, sel.count)))} ${unitShort(sel.unit)}</b><small>за приём</small></div>
+          <div class="stat-tile"><span>В среднем в день</span><b>${dec(r2(sel.amount / Math.max(1, sel.days.length)))} ${unitShort(sel.unit)}</b>
+            <small>${tr('в дни приёма; за весь период — {p0}', { p0: dec(r2(sel.amount / span)) })}</small></div>
+          <div class="stat-tile"><span>Последний приём</span><b class="tile-text">${whenLabel(sel.last, today)}</b><small>${tr('дней с приёмом: {p0} из {span}', { p0: sel.days.length, span })}</small></div>` : html`
+          <div class="stat-tile"><span>Приёмов</span><b>${num(st.intakes)}</b><small>за период</small></div>
+          <div class="stat-tile"><span>Дней с приёмами</span><b>${st.days}</b><small>из ${span}</small></div>
+          <div class="stat-tile"><span>Лекарств</span><b>${st.meds.length}</b><small>принимались</small></div>
+          <div class="stat-tile"><span>Последний приём</span><b class="tile-text">${st.log[0] ? whenLabel(st.log[0].date + ' ' + (st.log[0].time || ''), today) : '—'}</b>
+            <small>${st.log[0]?.name || ''}</small></div>`}
       </div>
       <section class="card-block">
-        <h2 class="block-title">Приёмы по ${span > 92 ? tr('неделям') : tr('дням')}</h2>
-        ${st.meds.length > 1 ? html`<div class="chip-row wrap" role="tablist" aria-label="Лекарство">
-          <button type="button" role="tab" aria-selected=${!sel} class=${'chip' + (!sel ? ' selected' : '')} onClick=${() => setPick('all')}>Все</button>
-          ${st.meds.map((m) => html`<button type="button" role="tab" key=${m.key} aria-selected=${sel?.key === m.key} class=${'chip' + (sel?.key === m.key ? ' selected' : '')}
-            onClick=${() => setPick(m.key)}>💊 ${m.name}</button>`)}
+        <h2 class="block-title">${metric === 'amount' ? tr('Количество') : tr('Приёмы')} ${groupTitle}</h2>
+        ${st.meds.length > 1 ? html`<${Chips} label=${tr('Лекарство')} value=${sel ? sel.key : 'all'} onChange=${setPick}
+          list=${[['all', tr('Все')], ...st.meds.map((m) => [m.key, '💊 ' + m.name])]}/>` : null}
+        <div class="med-controls">
+          <${Chips} label=${tr('Группировка')} value=${group} onChange=${setGroup} list=${GROUPS}/>
+          <${Chips} label=${tr('Что считать')} value=${metric} onChange=${setMetric} list=${METRICS}/>
+        </div>
+        ${!sel && metric === 'amount' && units.length > 1 ? html`<div class="med-units">
+          <span class="muted small">${tr('В чём показывать:')}</span>
+          <${Chips} label=${tr('Единица')} value=${unit} onChange=${setUnitPick} list=${units.map((u) => [u, unitShort(u)])}/>
         </div>` : null}
-        <${DayBars} points=${points} from=${from} to=${today} label=${tr('Приёмы ') + (sel ? sel.name : tr('лекарств')) + tr(' по дням')} unitLabel=${timesLabel}/>
+        <${StackedBars} buckets=${buckets} series=${series} fmtValue=${fmtValue}
+          label=${(metric === 'amount' ? tr('Количество') : tr('Приёмы')) + ' ' + groupTitle}/>
+        ${group === 'hour' ? html`<p class="muted small">${tr('Сумма за период по часу приёма; приёмы без времени и старые дни из сводок не учитываются.')}</p>` : null}
+        ${!sel && metric === 'amount' ? html`<p class="muted small">${tr('На одном графике — лекарства в одной единице ({u}), чтобы их можно было сравнить.', { u: unitShort(unit) })}</p>` : null}
       </section>
       <section class="card-block">
         <h2 class="block-title">По лекарствам</h2>
-        <ul class="med-stats">${st.meds.map((m) => html`<li key=${m.key} class="ex-facet med-stat">
-          <span class="ex-facet-bar" style=${{ width: (m.count / max) * 100 + '%' }}></span>
-          <span class="ms-name">💊 ${m.name}</span>
-          <span class="ms-meta">${timesLabel(m.count)} · всего ${amountLabel({ amount: m.amount, unit: m.unit })} · дней ${m.days.length} из ${span}
-            · в среднем ${amountLabel({ amount: Math.round((m.amount / Math.max(1, m.days.length)) * 100) / 100, unit: m.unit })} в день приёма
-            · последний: ${whenLabel(m.last, today).toLowerCase()}</span>
-        </li>`)}</ul>
+        ${byUnit.map((g) => {
+          const max = Math.max(1e-9, ...g.meds.map((m) => (metric === 'amount' ? m.amount : m.count)));
+          return html`<div class="med-unit-group" key=${g.unit}>
+            ${byUnit.length > 1 ? html`<p class="med-log-date">${tr('В единицах: {u}', { u: unitShort(g.unit) })}</p>` : null}
+            <ul class="med-stats">${g.meds.map((m) => html`<li key=${m.key} class="ex-facet med-stat">
+              <span class="ex-facet-bar" style=${{ width: ((metric === 'amount' ? m.amount : m.count) / max) * 100 + '%', background: `color-mix(in srgb, ${color(m.key)} 22%, transparent)` }}></span>
+              <span class="ms-name"><i class="swatch" style=${{ background: color(m.key) }}></i> ${m.name}</span>
+              <span class="ms-meta">${tr('всего {total} · {times} · средняя доза {dose} · в день приёма {perDay} · последний: {last}', {
+                total: `${dec(r2(m.amount))} ${unitShort(m.unit)}`, times: timesLabel(m.count), dose: `${dec(r2(m.amount / Math.max(1, m.count)))} ${unitShort(m.unit)}`,
+                perDay: `${dec(r2(m.amount / Math.max(1, m.days.length)))} ${unitShort(m.unit)}`, last: whenLabel(m.last, today).toLowerCase() })}</span>
+            </li>`)}</ul>
+          </div>`;
+        })}
       </section>
       <section class="card-block">
         <h2 class="block-title">Журнал приёмов${sel ? ' · ' + sel.name : ''}</h2>
@@ -167,6 +249,60 @@ function MedsTab() {
           </button>`)}
         </div>`) : html`<p class="muted small">В журнале — только дни, которые ещё хранятся в дневнике (старые сводятся в итоги дня).</p>`}
         ${(sel ? st.log.filter((l) => l.key === sel.key) : st.log).length > log.length ? html`<p class="muted small">Показаны последние ${log.length}.</p>` : null}
+      </section>`}`;
+}
+
+/**
+ * Вкладка «Замеры» (0.13): показания выбранного замера за период — график с нормой, последнее, среднее, разброс,
+ * сколько вне нормы, журнал (с едой и лекарствами той же записи).
+ */
+function MeasuresTab() {
+  const { period, setPeriod, from, today } = usePeriod();
+  const [pick, setPick] = useState(null);
+  const st = useMemo(() => F.measureStats(store.feast, from, today), [store.version, from, today]);
+  const catalog = [...store.feast.foods.values()].filter((f) => !f.deletedAt && F.isMeasure(f));
+  const sel = st.types.find((t) => t.key === pick) || st.types[0] || null;
+  const type = sel ? store.feast.foods.get(sel.key) : null;
+  const parts = type?.parts?.length ? type.parts : [];
+  const ranges = type?.ranges || [];
+  const statusOf = (vs) => M.readingStatus(vs, ranges);
+  const off = sel ? sel.readings.filter((r) => ['low', 'high'].includes(statusOf(r.values))).length : 0;
+  const unit = sel?.unit ? tr(sel.unit) : '';
+  const fv = (v) => (v == null ? '—' : dec(r2(v)));
+  const log = sel ? [...sel.readings].reverse().slice(0, 80) : [];
+  return html`
+    <${PeriodChips} period=${period} setPeriod=${setPeriod}/>
+    <div class="page-actions meds-actions">
+      <button type="button" class="btn primary" disabled=${!!store.ui.feastReadOnly} onClick=${() => openAddFood({ kind: 'measure' })}>📏 Записать замер</button>
+      <button type="button" class="btn" onClick=${() => navigate('/foods/measures')}>Все замеры${catalog.length ? ` (${catalog.length})` : ''}</button>
+    </div>
+    ${!sel ? html`<div class="card-block"><p class="muted">${catalog.length
+      ? tr('За этот период замеров нет. Записывай их в «Дневнике» — отдельно или вместе с едой и лекарствами.')
+      : tr('Замеров пока нет. Добавь известный (глюкоза, давление, пульс…) или свой в «Замерах» — и записывай показания в «Дневнике».')}</p></div>` : html`
+      ${st.types.length > 1 ? html`<${Chips} label=${tr('Замер')} value=${sel.key} onChange=${setPick} list=${st.types.map((t) => [t.key, (store.feast.foods.get(t.key)?.icon || '📏') + ' ' + t.name])}/>` : null}
+      <div class="stat-tiles">
+        <div class="stat-tile"><span>Последнее</span><b>${sel.last ? sel.last.values.map(fv).join('/') : '—'} <small>${unit}</small></b>
+          <small>${sel.last ? whenLabel(sel.last.date + ' ' + (sel.last.time || ''), today) : ''}</small></div>
+        <div class="stat-tile"><span>Среднее</span><b>${sel.stat.map((s) => fv(s?.avg)).join('/')} <small>${unit}</small></b><small>${countLabel(sel.count, ['показание', 'показания', 'показаний'])}</small></div>
+        <div class="stat-tile"><span>Разброс</span><b class="tile-text">${sel.stat.map((s) => (s ? `${fv(s.min)}–${fv(s.max)}` : '—')).join(' / ')}</b><small>мин–макс</small></div>
+        <div class="stat-tile"><span>Вне нормы</span><b>${ranges.some(Boolean) ? (off ? '⚠ ' + off : '0') : '—'}</b><small>${ranges.some(Boolean) ? tr('норма {p0}', { p0: M.normText(type) }) : tr('норма не задана')}</small></div>
+      </div>
+      <section class="card-block">
+        <h2 class="block-title">${sel.name}${unit ? ', ' + unit : ''}</h2>
+        <${ReadingsChart} readings=${sel.readings} parts=${parts} ranges=${ranges} unit=${unit} label=${sel.name}
+          statusOf=${statusOf} statusLabel=${M.STATUS_LABEL}/>
+      </section>
+      <section class="card-block">
+        <h2 class="block-title">Журнал · ${sel.name}</h2>
+        ${log.map((r, i) => {
+          const s = statusOf(r.values);
+          return html`<button type="button" class="med-log-row" key=${i} disabled=${!r.entryId} onClick=${() => r.entryId && openSheet('entry', { id: r.entryId })}>
+            <span class="er-time">${humanDate(r.date, today)}${r.time ? ' ' + r.time : ''}</span>
+            <span class="er-main"><span class="er-name">${r.values.map(fv).join('/')} ${unit}${s === 'low' || s === 'high' ? html` <span class="tone-danger">⚠ ${M.STATUS_LABEL[s]}</span>` : null}</span>
+              ${r.foods?.length || r.meds?.length ? html`<small class="muted">вместе с: ${[...(r.foods || []), ...(r.meds || []).map((x) => '💊 ' + x)].join(', ')}</small>` : null}
+              ${r.note ? html`<small class="er-item-note">${r.note}</small>` : null}</span>
+          </button>`;
+        })}
       </section>`}`;
 }
 
@@ -187,16 +323,16 @@ function BodyTab() {
     <${WeightCard} st=${st}/>`;
 }
 
-export const ANALYTICS_TABS = [['food', tr('Питание'), '/nutrition'], ['meds', tr('Лекарства'), '/nutrition/meds'], ['body', tr('Тело'), '/nutrition/body']];
+export const ANALYTICS_TABS = [['food', tr('Питание'), '/nutrition'], ['meds', tr('Лекарства'), '/nutrition/meds'], ['measures', tr('Замеры'), '/nutrition/measures'], ['body', tr('Тело'), '/nutrition/body']];
 
 export function NutritionScreen({ tab: param = null }) {
-  const tab = ['meds', 'body'].includes(param) ? param : 'food';
+  const tab = ['meds', 'measures', 'body'].includes(param) ? param : 'food';
   return html`
     <div class="screen nutrition">
       <div class="section-tabs" role="tablist" aria-label="Аналитика">
         ${ANALYTICS_TABS.map(([k, l, to]) => html`<button type="button" role="tab" key=${k} aria-selected=${tab === k}
           class=${'section-tab' + (tab === k ? ' active' : '')} onClick=${() => navigate(to, { replace: true })}>${l}</button>`)}
       </div>
-      ${tab === 'food' ? html`<${FoodTab}/>` : tab === 'meds' ? html`<${MedsTab}/>` : html`<${BodyTab}/>`}
+      ${tab === 'food' ? html`<${FoodTab}/>` : tab === 'meds' ? html`<${MedsTab}/>` : tab === 'measures' ? html`<${MeasuresTab}/>` : html`<${BodyTab}/>`}
     </div>`;
 }

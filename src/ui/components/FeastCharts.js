@@ -256,3 +256,158 @@ export function DayBars({ points, from, to, unitLabel = (v) => String(v), label 
     </div>`}
   </div>`;
 }
+
+/** Цвета рядов по порядку (проверенная палитра, 8 слотов); цвет следует за сущностью, а не за местом в рейтинге. */
+export const SERIES = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)', 'var(--series-6)', 'var(--series-7)', 'var(--series-8)'];
+
+/**
+ * Столбики с наложением рядов (0.13, лекарства): buckets — [{ key, label, title, values: { ключ ряда: число } }],
+ * series — [{ key, label, color }]. Зазор 2 px между частями, скруглён верх столбика, подсказка — по каждому ряду и
+ * сумма, легенда для двух и более рядов, «Таблицей». fmtValue(v, ряд) — подпись значения («3 ед.»).
+ */
+export function StackedBars({ buckets, series, fmtValue = (v) => String(v), label = tr('График'), height = 180, empty = tr('нет приёмов') }) {
+  const box = useRef(null);
+  const [tip, setTip] = useState(null);
+  const [table, setTable] = useState(false);
+  const sum = (b) => series.reduce((s, x) => s + (b.values[x.key] || 0), 0);
+  const tk = ticks(Math.max(1, ...buckets.map(sum)), 3);
+  const top = tk.at(-1) || 1;
+  const ih = height - PAD.t - PAD.b;
+  const iw = W - PAD.l - PAD.r;
+  const slot = iw / Math.max(1, buckets.length);
+  const bw = Math.max(1, Math.min(24, slot - 2));
+  const y = (v) => PAD.t + ih - (v / top) * ih;
+  const labelEvery = Math.ceil(buckets.length / 8);
+  const show = (i, e) => {
+    const b = buckets[i];
+    const rect = box.current.getBoundingClientRect();
+    const total = sum(b);
+    const parts = series.filter((x) => b.values[x.key]);
+    setTip({
+      x: ((PAD.l + slot * i + slot / 2) / W) * rect.width, y: (y(total) / height) * rect.height,
+      body: html`<b>${b.title}</b>${!total ? html`<span>${empty}</span>` : parts.map((x) => html`<span key=${x.key}><i class="swatch" style=${{ background: x.color }}></i> ${x.label}: ${fmtValue(b.values[x.key], x)}</span>`)}
+        ${parts.length > 1 ? html`<span class="muted">${tr('Всего')}: ${fmtValue(total, series[0])}</span>` : null}`,
+    });
+    e?.stopPropagation?.();
+  };
+  return html`<div class="fchart">
+    <div class="fchart-legend">
+      ${series.length > 1 ? series.map((x) => html`<span key=${x.key}><i class="swatch" style=${{ background: x.color }}></i>${x.label}</span>`) : null}
+      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? tr('График') : tr('Таблицей')}</button>
+    </div>
+    ${table ? html`<div class="fchart-table"><table><thead><tr><th></th>${series.map((x) => html`<th class="num" key=${x.key}>${x.label}</th>`)}</tr></thead><tbody>
+      ${buckets.filter((b) => sum(b)).reverse().map((b) => html`<tr key=${b.key}><td>${b.title}</td>${series.map((x) => html`<td class="num" key=${x.key}>${b.values[x.key] ? fmtValue(b.values[x.key], x) : '—'}</td>`)}</tr>`)}
+    </tbody></table></div>` : html`
+    <div class="fchart-box" ref=${box} onPointerLeave=${() => setTip(null)}>
+      <svg viewBox=${`0 0 ${W} ${height}`} preserveAspectRatio="none" class="fchart-svg" style=${{ height: height + 'px' }} role="img" aria-label=${label}>
+        ${tk.map((t) => html`<line key=${'g' + t} class="grid" x1=${PAD.l} x2=${W - PAD.r} y1=${y(t)} y2=${y(t)}/>`)}
+        ${buckets.map((b, i) => {
+          let acc = 0;
+          const present = series.filter((x) => b.values[x.key] > 0);
+          return present.map((x, j) => {
+            const v = b.values[x.key];
+            const y0 = y(acc);
+            acc += v;
+            const y1 = y(acc);
+            const xx = PAD.l + slot * i + (slot - bw) / 2;
+            const last = j === present.length - 1;
+            // зазор 2 px цвета фона между частями столбика
+            const h = Math.max(0, y0 - y1 - (j > 0 ? 2 : 0));
+            return last
+              ? html`<path key=${b.key + x.key} class="bar" d=${barPath(xx, y1, bw, h)} fill=${x.color}/>`
+              : html`<rect key=${b.key + x.key} class="bar" x=${xx} y=${y1} width=${bw} height=${h} fill=${x.color}/>`;
+          });
+        })}
+        ${buckets.map((b, i) => html`<rect key=${'h' + b.key} class="hit" x=${PAD.l + slot * i} y=${PAD.t} width=${slot} height=${ih}
+          onPointerEnter=${(e) => show(i, e)} onPointerDown=${(e) => show(i, e)}/>`)}
+      </svg>
+      <div class="fchart-axis-y">${tk.map((t) => html`<span key=${t} style=${{ top: (y(t) / height) * 100 + '%' }}>${t.toLocaleString(locale())}</span>`)}</div>
+      <div class="fchart-axis-x">${buckets.map((b, i) => (i % labelEvery === 0 ? html`<span key=${b.key} style=${{ left: ((PAD.l + slot * i + slot / 2) / W) * 100 + '%' }}>${b.label}</span>` : null))}</div>
+      <${Tip} tip=${tip}/>
+    </div>`}
+  </div>`;
+}
+
+/**
+ * Показания замера во времени (0.13): по линии на часть значения (у давления — верхнее и нижнее), точки, полосы нормы.
+ * readings — [{ date, time, values, note }], parts — названия частей, ranges — нормы частей.
+ * Вне нормы — точка с обводкой статусного цвета и «⚠» в подсказке и таблице (не только цвет).
+ */
+export function ReadingsChart({ readings, parts = [], ranges = [], unit = '', label = tr('Показания'), height = 200, statusOf = () => null, statusLabel = {} }) {
+  const box = useRef(null);
+  const [tip, setTip] = useState(null);
+  const [table, setTable] = useState(false);
+  if (!readings.length) return html`<p class="muted fchart-empty">${tr('Пока нет показаний.')}</p>`;
+  const n = Math.max(1, parts.length, ...readings.map((r) => r.values.length));
+  const names = Array.from({ length: n }, (_, i) => parts[i] || (n > 1 ? tr('Значение {n}', { n: i + 1 }) : label));
+  const t = (r) => Date.parse(r.date + 'T' + (r.time || '12:00') + ':00Z');
+  const t0 = Math.min(...readings.map(t));
+  const t1 = Math.max(...readings.map(t));
+  const span = Math.max(3600000, t1 - t0);
+  const all = readings.flatMap((r) => r.values.filter((v) => Number.isFinite(v)));
+  for (const r of ranges) if (r) all.push(...[r.min, r.max].filter((v) => v != null));
+  let lo = Math.min(...all);
+  let hi = Math.max(...all);
+  const pad = Math.max(0.5, (hi - lo) * 0.12);
+  lo = Math.floor((lo - pad) * 2) / 2;
+  hi = Math.ceil((hi + pad) * 2) / 2;
+  const ih = height - PAD.t - PAD.b;
+  const iw = W - PAD.l - PAD.r;
+  const x = (ms) => PAD.l + 6 + ((ms - t0) / span) * (iw - 12);
+  const y = (v) => PAD.t + ih - ((v - lo) / (hi - lo || 1)) * ih;
+  const tk = ticks(hi - lo).map((v) => Math.round((lo + v) * 100) / 100).filter((v) => v <= hi + 1e-9);
+  const f = (v) => (v == null ? '—' : v.toLocaleString(locale(), { maximumFractionDigits: 2 }));
+  const when = (r) => `${longDate(r.date)} ${r.date.slice(0, 4)}${r.time ? ', ' + r.time : ''}`;
+  const near = (px) => {
+    let best = null;
+    for (const r of readings) {
+      const d = Math.abs(x(t(r)) - px);
+      if (!best || d < best.d) best = { d, r };
+    }
+    return best?.r || null;
+  };
+  const move = (e) => {
+    const rect = box.current.getBoundingClientRect();
+    const r = near(((e.clientX - rect.left) / rect.width) * W);
+    if (!r) return;
+    const st = statusOf(r.values);
+    setTip({
+      x: (x(t(r)) / W) * rect.width, y: (y(r.values.find((v) => Number.isFinite(v)) ?? lo) / height) * rect.height, ms: t(r),
+      body: html`<b>${when(r)}</b><span>${r.values.map(f).join(' / ')} ${unit}</span>
+        ${st && st !== 'ok' ? html`<span class="tone-danger">⚠ ${statusLabel[st] || ''}</span>` : null}
+        ${r.note ? html`<span class="muted">${r.note}</span>` : null}`,
+    });
+  };
+  const xLabels = [t0, t0 + span / 2, t1].map((ms) => new Date(ms).toISOString().slice(0, 10));
+  const off = (r) => {
+    const st = statusOf(r.values);
+    return st && st !== 'ok';
+  };
+  return html`<div class="fchart">
+    <div class="fchart-legend">
+      ${n > 1 ? names.map((nm, i) => html`<span key=${i}><i class="line-key" style=${{ background: SERIES[i] }}></i>${nm}</span>`) : null}
+      ${ranges.some(Boolean) ? html`<span><i class="swatch norm-key"></i>${tr('норма')}</span>` : null}
+      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? tr('График') : tr('Таблицей')}</button>
+    </div>
+    ${table ? html`<div class="fchart-table"><table><thead><tr><th>${tr('Когда')}</th>${names.map((nm, i) => html`<th class="num" key=${i}>${nm}</th>`)}<th></th></tr></thead><tbody>
+      ${[...readings].reverse().map((r, k) => html`<tr key=${k}><td>${when(r)}</td>${names.map((_, i) => html`<td class="num" key=${i}>${f(r.values[i])}</td>`)}
+        <td>${off(r) ? '⚠ ' + (statusLabel[statusOf(r.values)] || '') : ''}</td></tr>`)}
+    </tbody></table></div>` : html`
+    <div class="fchart-box" ref=${box} onPointerMove=${move} onPointerDown=${move} onPointerLeave=${() => setTip(null)}>
+      <svg viewBox=${`0 0 ${W} ${height}`} preserveAspectRatio="none" class="fchart-svg" style=${{ height: height + 'px' }} role="img" aria-label=${label}>
+        ${ranges.map((r, i) => (r ? html`<rect key=${'n' + i} class="norm-band" x=${PAD.l} width=${iw} y=${y(r.max ?? hi)} height=${Math.max(0, y(r.min ?? lo) - y(r.max ?? hi))}/>` : null))}
+        ${tk.map((v) => html`<line key=${'g' + v} class="grid" x1=${PAD.l} x2=${W - PAD.r} y1=${y(v)} y2=${y(v)}/>`)}
+        ${names.map((_, i) => {
+          const pts = readings.filter((r) => Number.isFinite(r.values[i]));
+          return pts.length > 1 ? html`<polyline key=${'l' + i} class="series-line" stroke=${SERIES[i]} points=${pts.map((r) => `${x(t(r))},${y(r.values[i])}`).join(' ')}/>` : null;
+        })}
+        ${tip ? html`<line class="crosshair" x1=${x(tip.ms)} x2=${x(tip.ms)} y1=${PAD.t} y2=${PAD.t + ih}/>` : null}
+      </svg>
+      ${readings.flatMap((r, k) => r.values.map((v, i) => (Number.isFinite(v) ? html`<i key=${k + ':' + i} class=${'fchart-dot' + (off(r) ? ' off-norm' : '')}
+        style=${{ left: (x(t(r)) / W) * 100 + '%', top: (y(v) / height) * 100 + '%', background: SERIES[i] }}></i>` : null)))}
+      <div class="fchart-axis-y">${tk.map((v) => html`<span key=${v} style=${{ top: (y(v) / height) * 100 + '%' }}>${f(v)}</span>`)}</div>
+      <div class="fchart-axis-x">${xLabels.map((d, i) => html`<span key=${i} style=${{ left: ((i === 0 ? PAD.l + 6 : i === 2 ? W - PAD.r - 6 : W / 2) / W) * 100 + '%' }}>${shortDate(d)}</span>`)}</div>
+      <${Tip} tip=${tip}/>
+    </div>`}
+  </div>`;
+}

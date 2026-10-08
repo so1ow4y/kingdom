@@ -19,6 +19,7 @@ import { planningDate } from '../../core/planning.js';
 import { countLabel } from '../../core/plural.js';
 import { getPrefs } from '../prefs.js';
 import { tr } from '../../core/i18n.js';
+import * as MS from '../../core/measures.js';
 
 /** Точки полосы недели для Feast: день записан — точка, сверх лимита — «!». */
 function feastMarks(days) {
@@ -50,6 +51,7 @@ function EntryRow({ e, where = 'diary' }) {
   const multi = items.length > 1;
   const show = noteDisplay(where);
   const onlyMeds = !F.hasFood(e);
+  const kcal = nv(n, 'kcal');
   const notesOf = (it) => {
     const out = [];
     if (show.item && it.note) out.push(html`<small class="er-item-note" key="i">${it.note}</small>`);
@@ -57,22 +59,31 @@ function EntryRow({ e, where = 'diary' }) {
     if (f && !f.deletedAt && f.note) out.push(html`<small class="er-food-note" key="f">📝 ${f.note}</small>`);
     return out;
   };
-  const line = (it) => (F.isMed(it) ? html`<small class="muted">${amountLabel(it)}</small>`
+  const typeOf = (it) => (it.foodId ? store.feast.foods.get(it.foodId) : null);
+  // 0.13: замер — значение и ⚠, если вне нормы (знак и текст, не только цвет)
+  const reading = (it) => {
+    const t = typeOf(it);
+    const st = t && !t.deletedAt ? MS.readingStatus(it.values || [it.amount], t.ranges) : null;
+    return html`<small class=${st === 'low' || st === 'high' ? 'tone-danger' : 'muted'}>${MS.readingText(it)}${st === 'low' || st === 'high' ? ' · ⚠ ' + MS.STATUS_LABEL[st] : ''}</small>`;
+  };
+  const icon = (it) => (F.isMed(it) ? '💊 ' : F.isMeasure(it) ? (typeOf(it)?.icon || '📏') + ' ' : '');
+  const line = (it) => (F.isMeasure(it) ? reading(it) : F.isMed(it) ? html`<small class="muted">${amountLabel(it)}${nv(itemNutrients(it), 'kcal') ? ' · ' + fmt(nv(itemNutrients(it), 'kcal'), 'kcal') : ''}</small>`
     : html`<small class="muted">${amountLabel(it)} · ${fmt(nv(itemNutrients(it), 'kcal'), 'kcal')}</small>`);
-  return html`<button type="button" class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '')} onClick=${() => openSheet('entry', { id: e.id })}>
+  const badge = !items.length ? '📝' : onlyMeds && !kcal ? (items.every(F.isMeasure) ? '📏' : '💊') : fmt(kcal, 'kcal');
+  return html`<button type="button" class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '')} onClick=${() => openSheet('entry', { id: e.id })}>
     ${e.time ? html`<span class="er-time">${e.time}</span>` : null}
     <span class="er-main">
-      ${multi ? html`
+      ${!items.length ? null : multi ? html`
         <span class="er-items">${items.map((it) => html`<span class="er-item-wrap" key=${it.id}><span class="er-item">
-          <span class="er-name">${F.isMed(it) ? '💊 ' : ''}${it.name}</span>${line(it)}</span>
+          <span class="er-name">${icon(it)}${it.name}</span>${line(it)}</span>
           ${notesOf(it)}</span>`)}</span>
-        ${onlyMeds ? null : html`<small class="muted">${macroLine(n)}</small>`}` : html`
-        <span class="er-name">${items[0] && F.isMed(items[0]) ? '💊 ' : ''}${items[0]?.name || tr('Запись')}</span>
-        <small class="muted">${items[0] ? amountLabel(items[0]) : ''}${onlyMeds ? '' : (items[0] ? ' · ' : '') + macroLine(n)}</small>
-        ${items[0] ? notesOf(items[0]) : null}`}
-      ${F.entryNoteList(e).map((note) => html`<small class="er-note" key=${note.id}>${note.text}</small>`)}
+        ${onlyMeds && !kcal ? null : html`<small class="muted">${macroLine(n)}</small>`}` : html`
+        <span class="er-name">${icon(items[0])}${items[0].name}</span>
+        ${F.isMeasure(items[0]) ? reading(items[0]) : html`<small class="muted">${amountLabel(items[0])}${onlyMeds && !kcal ? '' : ' · ' + macroLine(n)}</small>`}
+        ${notesOf(items[0])}`}
+      ${F.entryNoteList(e).map((note) => html`<small class=${'er-note' + (!items.length ? ' er-note-main' : '')} key=${note.id}>${note.text}</small>`)}
     </span>
-    <b class="er-kcal">${onlyMeds ? '💊' : fmt(nv(n, 'kcal'), 'kcal')}</b>
+    <b class="er-kcal">${badge}</b>
   </button>`;
 }
 
@@ -135,6 +146,8 @@ export function DiaryScreen({ query = {} }) {
           onClick=${() => FA.copyEntries(yesterday, date)}><${Icon} name="copy2" size=${16}/> Как ${humanDate(yesterday, store.now.today).toLowerCase()}: ${countLabel(prevCount, ['запись', 'записи', 'записей'])}</button>` : null}
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, scan: true })}><${Icon} name="barcode" size=${16}/> Сканировать</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'med' })}>💊 Лекарство</button>
+        <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'measure' })}>📏 Замер</button>
+        <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, note: true })}>📝 Заметка</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openSheet('meal', { date })}><${Icon} name="plus" size=${16}/> Рацион</button>
         ${day.count ? html`<button type="button" class="btn ghost" onClick=${() => setDetails(!details)} aria-expanded=${details}>
           <${Icon} name=${details ? 'chevronDown' : 'chevron'} size=${16}/> Витамины и минералы за день</button>` : null}

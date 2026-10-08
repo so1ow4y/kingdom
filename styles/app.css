@@ -1685,9 +1685,9 @@ td.ex-empty-row { padding: 32px 8px; color: var(--muted); text-align: center; }
 .sc-cheat-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 5px 0; border-top: 1px solid var(--border); font-size: 14px; }
 
 /* ---------- 0.11: Crimson Harvest — схема «Багрянец», ряды графиков, вторая буква ---------- */
-:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; }
-:root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; } }
+:root { --series-1: #2a78d6; --series-2: #eb6834; --series-3: #1baf7a; --series-4: #eda100; --series-5: #e87ba4; --series-6: #008300; --series-7: #4a3aa7; --series-8: #e34948; --fat: #f2c230; }
+:root[data-theme="dark"] { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; --fat: #e8b923; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --series-1: #3987e5; --series-2: #d95926; --series-3: #199e70; --series-4: #c98500; --series-5: #d55181; --series-6: #008300; --series-7: #9085e9; --series-8: #e66767; --fat: #e8b923; } }
 :root[data-scheme="crimson"] { --accent: #a3122a; --accent-soft: #f8e4e7; }
 :root[data-theme="dark"][data-scheme="crimson"] { --accent: #ef5b6b; --accent-soft: #3b1a20; --accent-text: #1b0a0d; --bg: #120f12; --surface: #1c171b; --surface-2: #261f24; --surface-3: #31282e; --border: #33292f; }
 @media (prefers-color-scheme: dark) {
@@ -2024,3 +2024,42 @@ a.msr-name:hover { color: var(--accent); }
 .vn-all { margin: 2px 0 0; font-size: 13px; }
 @media (max-width: 600px) { .vn-tasks { max-height: 34vh; } .vn-check, .vn-play { width: 34px; height: 34px; } }
 .vn-dialog.vn-away { visibility: hidden; pointer-events: none !important; }
+/* 0.13: графики лекарств и замеров */
+.fchart-svg .norm-band { fill: var(--ok); opacity: .1; }
+.swatch.norm-key { background: color-mix(in srgb, var(--ok) 30%, transparent); }
+.fchart-dot.off-norm { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--danger); }
+.fchart-tip .swatch { display: inline-block; width: 8px; height: 8px; margin-right: 2px; border-radius: 2px; vertical-align: middle; }
+.tone-danger { color: var(--danger); }
+.med-controls { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 6px 0; }
+.med-units { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin: 0 0 6px; }
+.med-unit-group + .med-unit-group { margin-top: 10px; }
+.med-stat .ms-name .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; vertical-align: middle; }
+.entry-row.note-only .er-note-main { color: var(--text); font-style: normal; font-size: 14px; }
+.measure-inputs { display: flex; flex-wrap: wrap; gap: 8px; }
+.measure-inputs .num-field { flex: 1 1 120px; min-width: 0; }
+.linked-measures .lme-row { display: flex; flex-direction: column; gap: 4px; }
+.lme-name { font-size: 14px; }
+.measure-presets { display: flex; flex-direction: column; gap: 4px; margin: 4px 0 8px; }
+.ie-values { font-variant-numeric: tabular-nums; }
+.fc-desc { margin: 6px 0; }
+.fc-desc-hint { margin: 2px 0 0 22px; }
+.measures-table td { vertical-align: top; }
+.food-pick.measure .fp-name { color: var(--text); }
+/* 0.13: шкалы процента жира и ИМТ, фигура-схема */
+.bf-title { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
+.bf-title b { color: var(--text); font-weight: 600; }
+.bf-bounds { position: relative; height: 0; }
+.bf-bounds span { position: absolute; bottom: 4px; transform: translateX(-50%); color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
+.bf-labels { height: 34px; }
+.bf-labels span, .bf-labels span:first-child, .bf-labels span:last-child { left: auto; right: auto; transform: translateX(-50%); max-width: 30%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.bf-labels span.lane2 { top: 15px; }
+.bf-seg.bmi-low { background: #7b8fc6; }
+.bf-seg.bmi-ok { background: #4c9a6a; }
+.bf-seg.bmi-over { background: #e8b923; }
+.bf-seg.bmi-high { background: #c8553d; }
+.bf-scale + .bf-scale { margin-top: 18px; }
+.manual-fat { display: flex; flex-direction: column; gap: 4px; max-width: 420px; margin: 14px 0 4px; }
+.body-figure-svg svg { display: block; max-width: 44vw; height: auto; }
+.bf-shorts { fill: var(--surface-3); stroke: var(--text); stroke-opacity: .35; stroke-width: 1; }
+.figure-legend { justify-content: center; margin: -4px 0 8px; }
+.figure-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }

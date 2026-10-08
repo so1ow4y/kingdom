@@ -14,6 +14,8 @@ export const SEXES = [
 ];
 
 export const ACTIVITY = [
+  // 0.13: «+0» — только базовый обмен, без умножения (например, если активность считается отдельно)
+  { key: 'none', label: tr('Без надбавки'), hint: tr('Только базовый обмен, расход не умножается'), factor: 1 },
   { key: 'sedentary', label: tr('Сидячий образ жизни'), hint: tr('Почти без движения'), factor: 1.2 },
   { key: 'light', label: tr('Лёгкая активность'), hint: tr('Прогулки, 1–3 тренировки в неделю'), factor: 1.375 },
   { key: 'moderate', label: tr('Средняя'), hint: tr('3–5 тренировок в неделю'), factor: 1.55 },
@@ -63,7 +65,7 @@ export function activityList(custom = []) {
 
 /** Активность по ключу; неизвестная (удалённая своя) — «Лёгкая активность». */
 export function activityOf(key, custom = []) {
-  return activityList(custom).find((a) => a.key === key) || ACTIVITY[1];
+  return activityList(custom).find((a) => a.key === key) || ACTIVITY.find((a) => a.key === 'light');
 }
 
 /** Сколько ккал в день добавляет активность к базовому обмену (null — обмен неизвестен, а активность — коэффициентом). */

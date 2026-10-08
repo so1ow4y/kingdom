@@ -14,6 +14,7 @@ import { num, fmt, entryKcal, checkGoals, goalChanges, kcalGoalChanges } from '.
 import { countLabel } from '../core/plural.js';
 import { FEAST_RETENTION } from '../config.js';
 import { tr } from '../core/i18n.js';
+import { cleanValues, partCount } from '../core/measures.js';
 
 let repo = null;
 let clock = null;
@@ -262,8 +263,8 @@ export async function duplicateFood(id) {
   const f = D().foods.get(id);
   if (!f) return null;
   const copy = await createFood({ name: f.name + tr(' (копия)'), brand: f.brand, unit: f.unit, servingName: f.servingName, servingSize: f.servingSize,
-    nutrients: f.nutrients, kind: f.kind || 'food', dose: f.dose, note: f.note });
-  if (copy && f.meds?.length) await updateFood(copy.id, { meds: f.meds });
+    nutrients: f.nutrients, kind: f.kind || 'food', dose: f.dose, note: f.note, parts: f.parts, ranges: f.ranges, desc: f.desc, icon: f.icon });
+  if (copy && (f.meds?.length || f.measures?.length)) await updateFood(copy.id, { meds: f.meds || [], measures: f.measures || [] });
   return copy;
 }
 
@@ -280,6 +281,12 @@ function itemSpecs(items) {
     if (it.foodId) {
       const food = D().foods.get(it.foodId);
       if (!food || food.deletedAt) continue;
+      // замер (0.13) — значения по частям; пустой не записывается
+      if (F.isMeasure(food)) {
+        const vs = cleanValues(it.values ?? it.amount, partCount(food));
+        if (vs) out.push({ measure: food, values: vs, note: it.note });
+        continue;
+      }
       // лекарство (0.12.5) — без наград
       if (F.isMed(food)) out.push({ med: food, amount: it.amount, note: it.note });
       else out.push({ food, amount: it.amount, note: it.note, rewards: boosted(F.rewardsOf(food, s)) });
@@ -307,12 +314,14 @@ export function feastEarnings() {
 const productsLabel = (n) => countLabel(n, ['продукт', 'продукта', 'продуктов']);
 /** «Торт», «2 продукта», «Торт + 💊 Инсулин», «3 продукта + 💊 2 лекарства» — для уведомлений. */
 function specsLabel(specs) {
-  const foods = specs.filter((s) => !s.med);
+  const foods = specs.filter((s) => !s.med && !s.measure);
   const meds = specs.filter((s) => s.med);
-  const name = (s) => s.food?.name || s.quick?.name || s.med?.name || tr('продукт');
+  const ms = specs.filter((s) => s.measure);
+  const name = (s) => s.food?.name || s.quick?.name || s.med?.name || s.measure?.name || tr('продукт');
   const f = foods.length === 1 ? name(foods[0]) : foods.length ? productsLabel(foods.length) : '';
   const m = meds.length === 1 ? '💊 ' + name(meds[0]) : meds.length ? '💊 ' + countLabel(meds.length, ['лекарство', 'лекарства', 'лекарств']) : '';
-  return [f, m].filter(Boolean).join(' + ');
+  const x = ms.length === 1 ? '📏 ' + name(ms[0]) : ms.length ? '📏 ' + countLabel(ms.length, ['замер', 'замера', 'замеров']) : '';
+  return [f, m, x].filter(Boolean).join(' + ');
 }
 
 /**
@@ -321,13 +330,19 @@ function specsLabel(specs) {
  */
 export async function addEntry({ date, meal, time = store.now.time, note = '', notes = null, items = null, foodId = null, amount = null }) {
   const specs = itemSpecs(items || [{ foodId, amount }]);
-  if (!specs.length) return null;
+  // 0.13: запись может быть просто заметкой — без продуктов
+  const texts = (notes || [note]).filter((t) => String(t || '').trim());
+  if (!specs.length && !texts.length) return null;
   const e = F.newEntry({ date, meal, time, note, notes, items: specs }, ctx());
   const changes = [{ coll: 'entries', prev: undefined, next: e }];
   if (await commit(changes)) {
     const rw = rewardText(F.entryRewards(e));
     const onlyMeds = !F.hasFood(e);
-    offerUndo(onlyMeds ? tr('💊 Записано: {p0}', { p0: F.entryTitle(e) })
+    if (!specs.length) {
+      offerUndo(tr('📝 Заметка записана'), changes);
+      return e;
+    }
+    offerUndo(onlyMeds ? tr('Записано: {p0}', { p0: specsLabel(specs) })
       : tr('{p0} · {p1} ккал{p2}', { p0: specs.length === 1 ? F.entryTitle(e) : tr('Записано: ') + specsLabel(specs), p1: fmt(entryKcal(e), 'kcal'), p2: rw ? ' · ' + rw : '' }), changes);
     return e;
   }
@@ -367,7 +382,7 @@ export async function addToEntry(id, items) {
 /**
  * entryNotes (0.12.5) — заметки записи: { edits: { id: текст } (пусто — убрать), added: [текст] }.
  */
-export async function saveEntry(id, { amounts = {}, notes = {}, removed = [], entryNotes = null, ...fields }) {
+export async function saveEntry(id, { amounts = {}, values = {}, notes = {}, removed = [], entryNotes = null, ...fields }) {
   const c = changeEntry(id, (e, c0) => {
     let next = F.editEntry(e, fields, c0);
     if (entryNotes) {
@@ -381,6 +396,10 @@ export async function saveEntry(id, { amounts = {}, notes = {}, removed = [], en
       const it = (next.items || []).find((x) => x.id === itemId);
       if (it && !it.deletedAt && num(a) && num(a) !== it.amount) next = F.setItemAmount(next, itemId, a, c0);
     }
+    for (const [itemId, vs] of Object.entries(values)) {
+      const it = (next.items || []).find((x) => x.id === itemId);
+      if (it && !it.deletedAt && JSON.stringify(it.values || []) !== JSON.stringify(vs)) next = F.setItemValues(next, itemId, vs, c0);
+    }
     for (const [itemId, text] of Object.entries(notes)) {
       const it = (next.items || []).find((x) => x.id === itemId);
       if (it && !it.deletedAt && (it.note || '') !== String(text || '')) next = F.setItemNote(next, itemId, text, c0);
@@ -389,7 +408,8 @@ export async function saveEntry(id, { amounts = {}, notes = {}, removed = [], en
     return next;
   });
   if (!c) return false;
-  if (!F.entryItems(c.next).length) return deleteEntries([id], tr('Запись удалена: в ней не осталось продуктов'));
+  // без продуктов и без заметок запись не нужна (0.13: заметка без продуктов — тоже запись)
+  if (!F.entryItems(c.next).length && !F.entryNoteList(c.next).length) return deleteEntries([id], tr('Запись удалена: в ней не осталось продуктов'));
   return commit([c]);
 }
 
@@ -534,7 +554,7 @@ export async function setMealNote(date, meal, text) {
 export async function saveBodyLog(date, values) {
   const cur = F.bodyLogOn(D(), date);
   const clean = {};
-  for (const k of ['weightKg', 'waistCm', 'neckCm', 'hipCm', 'bodyFatPct']) if (k in values) clean[k] = num(values[k]) || null;
+  for (const k of F.BODY_NUM_FIELDS) if (k in values) clean[k] = num(values[k]) || null;
   if ('note' in values) clean.note = String(values.note || '').slice(0, 500);
   if (cur) return commit([change('body', cur.id, (b) => touch(b, clean, ctx()))]);
   if (!Object.values(clean).some((v) => v)) return false;

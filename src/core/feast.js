@@ -19,6 +19,7 @@ import { addDays, daysBetween } from './dates.js';
 import { normalizeBarcode } from './barcode.js';
 import { DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, FEAST_RETENTION } from '../config.js';
 import { tr } from './i18n.js';
+import { isMeasure, cleanUnit, cleanParts, cleanRanges, cleanValues, partCount } from './measures.js';
 
 export const FEAST_SETTINGS_ID = '00000000-0000-7000-8000-00000000f001';
 export const FEAST_COLLECTIONS = ['settings', 'foods', 'entries', 'dayArchive', 'body', 'meals', 'mealNotes'];
@@ -32,19 +33,26 @@ export const FEAST_SETTINGS_FIELDS = ['kcalGoal', 'proteinGoal', 'fatGoal', 'car
 // rewards (0.12) — опыт, монеты и 💎 за каждую запись продукта; не задано — по умолчанию из настроек
 // 0.12.5: каталог общий — продукты и лекарства (kind: 'food' | 'med'; нет поля — продукт). У лекарства: unit — форма
 // (MED_UNITS), dose — обычная доза; у продукта meds — лекарства, которые записываются вместе с ним ({ medId, amount }).
+// 0.13: третий вид — замер (kind: 'measure'): unit — свободный текст, parts — части значения, ranges — нормы;
+// у всех — desc (скрытое описание) и measures — замеры, которые предлагаются при записи ({ measureId }).
+// У лекарства могут быть КБЖУ, витамины и минералы — на 1 единицу формы (сироп, витамины).
 export const FOOD_FIELDS = ['name', 'brand', 'unit', 'servingName', 'servingSize', 'nutrients', 'favorite', 'note', 'rewards',
-  'kind', 'dose', 'meds', 'deletedAt'];
+  'kind', 'dose', 'meds', 'parts', 'ranges', 'desc', 'measures', 'icon', 'deletedAt'];
 // Записи 0.11 хранили один продукт в своих полях (foodId, name, amount, unit, nutrients) — они читаются как есть;
 // с 0.12 продукты — во вложенном массиве items (сливается поэлементно), у записи — время и заметка.
 export const ENTRY_FIELDS = ['date', 'meal', 'time', 'note', 'deletedAt'];
 export const LEGACY_ENTRY_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients'];
 // order — порядок продуктов в записи (как добавляли), дробный ключ
 // note (0.12.4) — заметка к продукту в записи (например, сколько единиц инсулина); kind (0.12.5) — 'med' у лекарства
-export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'note', 'kind', 'deletedAt'];
+// values (0.13) — значения замера по частям (у давления два), amount = первое значение (для старых версий)
+export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'note', 'kind', 'values', 'deletedAt'];
 export const MEAL_FIELDS = ['name', 'icon', 'time', 'order', 'date', 'archived', 'deletedAt'];
 export const MEAL_NOTE_FIELDS = ['date', 'meal', 'text', 'deletedAt'];
-export const BODY_FIELDS = ['date', 'weightKg', 'waistCm', 'neckCm', 'hipCm', 'bodyFatPct', 'note', 'deletedAt'];
-export const DAY_ARCHIVE_FIELDS = ['date', 'count', 'totals', 'meals', 'foods', 'meds', 'rewards', 'deletedAt'];
+// 0.13: ещё обхваты — грудь, бицепс, бедро (для фигуры)
+export const BODY_FIELDS = ['date', 'weightKg', 'waistCm', 'neckCm', 'hipCm', 'chestCm', 'armCm', 'thighCm', 'bodyFatPct', 'note', 'deletedAt'];
+export const BODY_NUM_FIELDS = ['weightKg', 'waistCm', 'neckCm', 'hipCm', 'chestCm', 'armCm', 'thighCm', 'bodyFatPct'];
+export const DAY_ARCHIVE_FIELDS = ['date', 'count', 'totals', 'meals', 'foods', 'meds', 'measures', 'rewards', 'deletedAt'];
+export const DESC_MAX = 4000;
 
 export const FOOD_NAME_MAX = 120;
 export const MEAL_NAME_MAX = 40;
@@ -54,6 +62,12 @@ export const UNITS = [{ key: 'g', label: tr('граммы') }, { key: 'ml', labe
 /** Лекарство ли это (запись каталога или продукт записи). */
 export const isMed = (x) => x?.kind === 'med';
 const medUnit = (u) => (MED_UNIT[u] ? u : 'tab');
+export { isMeasure };
+const cleanMeasureLinks = (list) => (Array.isArray(list) ? list : [])
+  .filter((m) => m && typeof m.measureId === 'string' && m.measureId)
+  .map((m) => ({ measureId: m.measureId }))
+  .filter((m, i, a) => a.findIndex((x) => x.measureId === m.measureId) === i)
+  .slice(0, 20);
 const cleanMedLinks = (list) => (Array.isArray(list) ? list : [])
   .filter((m) => m && typeof m.medId === 'string' && m.medId)
   .map((m) => ({ medId: m.medId, amount: num(m.amount) || 1 }))
@@ -186,15 +200,19 @@ export function feastRewards(data) {
 
 // ---------- Продукты ----------
 
-export function newFood({ name, brand = '', unit = 'g', servingName = '', servingSize = null, nutrients = {}, note = '', barcodes = [], rewards = {}, kind = 'food', dose = null }, ctx) {
+export function newFood({ name, brand = '', unit = 'g', servingName = '', servingSize = null, nutrients = {}, note = '', barcodes = [], rewards = {}, kind = 'food', dose = null, parts = [], ranges = [], desc = '', icon = '' }, ctx) {
   const n = normalizeName(name);
   if (!n) throw new Error('newFood: пустое название');
   const med = kind === 'med';
+  const measure = kind === 'measure';
+  const ps = measure ? cleanParts(parts) : [];
   let f = create(uuidv7(ctx.now), {
     name: n,
     brand: normalizeName(brand),
-    unit: med ? medUnit(unit) : unit === 'ml' ? 'ml' : 'g',
+    unit: med ? medUnit(unit) : measure ? cleanUnit(unit) : unit === 'ml' ? 'ml' : 'g',
     ...(med ? { kind: 'med', dose: num(dose) || 1 } : {}),
+    ...(measure ? { kind: 'measure', parts: ps, ranges: cleanRanges(ranges, Math.max(1, ps.length)), icon: cleanIcon(icon) } : {}),
+    ...(String(desc || '').trim() ? { desc: String(desc).slice(0, DESC_MAX) } : {}),
     servingName: normalizeName(servingName).slice(0, 40),
     servingSize: num(servingSize) || null,
     nutrients: cleanNutrients(nutrients),
@@ -207,22 +225,26 @@ export function newFood({ name, brand = '', unit = 'g', servingName = '', servin
   return f;
 }
 
-/** Правка продукта: значения чистятся, название и бренд нормализуются. */
+/** Правка продукта, лекарства или замера: значения чистятся, название и бренд нормализуются. */
 export function editFood(food, changes, ctx) {
   const c = { ...changes };
   if ('rewards' in c) c.rewards = cleanRewards(c.rewards);
   if ('meds' in c) c.meds = cleanMedLinks(c.meds);
+  if ('measures' in c) c.measures = cleanMeasureLinks(c.measures);
   if ('dose' in c) c.dose = num(c.dose) || 1;
-  if (isMed(food) && 'unit' in c) {
-    c.unit = medUnit(c.unit);
-    return touch(food, c, ctx);
-  }
+  if ('desc' in c) c.desc = String(c.desc ?? '').slice(0, DESC_MAX);
+  if ('icon' in c) c.icon = cleanIcon(c.icon);
   if ('name' in c) c.name = normalizeName(c.name) || food.name;
   if ('brand' in c) c.brand = normalizeName(c.brand);
   if ('nutrients' in c) c.nutrients = cleanNutrients(c.nutrients);
   if ('servingSize' in c) c.servingSize = num(c.servingSize) || null;
   if ('servingName' in c) c.servingName = normalizeName(c.servingName).slice(0, 40);
-  if ('unit' in c) c.unit = c.unit === 'ml' ? 'ml' : 'g';
+  if ('unit' in c) c.unit = isMed(food) ? medUnit(c.unit) : isMeasure(food) ? cleanUnit(c.unit) : c.unit === 'ml' ? 'ml' : 'g';
+  if ('parts' in c) {
+    c.parts = cleanParts(c.parts);
+    if (!('ranges' in c)) c.ranges = cleanRanges(food.ranges, Math.max(1, c.parts.length));
+  }
+  if ('ranges' in c) c.ranges = cleanRanges(c.ranges, Math.max(1, ('parts' in c ? c.parts : food.parts || []).length));
   return touch(food, c, ctx);
 }
 
@@ -434,23 +456,32 @@ function nestedItem(fields, ctx) {
  * amount в граммах/мл. Быстрая запись без продукта — unit 'portion', amount — число порций, значения — на порцию.
  * snapshot — копия продукта другой записи («как вчера»).
  */
-export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null, note = null, med = null }) {
+export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null, note = null, med = null, measure = null, values = null }) {
   // награда — снимок на момент записи (правка продукта или настроек прошлые записи не меняет); заметка — если есть
   const text = cleanNote(note ?? snapshot?.note ?? '').trim() ? cleanNote(note ?? snapshot?.note) : '';
   const withRewards = (f, r) => {
     const out = hasRewards(r) ? { ...f, rewards: cleanRewards(r) } : f;
     return text ? { ...out, note: text } : out;
   };
-  // лекарство (0.12.5): без пищевой ценности и наград
+  const withNote = (out) => (text ? { ...out, note: text } : out);
+  // замер (0.13): значения по частям, без пищевой ценности и наград
+  const asMeasure = measure || (food && isMeasure(food)) ? (measure || food) : null;
+  if (asMeasure) {
+    const vs = cleanValues(values ?? amount, partCount(asMeasure)) || Array.from({ length: partCount(asMeasure) }, () => null);
+    return withNote({ foodId: asMeasure.id, kind: 'measure', name: asMeasure.name, amount: vs.find((v) => v != null) ?? 0, values: vs, unit: cleanUnit(asMeasure.unit), nutrients: {} });
+  }
+  // лекарство (0.12.5): без наград; 0.13 — может нести КБЖУ и витамины на 1 единицу формы
   const asMed = med || (food && isMed(food)) ? (med || food) : null;
   if (asMed) {
-    const out = { foodId: asMed.id, kind: 'med', name: asMed.name + (asMed.brand ? ` (${asMed.brand})` : ''), amount: num(amount) || num(asMed.dose) || 1, unit: medUnit(asMed.unit), nutrients: {} };
-    return text ? { ...out, note: text } : out;
+    return withNote({ foodId: asMed.id, kind: 'med', name: asMed.name + (asMed.brand ? ` (${asMed.brand})` : ''), amount: num(amount) || num(asMed.dose) || 1, unit: medUnit(asMed.unit), nutrients: cleanNutrients(asMed.nutrients || {}) });
   }
   if (snapshot) {
+    if (isMeasure(snapshot)) {
+      const vs = cleanValues(snapshot.values ?? snapshot.amount, Math.max(1, (snapshot.values || []).length)) || [null];
+      return withNote({ foodId: snapshot.foodId ?? null, kind: 'measure', name: normalizeName(snapshot.name) || tr('Замер'), amount: vs.find((v) => v != null) ?? 0, values: vs, unit: cleanUnit(snapshot.unit), nutrients: {} });
+    }
     if (isMed(snapshot)) {
-      const out = { foodId: snapshot.foodId ?? null, kind: 'med', name: normalizeName(snapshot.name) || tr('Лекарство'), amount: num(snapshot.amount) || 1, unit: medUnit(snapshot.unit), nutrients: {} };
-      return text ? { ...out, note: text } : out;
+      return withNote({ foodId: snapshot.foodId ?? null, kind: 'med', name: normalizeName(snapshot.name) || tr('Лекарство'), amount: num(snapshot.amount) || 1, unit: medUnit(snapshot.unit), nutrients: cleanNutrients(snapshot.nutrients || {}) });
     }
     return withRewards({
       foodId: snapshot.foodId ?? null, name: normalizeName(snapshot.name) || tr('Запись'),
@@ -519,10 +550,10 @@ export function entryItems(e) {
   return [{ id: e.id, createdAt: e.createdAt, foodId: e.foodId ?? null, name: e.name || tr('Запись'), amount: e.amount, unit: e.unit, nutrients: e.nutrients || {}, legacy: true }];
 }
 
-/** Название записи: продукт или «Творог, банан и ещё 2». */
+/** Название записи: продукт или «Творог, банан и ещё 2»; без продуктов (0.13) — «Заметка». */
 export function entryTitle(e) {
   const items = entryItems(e);
-  if (!items.length) return tr('Пустая запись');
+  if (!items.length) return entryNoteList(e).length ? tr('Заметка') : tr('Пустая запись');
   if (items.length === 1) return items[0].name;
   if (items.length <= 3) return items.map((x) => x.name).join(', ');
   return tr('{p0} и ещё {p1}', { p0: items.slice(0, 2).map((x) => x.name).join(', '), p1: items.length - 2 });
@@ -556,6 +587,16 @@ export function addItems(e, specs, ctx) {
 export function setItemNote(e, itemId, note, ctx) {
   const base = upgradeEntry(e, ctx);
   return touchNested(base, 'items', itemId, { note: cleanNote(note) }, ctx);
+}
+
+/** Значения замера в записи (0.13); amount — первое значение (для старых версий). */
+export function setItemValues(e, itemId, values, ctx) {
+  const base = upgradeEntry(e, ctx);
+  const it = (base.items || []).find((x) => x.id === itemId);
+  if (!it) return e;
+  const vs = cleanValues(values, Math.max(1, (it.values || []).length));
+  if (!vs) return e;
+  return touchNested(base, 'items', itemId, { values: vs, amount: vs.find((v) => v != null) ?? 0 }, ctx);
 }
 
 /** Изменить количество продукта в записи. */
@@ -671,10 +712,9 @@ export function foodUsage(data) {
 
 // ---------- Замеры ----------
 
-export function newBodyLog({ date, weightKg = null, waistCm = null, neckCm = null, hipCm = null, bodyFatPct = null, note = '' }, ctx) {
+export function newBodyLog({ date, note = '', ...values }, ctx) {
   return create(uuidv7(ctx.now), {
-    date, weightKg: num(weightKg) || null, waistCm: num(waistCm) || null, neckCm: num(neckCm) || null,
-    hipCm: num(hipCm) || null, bodyFatPct: num(bodyFatPct) || null, note: String(note || '').slice(0, 500),
+    date, ...Object.fromEntries(BODY_NUM_FIELDS.map((k) => [k, num(values[k]) || null])), note: String(note || '').slice(0, 500),
   }, BODY_FIELDS, ctx);
 }
 
@@ -743,8 +783,16 @@ export function archiveFor(date, entries, prev, ctx) {
   for (const k of Object.keys(meals)) meals[k] = Math.round(meals[k]);
   const foods = {};
   const meds = {};
+  const measures = {};
   for (const e of entries) {
     for (const it of entryItems(e)) {
+      if (isMeasure(it)) {
+        // показания замеров остаются в сводке целиком (до 30 в день на замер) — это история здоровья
+        const key = it.foodId || 'measure:' + it.name;
+        const m = measures[key] || (measures[key] = { name: it.name, unit: it.unit, readings: [] });
+        if (m.readings.length < 30) m.readings.push({ time: e.time || null, values: it.values || [it.amount], ...(it.note ? { note: it.note } : {}) });
+        continue;
+      }
       if (isMed(it)) {
         const key = it.foodId || 'med:' + it.name;
         const m = meds[key] || (meds[key] = { name: it.name, unit: it.unit, count: 0, amount: 0 });
@@ -770,16 +818,19 @@ export function archiveFor(date, entries, prev, ctx) {
     for (const [k, v] of Object.entries(foods)) pf[k] = pf[k] ? { ...pf[k], count: pf[k].count + v.count, kcal: pf[k].kcal + v.kcal } : v;
     const pmed = { ...(prev.meds || {}) };
     for (const [k, v] of Object.entries(meds)) pmed[k] = pmed[k] ? { ...pmed[k], count: pmed[k].count + v.count, amount: pmed[k].amount + v.amount } : v;
+    const pms = { ...(prev.measures || {}) };
+    for (const [k, v] of Object.entries(measures)) pms[k] = pms[k] ? { ...pms[k], readings: [...pms[k].readings, ...v.readings].slice(0, 60) } : v;
     return touch(prev, {
       count: (prev.count || 0) + entries.filter(hasFood).length,
       totals: round(addNutrients(prev.totals || {}, totals)),
       meals: pm,
       foods: pf,
       meds: pmed,
+      measures: pms,
       rewards,
     }, ctx);
   }
-  return create(archiveId(date), { date, count: entries.filter(hasFood).length, totals: round(totals), meals, foods, meds, rewards }, DAY_ARCHIVE_FIELDS, ctx);
+  return create(archiveId(date), { date, count: entries.filter(hasFood).length, totals: round(totals), meals, foods, meds, measures, rewards }, DAY_ARCHIVE_FIELDS, ctx);
 }
 
 // ---------- Статистика за период ----------
@@ -792,11 +843,11 @@ export function dailySeries(data, from, to) {
     return days.get(date);
   };
   for (const e of data.entries.values()) {
-    if (!isLiveEntry(e) || e.date < from || e.date > to || !hasFood(e)) continue;
+    if (!isLiveEntry(e) || e.date < from || e.date > to || !hasNutrition(e)) continue;
     const d = get(e.date);
     const n = entryNutrients(e);
     d.totals = addNutrients(d.totals, n);
-    d.count++;
+    if (hasFood(e)) d.count++;
     const m = e.meal || 'snack';
     d.meals[m] = (d.meals[m] || 0) + nv(n, 'kcal');
   }
@@ -810,8 +861,10 @@ export function dailySeries(data, from, to) {
   return [...days.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
 }
 
-/** Есть ли в записи еда (а не только лекарства). */
-export const hasFood = (e) => entryItems(e).some((it) => !isMed(it));
+/** Есть ли в записи еда (а не только лекарства, замеры или заметки). */
+export const hasFood = (e) => entryItems(e).some((it) => !isMed(it) && !isMeasure(it));
+/** Даёт ли запись калории или вещества (еда или лекарство с КБЖУ — сироп, витамины). */
+const hasNutrition = (e) => hasFood(e) || Object.keys(entryNutrients(e)).length > 0;
 
 /**
  * Лекарства за период [from, to] (0.12.5): по каждому — приёмы, сумма, дни, последний приём, ряд по дням; журнал приёмов.
@@ -820,10 +873,11 @@ export const hasFood = (e) => entryItems(e).some((it) => !isMed(it));
 export function medStats(data, from, to) {
   const meds = new Map();
   const log = [];
+  const extra = []; // приёмы из сводок дней (без времени) — для графиков по дням, месяцам и годам
   const get = (key, name, unit) => meds.get(key) || meds.set(key, { key, name, unit, count: 0, amount: 0, days: new Map(), last: '' }).get(key);
   for (const e of data.entries.values()) {
     if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
-    const foods = entryItems(e).filter((it) => !isMed(it)).map((it) => it.name);
+    const foods = entryItems(e).filter((it) => !isMed(it) && !isMeasure(it)).map((it) => it.name);
     for (const it of entryItems(e)) {
       if (!isMed(it)) continue;
       const m = get(it.foodId || 'med:' + it.name, it.name, it.unit);
@@ -844,6 +898,7 @@ export function medStats(data, from, to) {
       const m = get(key, v.name, v.unit);
       m.count += v.count || 0;
       m.amount += v.amount || 0;
+      extra.push({ date: a.date, key, count: v.count || 0, amount: v.amount || 0 });
       const d = m.days.get(a.date) || { date: a.date, count: 0, amount: 0 };
       d.count += v.count || 0;
       d.amount += v.amount || 0;
@@ -854,7 +909,85 @@ export function medStats(data, from, to) {
   const list = [...meds.values()].map((m) => ({ ...m, amount: Math.round(m.amount * 1000) / 1000, days: [...m.days.values()].sort((x, y) => (x.date < y.date ? -1 : 1)) }))
     .sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : 1));
   log.sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1));
-  return { meds: list, log, intakes: list.reduce((s, m) => s + m.count, 0), days: new Set(list.flatMap((m) => m.days.map((d) => d.date))).size };
+  return { meds: list, log, extra, intakes: list.reduce((s, m) => s + m.count, 0), days: new Set(list.flatMap((m) => m.days.map((d) => d.date))).size };
+}
+
+/**
+ * Показания замеров за период [from, to] (0.13): по каждому виду — показания по времени (с заметкой и едой записи),
+ * последнее, среднее, минимум и максимум по частям. Учитываются и сводки дней, удалённых лимитом хранения.
+ */
+export function measureStats(data, from, to) {
+  const types = new Map();
+  const get = (key, name, unit) => types.get(key) || types.set(key, { key, name, unit, readings: [] }).get(key);
+  for (const e of data.entries.values()) {
+    if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
+    const items = entryItems(e);
+    const foods = items.filter((it) => !isMed(it) && !isMeasure(it)).map((it) => it.name);
+    const meds = items.filter(isMed).map((it) => it.name);
+    for (const it of items) {
+      if (!isMeasure(it)) continue;
+      const t = get(it.foodId || 'measure:' + it.name, it.name, it.unit);
+      t.readings.push({ date: e.date, time: e.time || null, values: it.values || [it.amount], note: it.note || '', foods, meds, entryId: e.id, itemId: it.id, meal: e.meal });
+    }
+  }
+  for (const a of data.dayArchive.values()) {
+    if (a.deletedAt || a.date < from || a.date > to) continue;
+    for (const [key, v] of Object.entries(a.measures || {})) {
+      const t = get(key, v.name, v.unit);
+      for (const r of v.readings || []) t.readings.push({ date: a.date, time: r.time || null, values: r.values || [], note: r.note || '', foods: [], meds: [], entryId: null, archived: true });
+    }
+  }
+  const at = (r) => r.date + ' ' + (r.time || '');
+  const list = [...types.values()].map((t) => {
+    const readings = t.readings.sort((x, y) => (at(x) < at(y) ? -1 : at(x) > at(y) ? 1 : 0));
+    const parts = Math.max(1, ...readings.map((r) => r.values.length));
+    const stat = Array.from({ length: parts }, (_, i) => {
+      const vs = readings.map((r) => r.values[i]).filter((v) => Number.isFinite(v));
+      return vs.length ? { avg: vs.reduce((s, v) => s + v, 0) / vs.length, min: Math.min(...vs), max: Math.max(...vs) } : null;
+    });
+    return { ...t, readings, last: readings.at(-1) || null, stat, count: readings.length };
+  }).sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : 1));
+  return { types: list, count: list.reduce((s, t) => s + t.count, 0) };
+}
+
+/** Группировки графиков лекарств (0.13): по дням, месяцам, годам — по времени; по часам — суммарно за период по часу суток. */
+export const MED_GROUPS = ['day', 'month', 'hour', 'year'];
+
+/**
+ * Корзины графика лекарств: [{ key, label, title, values: { ключ лекарства: число } }].
+ * log — журнал приёмов (medStats().log, с временем), extra — приёмы из сводок дней ({ date, key, count, amount });
+ * metric — 'count' (приёмы) или 'amount' (количество в единицах лекарства).
+ */
+export function medBuckets({ log = [], extra = [], from, to, group = 'day', metric = 'count', keys = null }) {
+  const want = (k) => !keys || keys.includes(k);
+  const val = (x) => (metric === 'amount' ? x.amount || 0 : x.count ?? 1);
+  const buckets = new Map();
+  const order = [];
+  const ensure = (key, label, title) => {
+    if (!buckets.has(key)) {
+      buckets.set(key, { key, label, title, values: {} });
+      order.push(key);
+    }
+    return buckets.get(key);
+  };
+  if (group === 'hour') {
+    for (let h = 0; h < 24; h++) ensure(String(h).padStart(2, '0'), String(h), `${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59`);
+  } else if (group === 'day') {
+    for (let d = from; d <= to; d = addDays(d, 1)) ensure(d, `${+d.slice(8)}.${d.slice(5, 7)}`, d);
+  } else if (group === 'month') {
+    for (let d = from.slice(0, 7) + '-01'; d.slice(0, 7) <= to.slice(0, 7); d = addDays(d.slice(0, 7) + '-28', 4).slice(0, 7) + '-01') ensure(d.slice(0, 7), `${d.slice(5, 7)}.${d.slice(2, 4)}`, d.slice(0, 7));
+  } else {
+    for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) ensure(String(y), String(y), String(y));
+  }
+  const keyOf = (date, time) => (group === 'hour' ? (time ? time.slice(0, 2) : null) : group === 'day' ? date : group === 'month' ? date.slice(0, 7) : date.slice(0, 4));
+  const put = (k, medKey, v) => {
+    const b = k && buckets.get(k);
+    if (!b) return;
+    b.values[medKey] = Math.round(((b.values[medKey] || 0) + v) * 1000) / 1000;
+  };
+  for (const l of log) if (want(l.key)) put(keyOf(l.date, l.time), l.key, val({ count: 1, amount: l.amount }));
+  if (group !== 'hour') for (const x of extra) if (want(x.key)) put(keyOf(x.date, null), x.key, val(x));
+  return order.map((k) => buckets.get(k));
 }
 
 /** Самый ранний день с записями (или сводкой). */

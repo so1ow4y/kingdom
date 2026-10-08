@@ -22,6 +22,7 @@ export function bodyState(today = store.now.today) {
   const p = {
     sex: s.sex, age, heightCm: s.heightCm, weightKg: weight?.value ?? null, activity: s.activity, activities: s.activities, goal: s.goal,
     waistCm: last('waistCm')?.value ?? null, neckCm: last('neckCm')?.value ?? null, hipCm: last('hipCm')?.value ?? null,
+    chestCm: last('chestCm')?.value ?? null, armCm: last('armCm')?.value ?? null, thighCm: last('thighCm')?.value ?? null,
     bodyFatPct: (() => {
       // замер процента жира действует, только если он не старше последнего взвешивания
       const bf = last('bodyFatPct');
@@ -64,7 +65,7 @@ function CustomActivities({ s, ro, base }) {
       <label class="field"><span>Описание</span><input value=${hint} maxlength="80" placeholder="необязательно: что за нагрузка"
         onInput=${(e) => setHint(e.target.value)}/></label>
       <p class="muted small">Сколько калорий в день уходит на движение помимо базового обмена${base ? tr(' ({base} ккал в покое)', { base }) : ''}: например,
-        «Лёгкая активность» сейчас — +${base ? B.activityBurn(B.ACTIVITY[1], base) : '…'} ккал. Значение — от 0 до ${B.ACTIVITY_KCAL_MAX}.</p>
+        «Лёгкая активность» сейчас — +${base ? B.activityBurn(B.ACTIVITY.find((a) => a.key === 'light'), base) : '…'} ккал. Значение — от 0 до ${B.ACTIVITY_KCAL_MAX}.</p>
       <div class="form-actions">
         <button type="button" class="btn ghost" onClick=${() => setOpen(false)}>Отмена</button>
         <button type="submit" class="btn primary" disabled=${ro || !name.trim() || !String(kcal).trim()}>Добавить и выбрать</button>
