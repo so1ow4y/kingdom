@@ -1,7 +1,7 @@
 // Медиа (обновление 0.5; docs/TZ.md §10, DATA_FORMAT §5.5, §13): типы файлов, ссылки, сборка мусора. Чистые функции.
 
 import { liveAttachments } from './model.js';
-import { tr } from './i18n.js';
+import { tr, dec } from './i18n.js';
 
 const EXT_BY_MIME = {
   'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif',
@@ -38,7 +38,7 @@ export function formatBytes(n) {
     v /= 1024;
     i++;
   }
-  return `${v < 10 ? v.toFixed(1).replace('.', ',') : Math.round(v)} ${units[i]}`;
+  return `${v < 10 ? dec(v.toFixed(1)) : Math.round(v)} ${units[i]}`;
 }
 
 /** «0:42», «12:05», «1:02:03». */

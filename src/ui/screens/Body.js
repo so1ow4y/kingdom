@@ -17,11 +17,11 @@ import * as F from '../../core/feast.js';
 import * as B from '../../core/body.js';
 import { addDays, longDate } from '../../core/dates.js';
 import { SCHEMES, getAppPrefs } from '../prefs.js';
-import { tr } from '../../core/i18n.js';
+import { tr, locale } from '../../core/i18n.js';
 
 export { bodyState };
 
-const f1 = (v) => (Number.isFinite(v) ? v.toLocaleString('ru-RU', { maximumFractionDigits: 1 }) : '—');
+const f1 = (v) => (Number.isFinite(v) ? v.toLocaleString(locale(), { maximumFractionDigits: 1 }) : '—');
 
 
 /** Процент жира на каждый день со взвешиванием (для графика). */

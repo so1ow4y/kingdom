@@ -22,7 +22,7 @@ import { normalizeBarcode, barcodeWarning } from '../../core/barcode.js';
 import { humanDate } from '../../core/dates.js';
 import { foldYo } from '../../core/query.js';
 import { openFood } from '../router.js';
-import { tr } from '../../core/i18n.js';
+import { tr, dec } from '../../core/i18n.js';
 
 const readOnly = () => !!store.ui.feastReadOnly;
 /** autofocus у вставленных позже элементов браузер не выполняет — фокусируем сами, один раз. */
@@ -137,7 +137,7 @@ function LinkedMeds({ food, picked, setPicked }) {
       return html`<label class="lm-row" key=${l.medId}>
         <input type="checkbox" checked=${on} onChange=${(e) => setPicked({ ...picked, [l.medId]: e.target.checked ? l.amount : null })}/>
         <span>💊 ${l.med.name}</span>
-        <input class="lm-amount" inputmode="decimal" value=${String(on ? picked[l.medId] : l.amount).replace('.', ',')} disabled=${!on}
+        <input class="lm-amount" inputmode="decimal" value=${dec(on ? picked[l.medId] : l.amount)} disabled=${!on}
           aria-label=${tr('Сколько: ') + l.med.name} onInput=${(e) => setPicked({ ...picked, [l.medId]: num(e.target.value) })}/>
         <small class="muted">${MED_UNIT[l.med.unit]?.short || ''}</small>
       </label>`;
@@ -153,7 +153,7 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
   const med = F.isMed(food);
   const serving = med ? null : F.servingOf(food);
   const usage = F.foodUsage(store.feast).get(food.id);
-  const [amount, setAmount] = useState(String(usage?.amount ?? (med ? food.dose || 1 : serving ?? 100)).replace('.', ','));
+  const [amount, setAmount] = useState(dec(usage?.amount ?? (med ? food.dose || 1 : serving ?? 100)));
   const [itemNote, setItemNote] = useState('');
   const [noteOpen, setNoteOpen] = useState(false);
   const [picked, setPicked] = useState(() => Object.fromEntries((food.meds || []).map((l) => [l.medId, l.amount])));
@@ -194,7 +194,7 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
       <span class="muted">${macroLine(n)}</span>
       ${store.data.settings?.gameEnabled ? html`<span class="muted">Награда: ${rewardLine(F.rewardsOf(food, store.feast.settings)) || tr('нет')}</span>` : null}`}
       ${total !== null ? html`<span class="muted">Вся запись: ${countLabel(basket.length + 1, ['позиция', 'позиции', 'позиций'])} · ${fmt(total, 'kcal')} ккал</span>` : null}
-      ${entryMode ? null : html`<span class="muted">${humanDate(meta.date, store.now.today)} · ${meta.time || ''} · ${F.mealInfo(store.feast, meta.meal).name}</span>`}
+      ${entryMode ? null : html`<span class="muted">${humanDate(meta.date, store.now.today)} · ${meta.time || ''} · ${F.mealName(F.mealInfo(store.feast, meta.meal))}</span>`}
     </div>
     <div class="sheet-actions">
       <button type="button" class="btn" onClick=${onBack}>Назад</button>

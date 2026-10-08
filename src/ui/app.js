@@ -77,7 +77,7 @@ function titleFor(route) {
     case 'meals': return tr('Рационы');
     case 'meal': {
       const m = store.feast.meals.get(route.param);
-      return m && !m.deletedAt ? `${m.icon} ${m.name}` : tr('Рацион');
+      return m && !m.deletedAt ? `${m.icon} ${F.mealName(m)}` : tr('Рацион');
     }
     default: return SUITE_NAME;
   }

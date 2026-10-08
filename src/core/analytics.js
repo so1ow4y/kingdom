@@ -6,6 +6,7 @@ import { doneByDay, streaks } from './game.js';
 import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 import { tr } from './i18n.js';
+import { priorityLabel } from './priorities.js';
 
 export const PERIODS = [
   { id: '7d', label: tr('7 дней'), days: 7 },
@@ -97,7 +98,7 @@ export function analyze(data, tz, today, from, to) {
   }).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'ru'));
   const byPriority = [...pri].map(([id, n]) => {
     const p = data.priorities.get(id);
-    return { id, name: p?.name || tr('Без приоритета'), color: p?.color || '#9E9E9E', n, order: p?.order || '' };
+    return { id, name: priorityLabel(p) || tr('Без приоритета'), color: p?.color || '#9E9E9E', n, order: p?.order || '' };
   }).sort((a, b) => (a.order < b.order ? 1 : -1));
 
   return {

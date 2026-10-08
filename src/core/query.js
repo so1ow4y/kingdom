@@ -8,6 +8,8 @@
 // Приоритет: NOT, затем AND, затем OR. Поля задаёт вызывающий; неизвестное поле — ошибка, а не тихий поиск
 // по тексту. Сервера у LifeTasks нет, поэтому дерево не переводится в SQL, а проверяется на каждой задаче.
 
+import { tr } from './i18n.js';
+
 const MAX_TERMS = 30;
 const MAX_VALUE = 200;
 const MAX_DEPTH = 10;
@@ -99,7 +101,7 @@ export function parseQuery(q, fields = {}) {
   const tokens = tokenize(q || '');
   let pos = 0;
   let terms = 0;
-  const syntax = (message) => new QueryError('SEARCH_SYNTAX', `Ошибка в запросе: ${message}`);
+  const syntax = (message) => new QueryError('SEARCH_SYNTAX', tr('Ошибка в запросе: {message}', { message }));
 
   function parseOr(depth) {
     const nodes = [];
@@ -108,7 +110,7 @@ export function parseQuery(q, fields = {}) {
     while (tokens[pos]?.kind === 'or') {
       pos++;
       const next = parseAnd(depth);
-      if (!next) throw syntax('после OR нужно условие');
+      if (!next) throw syntax(tr('после OR нужно условие'));
       nodes.push(next);
     }
     if (!nodes.length) return null;
@@ -132,19 +134,19 @@ export function parseQuery(q, fields = {}) {
   }
 
   function parseUnary(depth) {
-    if (depth > MAX_DEPTH) throw syntax('слишком глубокая вложенность скобок');
+    if (depth > MAX_DEPTH) throw syntax(tr('слишком глубокая вложенность скобок'));
     const token = tokens[pos];
     if (!token) return null;
     if (token.kind === 'not') {
       pos++;
       const node = parseUnary(depth + 1);
-      if (!node) throw syntax('после NOT нужно условие');
+      if (!node) throw syntax(tr('после NOT нужно условие'));
       return { type: 'not', node };
     }
     if (token.kind === 'lparen') {
       pos++;
       const node = parseOr(depth + 1);
-      if (tokens[pos]?.kind !== 'rparen') throw syntax('не закрыта скобка');
+      if (tokens[pos]?.kind !== 'rparen') throw syntax(tr('не закрыта скобка'));
       pos++;
       return node;
     }
@@ -154,18 +156,18 @@ export function parseQuery(q, fields = {}) {
       if (token.field) {
         field = alias.get(token.field.toLowerCase()) || null;
         if (!field) {
-          throw new QueryError('SEARCH_FIELD_UNKNOWN', `Неизвестное поле «${token.field}». Доступны: ${Object.keys(fields).join(', ')}`);
+          throw new QueryError('SEARCH_FIELD_UNKNOWN', tr('Неизвестное поле «{field}». Доступны: {list}', { field: token.field, list: Object.keys(fields).join(', ') }));
         }
       }
-      if (!token.value) throw syntax(`у поля ${token.field} нет значения`);
-      if (++terms > MAX_TERMS) throw syntax(`не больше ${MAX_TERMS} условий`);
+      if (!token.value) throw syntax(tr('у поля {field} нет значения', { field: token.field }));
+      if (++terms > MAX_TERMS) throw syntax(tr('не больше {MAX_TERMS} условий', { MAX_TERMS }));
       return { type: 'term', term: { field, value: token.value } };
     }
-    throw syntax('лишняя закрывающая скобка');
+    throw syntax(tr('лишняя закрывающая скобка'));
   }
 
   const root = parseOr(0);
-  if (pos < tokens.length) throw syntax('лишняя закрывающая скобка');
+  if (pos < tokens.length) throw syntax(tr('лишняя закрывающая скобка'));
   return root;
 }
 

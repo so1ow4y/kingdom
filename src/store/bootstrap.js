@@ -55,7 +55,7 @@ async function openFeast() {
     return { repo, loaded };
   } catch (e) {
     console.error('Feast', e);
-    setUi({ feastReadOnly: tr('Не открылась локальная база Crimson Harvest: {p0}. Задачи работают как обычно.', { p0: e?.message || e }) });
+    setUi({ feastLocalBroken: true, feastReadOnly: tr('Не открылась локальная база Crimson Harvest: {p0}. Задачи работают как обычно.', { p0: e?.message || e }) });
     return null;
   }
 }

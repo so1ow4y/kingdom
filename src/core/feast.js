@@ -312,6 +312,11 @@ export function editMeal(meal, changes, ctx) {
   return touch(meal, c, ctx);
 }
 
+// 0.12.5: стандартные рационы, которые не переименовывали, показываются на языке интерфейса
+const DEFAULT_MEAL_RU = { breakfast: 'Завтрак', lunch: 'Обед', dinner: 'Ужин', snack: 'Перекус' };
+/** Название рациона для показа. */
+export const mealName = (m) => (m && DEFAULT_MEAL_RU[m.id] === m.name ? tr(m.name) : m?.name || '');
+
 /** Все живые общие рационы по порядку (и скрытые — для настроек). */
 export const globalMeals = (data) => [...data.meals.values()].filter((m) => !m.deletedAt && !m.date).sort(byOrder);
 

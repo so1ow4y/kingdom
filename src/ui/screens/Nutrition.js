@@ -16,12 +16,12 @@ import * as F from '../../core/feast.js';
 import { NUTRIENTS, NUTRIENT, MACROS, nv, fmt, rdiPct, amountLabel } from '../../core/nutrition.js';
 import { addDays, longDate, humanDate, daysBetween } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
-import { tr } from '../../core/i18n.js';
+import { tr, locale } from '../../core/i18n.js';
 
 const PERIODS = [['7', tr('7 дней')], ['30', tr('30 дней')], ['90', tr('3 месяца')], ['365', tr('Год')], ['all', tr('Всё время')]];
-const num = (v) => Math.round(v).toLocaleString('ru-RU');
+const num = (v) => Math.round(v).toLocaleString(locale());
 
-function FoodTop({ title, list, value }) {
+function FoodTop({ title, list, value, kcal = false }) {
   if (!list.length) return null;
   const max = Math.max(1, ...list.map(value));
   return html`<div class="ex-card">
@@ -29,7 +29,7 @@ function FoodTop({ title, list, value }) {
     <ul class="ex-facet-list">${list.map((f) => html`<li key=${f.key} class="ex-facet">
       <span class="ex-facet-bar" style=${{ width: (value(f) / max) * 100 + '%' }}></span>
       <span class="ex-facet-value static" title=${f.name}>${f.name}</span>
-      <span class="ex-facet-count">${title.includes('калор') ? num(f.kcal) + tr(' ккал') : countLabel(f.count, ['раз', 'раза', 'раз'])}</span>
+      <span class="ex-facet-count">${kcal ? num(f.kcal) + tr(' ккал') : countLabel(f.count, ['раз', 'раза', 'раз'])}</span>
     </li>`)}</ul>
   </div>`;
 }
@@ -91,7 +91,7 @@ function FoodTab() {
         })}</div>` : html`<p class="muted small">У продуктов пока не указаны витамины и минералы — заполни их в карточках, и здесь появятся проценты от нормы.</p>`}
       </section>
       <div class="foods-tops">
-        <${FoodTop} title="Больше всего калорий дали" list=${st.topByKcal} value=${(f) => f.kcal}/>
+        <${FoodTop} kcal title="Больше всего калорий дали" list=${st.topByKcal} value=${(f) => f.kcal}/>
         <${FoodTop} title="Чаще всего в дневнике" list=${st.topByCount} value=${(f) => f.count}/>
       </div>`}`;
 }

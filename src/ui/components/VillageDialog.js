@@ -17,7 +17,7 @@ import { LOOKS } from '../../village/chibi.js';
 import { affinityOf } from '../../core/skills.js';
 import { happiness } from '../../core/village.js';
 import { doneEntries } from '../../core/retention.js';
-import { localDateOf, humanDate, dayLabel } from '../../core/dates.js';
+import { localDateOf, dayLabel, daysBetween } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { getFocus } from '../../store/focus.js';
 import { navigate } from '../router.js';
@@ -187,7 +187,7 @@ function groupLabel(g, today) {
   if (g.key === 'today') return tr('Сегодня');
   if (g.key === 'none') return tr('Без даты');
   const year = g.date.slice(0, 4) !== today.slice(0, 4) ? ' ' + g.date.slice(0, 4) : '';
-  return (humanDate(g.date, today) === 'Завтра' ? tr('Завтра · ') : '') + dayLabel(g.date) + year;
+  return (daysBetween(today, g.date) === 1 ? tr('Завтра · ') : '') + dayLabel(g.date) + year;
 }
 const PICK_LIMIT = 60;
 

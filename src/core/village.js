@@ -340,7 +340,7 @@ export function canBuy(data, item, coinBalance) {
   if (item.legacy) return { ok: false, reason: tr('Больше не продаётся') };
   const owned = ownedVillage(data);
   if (!item.repeatable && owned.has(item.id)) return { ok: false, reason: tr('Уже есть') };
-  if (item.requires && !owned.has(item.requires)) return { ok: false, reason: tr('Сначала: {p0}', { p0: villageItem(item.requires)?.name }) };
+  if (item.requires && !owned.has(item.requires)) return { ok: false, locked: true, reason: tr('Сначала: {p0}', { p0: villageItem(item.requires)?.name }) };
   const p = priceOf(data, item);
   if (p.gems && gemBalance(data) < p.gems) return { ok: false, reason: tr('Не хватает {p0} 💎', { p0: p.gems - gemBalance(data) }) };
   if (p.coins && coinBalance < p.coins) return { ok: false, reason: tr('Не хватает {p0} 🪙', { p0: p.coins - coinBalance }) };

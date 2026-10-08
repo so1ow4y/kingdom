@@ -14,6 +14,7 @@ import { VillageShopPanel } from './Village.js';
 import { DecorationSettings } from '../components/Decorations.js';
 import { gemBalance } from '../../core/village.js';
 import { tr } from '../../core/i18n.js';
+import { priorityLabel } from '../../core/priorities.js';
 
 const TABS = [['rewards', tr('Награды')], ['village', tr('🏡 Деревня')], ['cosmetics', tr('Цвета')], ['achievements', tr('Достижения')], ['history', tr('История')]];
 const EMOJI = ['🎁', '🍕', '📺', '🎮', '☕', '🍰', '🛌', '🎬', '📚', '🛍', '🏖', '🎧'];
@@ -238,7 +239,7 @@ export function GameSettingsSection() {
       </label>
       ${s.gameEnabled ? html`
         <div class="field-label">Монеты за приоритеты</div>
-        <div class="chip-row wrap">${prios.map((p) => html`<span class="chip"><i class="dot" style=${{ background: p.color }}></i>${p.name} · ${p.coins} 🪙</span>`)}</div>
+        <div class="chip-row wrap">${prios.map((p) => html`<span class="chip"><i class="dot" style=${{ background: p.color }}></i>${priorityLabel(p)} · ${p.coins} 🪙</span>`)}</div>
         <a class="link-btn" href="#/settings?section=priorities">Изменить в «Приоритетах»</a>
         <details class="rules">
           <summary>Правила</summary>

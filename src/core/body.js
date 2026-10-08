@@ -6,7 +6,7 @@
 
 import { addDays, daysBetween } from './dates.js';
 import { MACROS, KCAL_PER_G, DEFAULT_MACRO_PCT, gramsFromPct } from './nutrition.js';
-import { tr } from './i18n.js';
+import { tr, dec } from './i18n.js';
 
 export const SEXES = [
   { key: 'male', label: tr('Мужской') },
@@ -75,7 +75,7 @@ export function activityBurn(a, base) {
 /** Подпись активности для списка: «… · +620 ккал в день» (или коэффициент, пока обмен не посчитан). */
 export function activityLabel(a, base) {
   const burn = activityBurn(a, base);
-  const tail = burn != null ? tr('+{burn} ккал в день', { burn }) : tr('обмен × {p0}', { p0: String(a.factor).replace('.', ',') });
+  const tail = burn != null ? tr('+{burn} ккал в день', { burn }) : tr('обмен × {p0}', { p0: dec(a.factor) });
   return `${a.label}${a.hint ? ' — ' + a.hint : ''} · ${tail}`;
 }
 
@@ -153,7 +153,7 @@ export function calcGoals(p, settings = {}) {
   const carbs = Math.max(0, Math.floor((kcal - protein * KCAL_PER_G.protein - fat * KCAL_PER_G.fat) / KCAL_PER_G.carbs));
   const grams = { protein, fat, carbs };
   for (const m of MACROS) grams[m] = Math.max(0, grams[m]);
-  const n = (v) => String(v).replace('.', ',');
+  const n = (v) => dec(v);
   return { kcal, grams, why: tr('белок {p0} г на кг ({p1} кг), жир ≈ {p2} г на кг, углеводы — остальное', { p0: n(perKg), p1: n(Math.round(kg * 10) / 10), p2: n(FAT_PER_KG) }) };
 }
 

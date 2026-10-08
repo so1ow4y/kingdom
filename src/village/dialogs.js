@@ -5,7 +5,7 @@
 
 import { STAGES, roman, MAX_LEVEL } from '../core/skills.js';
 import { countLabel } from '../core/plural.js';
-import { tr } from '../core/i18n.js';
+import { tr, LANG } from '../core/i18n.js';
 
 /** Жители из магазина: имя, кто такой, пол (для «рад/рада»), характер. */
 export const RESIDENTS = {
@@ -195,7 +195,7 @@ export function talkTree(ctx) {
 
 /** Подпись под именем: «Подмастерье · «Универ»» или «шахтёр». */
 export function whoTitle(w) {
-  if (w.keeper) return `${STAGES[w.stage || 0][w.gender]} · «${w.listName}»`;
+  if (w.keeper) return `${STAGES[w.stage || 0][w.gender]} · ${LANG === 'en' ? `“${w.listName}”` : `«${w.listName}»`}`;
   return RESIDENTS[w.kind]?.title || '';
 }
 

@@ -464,7 +464,7 @@ export async function createMeal({ name, icon, time = null, date = null, onlyDay
   const m = F.newMeal({ name, icon, time, order: F.orderAfter(list, after), date: onlyDay ? date : null }, ctx());
   const changes = [{ coll: 'meals', prev: undefined, next: m }];
   if (await commit(changes)) {
-    offerUndo(tr('Рацион «{name}» {p1}', { name: m.name, p1: m.date ? tr('добавлен на этот день') : tr('добавлен') }), changes);
+    offerUndo(tr('Рацион «{name}» {p1}', { name: F.mealName(m), p1: m.date ? tr('добавлен на этот день') : tr('добавлен') }), changes);
     return m;
   }
   return null;
@@ -497,7 +497,7 @@ export async function deleteMeal(id) {
   const entries = [...D().entries.values()].filter((e) => !e.deletedAt && e.meal === id);
   if (entries.length) {
     const ok = await confirm({
-      title: tr('Удалить рацион «{name}»?', { name: m.name }),
+      title: tr('Удалить рацион «{name}»?', { name: F.mealName(m) }),
       text: tr('В нём {p0} — они удалятся вместе с ним. Можно будет отменить.', { p0: countLabel(entries.length, ['запись', 'записи', 'записей']) }),
       confirmLabel: tr('Удалить'),
       danger: true,
@@ -509,7 +509,7 @@ export async function deleteMeal(id) {
   for (const e of entries) changes.push({ coll: 'entries', prev: e, next: tombstone(e, c0) });
   for (const n of D().mealNotes.values()) if (!n.deletedAt && n.meal === id) changes.push({ coll: 'mealNotes', prev: n, next: tombstone(n, c0) });
   if (await commit(changes)) {
-    offerUndo(tr('Рацион «{name}» удалён', { name: m.name }), changes);
+    offerUndo(tr('Рацион «{name}» удалён', { name: F.mealName(m) }), changes);
     return true;
   }
   return false;

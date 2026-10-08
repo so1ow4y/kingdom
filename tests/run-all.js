@@ -6,6 +6,7 @@ await run([
   './order.test.js',
   './dates.test.js',
   './plural.test.js',
+  './i18n.test.js',
   './canonical.test.js',
   './model.test.js',
   './selectors.test.js',

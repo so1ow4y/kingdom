@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.12.4';
+const VERSION = '0.12.5';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -25,6 +25,8 @@ const PRECACHE = [
   './src/core/feast.js',
   './src/core/foodQuery.js',
   './src/core/game.js',
+  './src/core/i18n.en.js',
+  './src/core/i18n.js',
   './src/core/ids.js',
   './src/core/media.js',
   './src/core/merge.js',
@@ -147,7 +149,7 @@ const PRECACHE = [
   './src/village/draw.js',
   './src/village/keepers.js',
   './src/village/map.js',
-  './src/village/portrait96.js',
+  './src/village/portrait128.js',
   './src/village/portraits.js',
   './src/village/puppets.js',
   './src/village/runtime.js',

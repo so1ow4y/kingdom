@@ -5,7 +5,7 @@
 // поэтому работают при любой раскладке: «N» — это та же кнопка, что «Т».
 
 import { getPrefs, setPrefs } from './prefs.js';
-import { tr } from '../core/i18n.js';
+import { tr, LANG } from '../core/i18n.js';
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
@@ -98,10 +98,10 @@ const CODE_LABEL = {
 };
 /** Та же кнопка в русской раскладке (ЙЦУКЕН) — подсказка рядом с латинской буквой. */
 const RU = {
-  KeyQ: tr('Й'), KeyW: tr('Ц'), KeyE: tr('У'), KeyR: tr('К'), KeyT: tr('Е'), KeyY: tr('Н'), KeyU: tr('Г'), KeyI: tr('Ш'), KeyO: tr('Щ'), KeyP: tr('З'),
-  BracketLeft: tr('Х'), BracketRight: tr('Ъ'), KeyA: tr('Ф'), KeyS: tr('Ы'), KeyD: tr('В'), KeyF: tr('А'), KeyG: tr('П'), KeyH: tr('Р'), KeyJ: tr('О'),
-  KeyK: tr('Л'), KeyL: tr('Д'), Semicolon: tr('Ж'), Quote: tr('Э'), KeyZ: tr('Я'), KeyX: tr('Ч'), KeyC: tr('С'), KeyV: tr('М'), KeyB: tr('И'), KeyN: tr('Т'),
-  KeyM: tr('Ь'), Comma: tr('Б'), Period: tr('Ю'), Backquote: tr('Ё'),
+  KeyQ: 'Й', KeyW: 'Ц', KeyE: 'У', KeyR: 'К', KeyT: 'Е', KeyY: 'Н', KeyU: 'Г', KeyI: 'Ш', KeyO: 'Щ', KeyP: 'З',
+  BracketLeft: 'Х', BracketRight: 'Ъ', KeyA: 'Ф', KeyS: 'Ы', KeyD: 'В', KeyF: 'А', KeyG: 'П', KeyH: 'Р', KeyJ: 'О',
+  KeyK: 'Л', KeyL: 'Д', Semicolon: 'Ж', Quote: 'Э', KeyZ: 'Я', KeyX: 'Ч', KeyC: 'С', KeyV: 'М', KeyB: 'И', KeyN: 'Т',
+  KeyM: 'Ь', Comma: 'Б', Period: 'Ю', Backquote: 'Ё',
 };
 const MOD_LABEL = IS_MAC ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win' };
 
@@ -127,7 +127,7 @@ export const formatCombo = (combo) => comboParts(combo).join(IS_MAC ? '' : ' + '
 export function ruLetter(combo) {
   if (!combo) return '';
   const code = combo.split('+').pop();
-  return RU[code] || '';
+  return LANG === 'en' ? '' : RU[code] || ''; // подсказка русской раскладки — только в русском интерфейсе
 }
 
 // ---------- Назначения ----------

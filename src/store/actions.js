@@ -1231,7 +1231,7 @@ export async function upgradeVillageObject(key) {
     return false;
   }
   const item = V.villageItem(obj.itemId);
-  const name = (item?.name || tr('Постройка')).replace(/ · ур\. \d$/, '');
+  const name = (item?.name || tr('Постройка')).replace(/ · (ур\.|lvl) \d$/, '');
   const gems = nu.price.gems || 0;
   const price = nu.price.coins || 0;
   const cost = gems ? `${gems} 💎` : `${price} 🪙`;
@@ -1270,7 +1270,7 @@ export async function sellVillageObject(key) {
     return false;
   }
   const item = V.villageItem(plan.obj.itemId);
-  const name = item?.name.replace(/ · ур\. \d$/, '') || tr('объект');
+  const name = item?.name.replace(/ · (ур\.|lvl) \d$/, '') || tr('объект');
   const back = [plan.coins ? `${plan.coins} 🪙` : '', plan.gems ? `${plan.gems} 💎` : ''].filter(Boolean).join(tr(' и ')) || tr('ничего');
   const ok = await confirm({ title: tr('Продать «{name}»?', { name }), text: tr('Вернётся {back}.', { back }), confirmLabel: tr('Продать') });
   if (!ok) return false;

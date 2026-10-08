@@ -14,7 +14,7 @@ import * as S from '../../core/selectors.js';
 import { normalizeTitle } from '../../core/model.js';
 import { humanDate, formatMoment } from '../../core/dates.js';
 import * as RP from '../../core/repeat.js';
-import { PRIORITY_NONE_ID } from '../../core/priorities.js';
+import { PRIORITY_NONE_ID, priorityLabel } from '../../core/priorities.js';
 import { LIMITS, TIMINGS } from '../../config.js';
 import { tr } from '../../core/i18n.js';
 
@@ -157,7 +157,7 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
           label=${t.repeat ? `${RP.describeRule(t.repeat)}${t.status === 'done' ? '' : ' · ' + (humanDate(RP.dueDate(t, today, tz) || today, today).toLowerCase())}${t.scheduledTime ? ' ' + t.scheduledTime : ''}` : tr('Повтор')}
           onClick=${() => openSheet('repeat', { taskId })} disabled=${locked}/>
         <${Chip} icon=${html`<i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i>`}
-          active=${prio && prio.id !== PRIORITY_NONE_ID} label=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : tr('Приоритет')}
+          active=${prio && prio.id !== PRIORITY_NONE_ID} label=${prio && prio.id !== PRIORITY_NONE_ID ? priorityLabel(prio) : tr('Приоритет')}
           onClick=${(e) => openSheet('priority', { taskId, anchor: anchorOf(e) })} disabled=${locked}/>
         ${!done && (!parent || focusedToday) ? html`<${Chip} icon=${html`<${Icon} name="star" filled=${focusedToday} size=${16}/>`} active=${focusedToday}
           tone=${focusedToday ? 'star-on' : ''} label=${focusedToday ? tr('Главное') : tr('В главное')}

@@ -20,7 +20,7 @@ import { countLabel } from '../../core/plural.js';
 import { useSelection } from '../components/Explorer.js';
 import { NutrientEditor, NutrientTable, macroLine, RewardEditor } from '../components/FeastParts.js';
 import { openAddFood } from '../components/AddFood.js';
-import { tr } from '../../core/i18n.js';
+import { tr, dec } from '../../core/i18n.js';
 
 const PAGE = 50;
 const SYNTAX = tr('· * — подстановка · пробел — оба условия · OR — любое · - — исключить · числа: >200, <5, 100..300');
@@ -269,7 +269,7 @@ function LinkedMedsEditor({ f, ro }) {
     <h3 class="set-sub">Лекарства вместе с продуктом</h3>
     ${links.length ? html`<ul class="fc-meds">${links.map((l) => html`<li key=${l.medId}>
       <button type="button" class="link-btn" onClick=${() => openFood(l.medId)}>💊 ${l.med.name}</button>
-      <input class="lm-amount" inputmode="decimal" value=${String(l.amount).replace('.', ',')} disabled=${ro} aria-label=${tr('Доза: ') + l.med.name}
+      <input class="lm-amount" inputmode="decimal" value=${dec(l.amount)} disabled=${ro} aria-label=${tr('Доза: ') + l.med.name}
         onChange=${(e) => save(links.map((x) => (x.medId === l.medId ? { ...x, amount: num(e.target.value) || x.amount } : x)))}/>
       <small class="muted">${MED_UNIT[l.med.unit]?.short || ''}</small>
       <button type="button" class="icon-btn small" disabled=${ro} aria-label=${tr('Отвязать ') + l.med.name} data-hint="Отвязать"
@@ -295,7 +295,7 @@ function MedFields({ f, ro, set }) {
         <select value=${unit.key} disabled=${ro} onChange=${(e) => set({ unit: e.target.value })}>${MED_UNITS.map((u) => html`<option value=${u.key}>${u.label}</option>`)}</select></label>
     </div>
     <div class="field-row">
-      <${TextField} label=${tr('Обычная доза, {short}', { short: unit.short })} value=${String(f.dose || 1).replace('.', ',')} maxLength=${8} disabled=${ro} onCommit=${(v) => set({ dose: num(v) || 1 })}/>
+      <${TextField} label=${tr('Обычная доза, {short}', { short: unit.short })} value=${dec(f.dose || 1)} maxLength=${8} disabled=${ro} onCommit=${(v) => set({ dose: num(v) || 1 })}/>
     </div>
     <${AreaField} label="Заметка" value=${f.note} placeholder="Как принимать, назначение, что важно помнить…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>
     ${foods.length ? html`<p class="muted small">Предлагается вместе с: ${foods.map((x, i) => html`${i ? ', ' : ''}<button type="button" class="link-btn" key=${x.id} onClick=${() => openFood(x.id)}>${x.name}</button>`)}</p>` : null}`;

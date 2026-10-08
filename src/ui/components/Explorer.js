@@ -23,6 +23,7 @@ import { countLabel, plural } from '../../core/plural.js';
 import { openMenu } from './Popup.js';
 import { shortcutText } from '../keys.js';
 import { tr, locale } from '../../core/i18n.js';
+import { priorityLabel } from '../../core/priorities.js';
 
 const PAGE = 50;
 /** Сколько строк можно выбрать за раз (BULK_MAX license-store). */
@@ -224,7 +225,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
   });
   const prioMenu = (e, ids = selection.ids) => openMenu({
     anchor: e.currentTarget, side: 'bottom', align: 'start', title: tr('Приоритет'), viaKeyboard: e.detail === 0,
-    items: S.sortedPriorities(store.data).map((p) => ({ label: p.name, color: p.color, onSelect: () => bulk('priority', p.id, ids) })),
+    items: S.sortedPriorities(store.data).map((p) => ({ label: priorityLabel(p), color: p.color, onSelect: () => bulk('priority', p.id, ids) })),
   });
 
   /** Кнопки действий: для полосы выбора (ids не задан) или для одной раскрытой строки. */
@@ -309,7 +310,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
                   <th></th><th></th><th class="ex-col-time"></th>
                   ${colFilters.map((f) => html`
                     <th key=${f} class=${f === 'список' ? 'ex-col-list' : f === 'приоритет' ? 'ex-col-prio' : ''}>
-                      <input class="ex-col-input" value=${columnDraft[f] ?? ''} placeholder=${f + '…'} aria-label=${tr('Фильтр: ') + f}
+                      <input class="ex-col-input" value=${columnDraft[f] ?? ''} placeholder=${fieldLabel(f) + '…'} aria-label=${tr('Фильтр: ') + fieldLabel(f)}
                         onInput=${(e) => setColumnDraft({ ...columnDraft, [f]: e.target.value })}
                         onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); setColumns({ ...columnDraft }); setSkip(0); } }}
                         onBlur=${() => { setColumns({ ...columnDraft }); }}/>

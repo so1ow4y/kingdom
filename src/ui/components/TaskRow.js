@@ -12,7 +12,7 @@ import * as S from '../../core/selectors.js';
 import { liveNotes, focusTotal } from '../../core/model.js';
 import { getFocus } from '../../store/focus.js';
 import { formatMinutes } from './Focus.js';
-import { PRIORITY_NONE_ID } from '../../core/priorities.js';
+import { PRIORITY_NONE_ID, priorityLabel } from '../../core/priorities.js';
 import { TIMINGS } from '../../config.js';
 import { DragHandle } from './Sortable.js';
 import { tr } from '../../core/i18n.js';
@@ -62,7 +62,7 @@ export function TaskMeta({ task, showList, showParent = false, index = null }) {
   }
   const prio = S.priorityOf(store.data, task);
   if (prio && prio.id !== PRIORITY_NONE_ID) {
-    parts.push(html`<span class="meta-prio" style=${{ color: prio.color }} title=${tr('Приоритет: ') + prio.name}><${Icon} name="flag" size=${13}/></span>`);
+    parts.push(html`<span class="meta-prio" style=${{ color: prio.color }} title=${tr('Приоритет: ') + priorityLabel(prio)}><${Icon} name="flag" size=${13}/></span>`);
   }
   if (index) {
     const pr = S.progressOf(store.data, task.id, index);

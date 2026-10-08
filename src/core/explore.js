@@ -8,6 +8,7 @@ import * as S from './selectors.js';
 import { liveNotes, liveAttachments } from './model.js';
 import { localDateOf, isoWeekday, addDays, WEEKDAY_SHORT, WEEKDAY_LONG } from './dates.js';
 import { LANG, tr } from './i18n.js';
+import { priorityLabel } from './priorities.js';
 import { describeRule, ruleCategory, CATEGORIES } from './repeat.js';
 
 /** Виды обозревателя: какие задачи, по какому времени, какие поля в топе. */
@@ -110,7 +111,7 @@ export function listNames(ctx, t) {
 }
 
 export function priorityName(data, t) {
-  return S.priorityOf(data, t)?.name || tr('Без приоритета');
+  return priorityLabel(S.priorityOf(data, t)) || tr('Без приоритета');
 }
 
 export function deviceName(data, id) {

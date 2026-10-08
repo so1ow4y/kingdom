@@ -77,7 +77,7 @@ function feastMenu() {
           items: [
             { title: tr('Все рационы'), icon: 'lists', to: '/meals', match: ['meals'], key: 'goMeals' },
             ...F.globalMeals(store.feast).filter((m) => !m.archived)
-              .map((m) => ({ title: m.name, emoji: m.icon, to: '/meal/' + m.id, match: ['meal', m.id] })),
+              .map((m) => ({ title: F.mealName(m), emoji: m.icon, to: '/meal/' + m.id, match: ['meal', m.id] })),
           ],
         },
         { title: tr('Продукты и лекарства'), icon: 'food', to: '/foods', match: ['foods'], key: 'goFoods' },

@@ -8,22 +8,22 @@ import { SortableList, DragHandle } from './Sortable.js';
 import { store } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
-import { PRIORITY_NONE_ID } from '../../core/priorities.js';
+import { PRIORITY_NONE_ID, priorityLabel } from '../../core/priorities.js';
 import { xpOfPriority } from '../../core/skills.js';
 
 function PriorityRow({ p, handle, readOnly }) {
-  const [name, setName] = useState(p.name);
+  const [name, setName] = useState(priorityLabel(p));
   const [coins, setCoins] = useState(String(p.coins));
   const [xp, setXp] = useState(String(xpOfPriority(p)));
-  useEffect(() => setName(p.name), [p.name]);
+  useEffect(() => setName(priorityLabel(p)), [p.name]);
   useEffect(() => setCoins(String(p.coins)), [p.coins]);
   useEffect(() => setXp(String(xpOfPriority(p))), [p.xp, p.coins]);
   const base = p.id === PRIORITY_NONE_ID;
   const inUse = S.priorityInUse(store.data, p.id);
   const saveName = () => {
     const n = name.trim();
-    if (n && n !== p.name) A.updatePriority(p.id, { name: n.slice(0, 40) });
-    else setName(p.name);
+    if (n && n !== priorityLabel(p)) A.updatePriority(p.id, { name: n.slice(0, 40) });
+    else setName(priorityLabel(p));
   };
   const saveCoins = () => {
     const v = Math.max(0, Math.min(100000, Math.round(Number(coins)) || 0));
@@ -91,7 +91,7 @@ export function PrioritiesSection({ focus = false }) {
       ${archived.length ? html`
         <h3 class="set-sub">В архиве</h3>
         ${archived.map((p) => html`<div class="prio-row" key=${p.id}>
-          <i class="dot big" style=${{ background: p.color }}></i><span class="prio-name">${p.name} · ${p.coins} 🪙 · ${xpOfPriority(p)} ⭐</span>
+          <i class="dot big" style=${{ background: p.color }}></i><span class="prio-name">${priorityLabel(p)} · ${p.coins} 🪙 · ${xpOfPriority(p)} ⭐</span>
           <button class="btn small" disabled=${readOnly} onClick=${() => A.updatePriority(p.id, { archived: false })}>Вернуть</button>
         </div>`)}` : null}
     </section>`;

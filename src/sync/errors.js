@@ -1,4 +1,5 @@
 // Тексты ошибок синхронизации (docs/TZ.md §14).
+
 import { tr } from '../core/i18n.js';
 
 export function errorText(e) {

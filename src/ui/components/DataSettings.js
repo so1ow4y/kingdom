@@ -17,7 +17,7 @@ import { tokenValid } from '../../google/auth.js';
 import { readLocal, writeLocal } from '../hooks.js';
 import { LIMITS, MEDIA, RETENTION, BACKUPS_KEEP, TOMBSTONE_TTL_DAYS, DRIVE_QUOTA_URL, DRIVE_STORAGE_URL } from '../../config.js';
 import { SCHEMA_VERSION } from '../../version.js';
-import { tr } from '../../core/i18n.js';
+import { tr, locale } from '../../core/i18n.js';
 
 const TASKS = ['задача', 'задачи', 'задач'];
 
@@ -215,7 +215,7 @@ export function LimitsSection() {
       <h3 class="set-sub">Ограничения</h3>
       <table class="kv">
         <tr><td>Название задачи</td><td>до ${LIMITS.titleMax} символов</td></tr>
-        <tr><td>Текст заметки</td><td>до ${LIMITS.noteMax.toLocaleString('ru-RU')} символов</td></tr>
+        <tr><td>Текст заметки</td><td>до ${LIMITS.noteMax.toLocaleString(locale())} символов</td></tr>
         <tr><td>«Главных» на день</td><td>${LIMITS.focusMax}</td></tr>
         <tr><td>Вложенность задач</td><td>${LIMITS.maxDepth} уровня</td></tr>
         <tr><td>Напоминаний у задачи</td><td>до ${LIMITS.remindersMax}</td></tr>

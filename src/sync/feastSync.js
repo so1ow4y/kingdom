@@ -189,7 +189,7 @@ export async function feastPull(drive, step) {
   if (r.dbMeta.headRevisionId === store.sync.feastRevisionId) return { changes: 0 };
   step(tr('Crimson Harvest: загрузка базы'));
   const res = await mergeIntoLocal(await parseFeastBytes(await drive.download(r.layout.dbId)), r.dbMeta.headRevisionId);
-  if (store.ui.feastReadOnly && !store.ui.feastReadOnly.startsWith('Не открылась')) setUi({ feastReadOnly: null });
+  if (store.ui.feastReadOnly && !store.ui.feastLocalBroken) setUi({ feastReadOnly: null });
   return { changes: res.changes.length };
 }
 

@@ -6,7 +6,7 @@
 import { html, useState, useRef } from '../html.js';
 import { addDays, daysBetween, longDate } from '../../core/dates.js';
 import { fmt } from '../../core/nutrition.js';
-import { tr } from '../../core/i18n.js';
+import { tr, locale } from '../../core/i18n.js';
 
 const W = 640;
 const PAD = { l: 44, r: 12, t: 12, b: 26 };
@@ -21,7 +21,7 @@ function ticks(max, count = 4) {
   for (let v = 0; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100);
   return out;
 }
-const num = (v) => Math.round(v).toLocaleString('ru-RU');
+const num = (v) => Math.round(v).toLocaleString(locale());
 const shortDate = (d) => `${+d.slice(8)}.${d.slice(5, 7)}`;
 
 /** Столбик со скруглённым верхом и прямым низом. */
@@ -131,7 +131,7 @@ export function LineChart({ lines, from, to, refs = [], unit = '', digits = 1, h
   const x = (d) => PAD.l + (daysBetween(from, d) / span) * iw;
   const y = (v) => PAD.t + ih - ((v - lo) / (hi - lo || 1)) * ih;
   const tk = ticks(hi - lo).map((t) => lo + t).filter((t) => t <= hi + 1e-9);
-  const f = (v) => v.toLocaleString('ru-RU', { maximumFractionDigits: digits, minimumFractionDigits: digits });
+  const f = (v) => v.toLocaleString(locale(), { maximumFractionDigits: digits, minimumFractionDigits: digits });
   const main = lines[0];
   const near = (px) => {
     let best = null;
@@ -250,7 +250,7 @@ export function DayBars({ points, from, to, unitLabel = (v) => String(v), label 
         ${buckets.map((b, i) => html`<rect key=${'h' + b.key} class="hit" x=${PAD.l + slot * i} y=${PAD.t} width=${slot} height=${ih}
           onPointerEnter=${(e) => show(i, e)} onPointerDown=${(e) => show(i, e)}/>`)}
       </svg>
-      <div class="fchart-axis-y">${tk.map((t) => html`<span key=${t} style=${{ top: (y(t) / height) * 100 + '%' }}>${t.toLocaleString('ru-RU')}</span>`)}</div>
+      <div class="fchart-axis-y">${tk.map((t) => html`<span key=${t} style=${{ top: (y(t) / height) * 100 + '%' }}>${t.toLocaleString(locale())}</span>`)}</div>
       <div class="fchart-axis-x">${buckets.map((b, i) => (i % labelEvery === 0 ? html`<span key=${b.key} style=${{ left: ((PAD.l + slot * i + slot / 2) / W) * 100 + '%' }}>${b.label}</span>` : null))}</div>
       <${Tip} tip=${tip}/>
     </div>`}

@@ -1,4 +1,4 @@
-"""Подготовка релиза LifeTasks (docs/ARCHITECTURE.md §8.3).
+"""Подготовка релиза Kingdom (docs/ARCHITECTURE.md §8.3).
 
   python tools/release.py            — следующая patch-версия (0.1.0 → 0.1.1)
   python tools/release.py 0.2.0      — конкретная версия
@@ -137,6 +137,23 @@ def main():
     print(f"Версия: {new} (формат данных v{schema}), файлов в кэше: {len(files)}")
     if not refresh:
         print("Открытые вкладки приложения покажут «Доступно обновление» (или нажми «Проверить обновление» в настройках).")
+    check_i18n()
+
+
+def check_i18n():
+    """0.12.5: все ли строки интерфейса переведены на английский (tools/i18n.py) — только предупреждение."""
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("i18n_tool", os.path.join(ROOT, "tools", "i18n.py"))
+    tool = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(tool)
+    keys, plurals = tool.collect()
+    main_d, plur_d = tool.load_dict()
+    miss = [k for k in keys if k not in main_d and tool.norm(k) not in main_d]
+    pmiss = [k for k in plurals if k not in plur_d]
+    if miss or pmiss:
+        print(f"Внимание: без английского перевода {len(miss)} строк и {len(pmiss)} форм числа — python tools/i18n.py --list")
+    else:
+        print("Переводы: все строки интерфейса есть на английском.")
 
 
 if __name__ == "__main__":

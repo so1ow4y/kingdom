@@ -147,7 +147,7 @@ function Selected({ sel, bal }) {
   const count = own ? V.villageObjects(store.data).filter((x) => x.place === o.place).length : 0;
   return html`<div class="village-sel">
     <span class="vs-emoji">${it.emoji}</span>
-    <div class="vs-main"><b>${(it.name || '').replace(/ · ур\. \d$/, '')}${up ? html` <small class="v-level" title=${tr('Уровень ') + o.level + tr(' из ') + V.MAX_LEVEL}>${stars(o.level)}</small>` : null}${count > 1 ? html` <small class="muted">· таких ${count}</small>` : null}</b>
+    <div class="vs-main"><b>${(it.name || '').replace(/ · (ур\.|lvl) \d$/, '')}${up ? html` <small class="v-level" title=${tr('Уровень ') + o.level + tr(' из ') + V.MAX_LEVEL}>${stars(o.level)}</small>` : null}${count > 1 ? html` <small class="muted">· таких ${count}</small>` : null}</b>
       <p class="muted small">${o.fixed ? tr('С него началась деревня — он всегда на своём месте.') : it.desc || ''}</p>
       ${up ? html`<p class="small">Ур. ${o.level}: ${V.bonusText(o.place, o.level)}${nu ? html` <span class="muted">→ ур. ${nu.level}: ${V.bonusText(o.place, nu.level)}</span>` : ''}</p>` : null}</div>
     <div class="vs-actions">
@@ -243,7 +243,7 @@ function ShopGrid({ bal }) {
         const count = it.repeatable ? objects.filter((o) => o.place === it.place).length : 0;
         const mine = has && it.place ? objects.find((o) => o.place === it.place) : null;
         const check = has ? null : V.canBuy(store.data, it, bal);
-        const locked = check && check.reason.startsWith('Сначала');
+        const locked = !!check?.locked;
         return html`<div class=${'v-item' + (has || count ? ' owned' : '') + (locked ? ' locked' : '')} key=${it.id}>
           <span class="v-emoji">${it.emoji}</span>
           <div class="v-name">${it.name}${it.big ? html` <small class="v-tag">большой</small>` : null}${count ? html` <small class="v-tag">×${count}</small>` : null}${mine && V.isUpgradable(mine.place) ? html` <small class="v-level">${stars(mine.level)}</small>` : null}</div>
@@ -280,7 +280,7 @@ function UpgradeList({ bal }) {
         return html`<li class="upgrade-row" key=${o.key}>
           <span class="v-emoji">${it?.emoji || '🏠'}</span>
           <div class="ur-main">
-            <b>${(it?.name || o.place).replace(/ · ур\. \d$/, '')}${many ? ` №${n}` : ''}</b> <small class="v-level">${stars(o.level)}</small>
+            <b>${(it?.name || o.place).replace(/ · (ур\.|lvl) \d$/, '')}${many ? ` №${n}` : ''}</b> <small class="v-level">${stars(o.level)}</small>
             <small class="muted">ур. ${o.level}: ${V.bonusText(o.place, o.level)}${nu ? ` → ${V.bonusText(o.place, nu.level)}` : ''}</small>
           </div>
           <${UpgradeButton} obj=${o} bal=${bal}/>

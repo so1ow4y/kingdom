@@ -80,15 +80,15 @@ function EntryRow({ e, where = 'diary' }) {
 export function MealBlock({ meal, list, date, readOnly, link = true }) {
   const kcal = nv(sumNutrients(list.map(entryNutrients)), 'kcal');
   const note = F.mealNoteOf(store.feast, date, meal.id);
-  const label = meal.name.toLowerCase();
+  const label = F.mealName(meal).toLowerCase();
   const tomorrow = addDays(date, 1);
   return html`
-    <section class=${'meal card-block' + (meal.date ? ' day-only' : '')} aria-label=${meal.name}>
+    <section class=${'meal card-block' + (meal.date ? ' day-only' : '')} aria-label=${F.mealName(meal)}>
       <header class="meal-head">
         <span class="meal-icon" aria-hidden="true">${meal.icon}</span>
         <span class="meal-title">
           ${link && !meal.missing ? html`<${Link} to=${`/meal/${meal.id}${date === store.now.today || meal.date ? '' : '?date=' + date}`}
-            className="meal-name" title="Открыть рацион (Ctrl+клик — в новой вкладке)">${meal.name}<//>` : html`<b class="meal-name">${meal.name}</b>`}
+            className="meal-name" title="Открыть рацион (Ctrl+клик — в новой вкладке)">${F.mealName(meal)}<//>` : html`<b class="meal-name">${F.mealName(meal)}</b>`}
           ${meal.time || meal.date ? html`<small class="meal-meta">
             ${meal.time ? html`<span class="meal-time" title="Время рациона">${meal.time}</span>` : null}
             ${meal.date ? html`<span class="meal-tag" title="Этот рацион — только на этот день">только этот день</span>` : null}

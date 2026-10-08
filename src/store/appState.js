@@ -46,6 +46,7 @@ export const store = {
     dirtyCount: 0,
     feastDirty: 0, // 0.11: непушнутые правки Feast (в индикаторе — сумма)
     feastReadOnly: null, // 0.11: база Feast на Диске новее приложения — текст причины
+    feastLocalBroken: false, // 0.12.5: не открылась локальная база Feast (причина — в feastReadOnly)
     readOnly: null, // null или текст причины
     update: null, // { version } — доступно обновление
     fatal: null,

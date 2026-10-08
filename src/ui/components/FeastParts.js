@@ -7,7 +7,7 @@ import * as F from '../../core/feast.js';
 import {
   NUTRIENTS, NUTRIENT, NUTRIENT_GROUPS, MACROS, nv, fmt, dayGoals, remaining, signed, rdiPct, kcalFromMacros, macroSplit,
 } from '../../core/nutrition.js';
-import { tr } from '../../core/i18n.js';
+import { tr, dec } from '../../core/i18n.js';
 
 export const feastGoals = () => dayGoals(store.feast.settings);
 
@@ -89,7 +89,7 @@ export function NutrientTable({ values, groups = ['main', 'more', 'vitamins', 'm
 /** Числовое поле с запятой: значение уходит на onCommit по уходу из поля или Enter. */
 export function NumField({ label, value, unit = '', onCommit, step = 'any', disabled = false, placeholder = '0', big = false }) {
   const [draft, setDraft] = useState(null);
-  const shown = draft ?? (value ? String(value).replace('.', ',') : '');
+  const shown = draft ?? (value ? dec(value) : '');
   const commit = () => {
     if (draft === null) return;
     onCommit(draft);
@@ -140,14 +140,14 @@ export function MealChips({ value, onChange, date = store.now.today }) {
   const list = F.mealsForDay(store.feast, date).filter((m) => !m.missing || m.id === value);
   return html`<div class="chip-row wrap meal-chips" role="radiogroup" aria-label="Рацион">
     ${list.map((m) => html`<button type="button" role="radio" aria-checked=${value === m.id} key=${m.id}
-      class=${'chip' + (value === m.id ? ' selected' : '')} onClick=${() => onChange(m.id)}>${m.icon} ${m.name}${m.time ? html` <small>${m.time}</small>` : null}</button>`)}
+      class=${'chip' + (value === m.id ? ' selected' : '')} onClick=${() => onChange(m.id)}>${m.icon} ${F.mealName(m)}${m.time ? html` <small>${m.time}</small>` : null}</button>`)}
   </div>`;
 }
 
 /** Поле награды: своё значение (и 0 — тоже значение) или пусто — по умолчанию (показано подсказкой). */
 function RewardField({ k, value, def, disabled, onCommit }) {
   const [draft, setDraft] = useState(null);
-  const shown = draft ?? (value === undefined || value === null ? '' : String(value).replace('.', ','));
+  const shown = draft ?? (value === undefined || value === null ? '' : dec(value));
   const commit = () => {
     if (draft === null) return;
     onCommit(draft);
@@ -156,7 +156,7 @@ function RewardField({ k, value, def, disabled, onCommit }) {
   return html`<label class="num-field reward-field">
     <span class="nf-label">${F.REWARD_ICONS[k]} ${F.REWARD_LABELS[k]}</span>
     <span class="nf-box">
-      <input inputmode="decimal" value=${shown} placeholder=${String(def).replace('.', ',')} disabled=${disabled}
+      <input inputmode="decimal" value=${shown} placeholder=${dec(def)} disabled=${disabled}
         aria-label=${F.REWARD_LABELS[k] + tr(' за запись')} onInput=${(e) => setDraft(e.target.value)} onBlur=${commit}
         onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}/>
     </span>
@@ -191,7 +191,7 @@ export const rewardLine = (r) => F.REWARD_KEYS.filter((k) => (r?.[k] || 0) > 0)
  */
 export function OptNumField({ label, value, placeholder = '', unit = '', disabled = false, onCommit, min = 0, max = 100000 }) {
   const [draft, setDraft] = useState(null);
-  const shown = draft ?? (Number.isFinite(value) ? String(value).replace('.', ',') : '');
+  const shown = draft ?? (Number.isFinite(value) ? dec(value) : '');
   const commit = () => {
     if (draft === null) return;
     const raw = draft.trim();

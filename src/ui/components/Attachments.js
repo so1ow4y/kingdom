@@ -16,7 +16,7 @@ import { VoiceRecorder, micPermission, recordingSupported } from '../../media/re
 import { drive } from '../../sync/syncEngine.js';
 import { tokenValid } from '../../google/auth.js';
 import { readLocal, writeLocal } from '../hooks.js';
-import { tr } from '../../core/i18n.js';
+import { tr, dec } from '../../core/i18n.js';
 
 const STATUS_TEXT = {
   loading: tr('Загрузка…'),
@@ -84,7 +84,7 @@ export function AudioPlayer({ media, url, name }) {
           aria-label="Перемотка" onInput=${(e) => { if (el.current) el.current.currentTime = +e.target.value / 1000; setPos(+e.target.value); }}/>
         <div class="ap-time"><span>${formatDuration(pos)} / ${formatDuration(total)}</span>${name ? html`<span class="ap-name">${name}</span>` : null}</div>
       </div>
-      <button type="button" class="ap-rate" onClick=${nextRate} aria-label="Скорость">${String(rate).replace('.', ',')}×</button>
+      <button type="button" class="ap-rate" onClick=${nextRate} aria-label="Скорость">${dec(rate)}×</button>
     </div>`;
 }
 

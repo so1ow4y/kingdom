@@ -40,7 +40,7 @@ import { tokenValid, startLogin, expireToken } from '../../google/auth.js';
 import { push, pull, revisionSpike } from '../../sync/syncEngine.js';
 import { confirmLogout } from '../account.js';
 import { buildMenu } from '../nav.js';
-import { tr } from '../../core/i18n.js';
+import { tr, LANG, LANGS, setLang } from '../../core/i18n.js';
 
 /** «Ещё» (#/more): всё меню дока одним списком — для старых ссылок и узких экранов. */
 export function MoreScreen() {
@@ -52,7 +52,7 @@ export function MoreScreen() {
         <section class="more-group" key=${g.title}>
           <h2 class="more-title">${g.title}</h2>
           <nav class="menu-list">
-            ${g.items.flatMap((it) => (it.items ? it.items.map((sub) => ({ ...sub, title: sub.title === 'Все списки' ? tr('Списки') : sub.title, icon: sub.icon || it.icon })) : [it]))
+            ${g.items.flatMap((it) => (it.items ? it.items.map((sub) => ({ ...sub, title: sub.title === tr('Все списки') ? tr('Списки') : sub.title, icon: sub.icon || it.icon })) : [it]))
               .filter((it) => !it.color)
               .map((it) => html`
                 <${Link} key=${it.to} to=${it.to} className="menu-item">
@@ -312,6 +312,7 @@ const TREE = [
   {
     id: 'interface', title: tr('Интерфейс'), icon: 'palette',
     items: [
+      { key: 'language', title: tr('Язык · Language'), desc: tr('Язык интерфейса. Твои задачи, продукты и заметки не переводятся. Хранится только на этом устройстве.'), keywords: 'язык language english русский английский lang' },
       { key: 'appearance', title: tr('Внешний вид'), desc: tr('Положение и вид док-панели, тема и цвета — у Chronicle и Crimson Harvest свои. Хранится только на этом устройстве.'), keywords: tr('тема цвет схема панель док буква квадрат автоскрытие тёмная светлая dock theme color appearance panel') },
       { key: 'shortcuts', title: tr('Горячие клавиши'), desc: tr('Клавиши для частых действий: переназначить, отключить, вернуть как было. Хранятся только на этом устройстве.'), keywords: tr('клавиши горячие сочетания клавиатура shortcut shortcuts hotkey keyboard') },
     ],
@@ -390,6 +391,17 @@ function SettingsNav({ current, debug }) {
     </nav>`;
 }
 
+/** Язык интерфейса (0.12.5): русский или английский; смена — с перезагрузкой страницы. */
+function LanguageSection() {
+  return html`<section class="set-section">
+    <div class="chip-row wrap" role="radiogroup" aria-label="Язык · Language">
+      ${LANGS.map((l) => html`<button type="button" role="radio" key=${l.key} aria-checked=${LANG === l.key}
+        class=${'chip' + (LANG === l.key ? ' selected' : '')} onClick=${() => LANG !== l.key && setLang(l.key)}>${l.label}</button>`)}
+    </div>
+    <p class="muted small">${LANG === 'en' ? 'The page reloads after switching. Data and sync are not affected.' : 'После выбора страница перезагрузится. Данные и синхронизация не меняются.'}</p>
+  </section>`;
+}
+
 export function SettingsScreen({ query = {} }) {
   const debug = query.debug === '1';
   const asked = query.section;
@@ -414,6 +426,7 @@ export function SettingsScreen({ query = {} }) {
       case 'priorities': return html`<${PrioritiesSection}/>`;
       case 'notifications': return html`<${NotificationsSection}/>`;
       case 'appearance': return html`<${AppearanceSection} phone=${phone}/>`;
+      case 'language': return html`<${LanguageSection}/>`;
       case 'feast-goals': return html`<${FeastGoalsPage}/>`;
       case 'feast-data': return html`<${FeastDataSection}/>`;
       case 'feast-meals': return html`<${MealsSection}/>`;

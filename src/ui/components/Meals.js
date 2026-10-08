@@ -34,13 +34,13 @@ const placeList = (date) => (date ? F.mealsForDay(store.feast, date).filter((m) 
 export function MealForm({ id = null, date = null, afterId, onDone = () => {}, inline = false }) {
   const meal = id ? store.feast.meals.get(id) : null;
   const list = placeList(date);
-  const [name, setName] = useState(meal?.name || '');
+  const [name, setName] = useState(F.mealName(meal));
   const [icon, setIcon] = useState(meal?.icon || '🍽️');
   const [time, setTime] = useState(meal?.time || null);
   const [onlyDay, setOnlyDay] = useState(!!date);
   const [after, setAfter] = useState(afterId !== undefined ? afterId : list.at(-1)?.id ?? null);
   if (id && (!meal || meal.deletedAt)) return null;
-  const dirty = !meal || name !== meal.name || icon !== meal.icon || (time || null) !== (meal.time || null);
+  const dirty = !meal || name !== F.mealName(meal) || icon !== meal.icon || (time || null) !== (meal.time || null);
   const save = async (e) => {
     e?.preventDefault();
     if (!name.trim()) return;
@@ -78,7 +78,7 @@ export function MealForm({ id = null, date = null, afterId, onDone = () => {}, i
         <label class="field"><span>Место</span>
           <select value=${after ?? ''} onChange=${(ev) => setAfter(ev.target.value || null)}>
             <option value="">В начале</option>
-            ${list.map((m) => html`<option value=${m.id}>После «${m.name}»</option>`)}
+            ${list.map((m) => html`<option value=${m.id}>После «${F.mealName(m)}»</option>`)}
           </select></label>` : html`
         <div class="field"><span>Порядок${meal.date ? tr(' · только {p0}', { p0: dayLabel(meal.date) }) : ''}</span>
           <div class="chip-row wrap">
@@ -121,7 +121,7 @@ export function MealNoteSheet({ date, meal }) {
     closeSheet();
   };
   return html`
-    <${Sheet} title=${tr('Заметка · {name}', { name: info.name })} onClose=${closeSheet}>
+    <${Sheet} title=${tr('Заметка · {name}', { name: F.mealName(info) })} onClose=${closeSheet}>
       <p class="muted small">${humanDate(date, store.now.today)}: что-то о рационе целиком — где ели, самочувствие, что запомнить.</p>
       <textarea class="note-area" rows="5" maxlength=${F.NOTE_MAX} value=${text} ref=${focusOnce}
         placeholder="Например: ел(а) в кафе, порции на глаз" onInput=${(e) => setText(e.target.value)}
@@ -142,7 +142,7 @@ export function openMealMenu(e, meal, date, { onCopy = null } = {}) {
     anchor: e.currentTarget,
     side: 'bottom',
     align: 'end',
-    title: meal.name,
+    title: F.mealName(meal),
     viaKeyboard: e.detail === 0,
     items: [
       { label: hasNote ? tr('Изменить заметку') : tr('Заметка к рациону'), icon: 'edit', disabled: ro, onSelect: () => openSheet('mealNote', { date, meal: meal.id }) },
@@ -171,14 +171,14 @@ export function MealsSection({ page = false }) {
     const i = shown.indexOf(m);
     return html`<li class="meal-set-row" key=${m.id}>
       <span class="meal-icon" aria-hidden="true">${m.icon}</span>
-      <${Link} to=${'/meal/' + m.id} className="msr-name" title="Открыть рацион (Ctrl+клик — в новой вкладке)">${m.name}<//>
+      <${Link} to=${'/meal/' + m.id} className="msr-name" title="Открыть рацион (Ctrl+клик — в новой вкладке)">${F.mealName(m)}<//>
       <span class="muted msr-time">${m.time || ''}</span>
       ${m.archived ? html`<button type="button" class="btn small" disabled=${ro} onClick=${() => FA.setMealHidden(m.id, false)}>Показывать</button>` : html`
-        <button type="button" class="icon-btn small" disabled=${ro || i <= 0} aria-label=${tr('Выше: ') + m.name} data-hint="Выше"
+        <button type="button" class="icon-btn small" disabled=${ro || i <= 0} aria-label=${tr('Выше: ') + F.mealName(m)} data-hint="Выше"
           onClick=${() => FA.moveMeal(m.id, -1)}><${Icon} name="up" size=${16}/></button>
-        <button type="button" class="icon-btn small" disabled=${ro || i >= shown.length - 1} aria-label=${tr('Ниже: ') + m.name} data-hint="Ниже"
+        <button type="button" class="icon-btn small" disabled=${ro || i >= shown.length - 1} aria-label=${tr('Ниже: ') + F.mealName(m)} data-hint="Ниже"
           onClick=${() => FA.moveMeal(m.id, 1)}><${Icon} name="down" size=${16}/></button>`}
-      <button type="button" class="icon-btn small" disabled=${ro} aria-label=${tr('Изменить: ') + m.name} data-hint="Изменить"
+      <button type="button" class="icon-btn small" disabled=${ro} aria-label=${tr('Изменить: ') + F.mealName(m)} data-hint="Изменить"
         onClick=${() => openSheet('meal', { id: m.id })}><${Icon} name="edit" size=${16}/></button>
     </li>`;
   };

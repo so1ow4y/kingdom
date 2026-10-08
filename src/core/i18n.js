@@ -26,6 +26,8 @@ function detect() {
 
 export const LANG = detect();
 export const isEn = () => LANG === 'en';
+/** Десятичный разделитель: 2,5 по-русски, 2.5 по-английски (ввод понимает оба). */
+export const dec = (v) => (LANG === 'en' ? String(v) : String(v).replace('.', ','));
 /** Локаль для чисел и дат: 'ru-RU' или 'en-US'. */
 export const locale = () => (LANG === 'en' ? 'en-US' : 'ru-RU');
 

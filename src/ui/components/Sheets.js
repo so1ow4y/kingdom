@@ -12,7 +12,7 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { addDays, mondayOf, weekDates, isoWeekday, WEEKDAY_SHORT, humanDate } from '../../core/dates.js';
 import { LIMITS } from '../../config.js';
-import { PRIORITY_NONE_ID } from '../../core/priorities.js';
+import { PRIORITY_NONE_ID, priorityLabel } from '../../core/priorities.js';
 import { liveNotes } from '../../core/model.js';
 import { ReminderSheet, MissedSheet } from './Reminders.js';
 import { RecorderSheet } from './Attachments.js';
@@ -121,7 +121,7 @@ function PrioritySheet({ taskId, anchor, onPick = null, current = undefined }) {
   const game = store.data.settings.gameEnabled;
   const item = (p) => html`
     <${MenuItem} key=${p.id} icon=${html`<i class="dot big" style=${{ background: p.color }}></i>`}
-      label=${p.name} hint=${game ? tr('+{coins} 🪙 за выполнение', { coins: p.coins }) : null} checked=${cur === p.id} onClick=${() => pick(p.id)}/>`;
+      label=${priorityLabel(p)} hint=${game ? tr('+{coins} 🪙 за выполнение', { coins: p.coins }) : null} checked=${cur === p.id} onClick=${() => pick(p.id)}/>`;
   return html`
     <${Sheet} title="Приоритет" onClose=${closeSheet} anchor=${anchor}>
       ${list.map(item)}
@@ -136,7 +136,7 @@ function ParentPickerSheet({ taskId }) {
   const t = A.getTask(taskId);
   const [q, setQ] = useState('');
   if (!t) return null;
-  const norm = (s) => s.toLowerCase().replace(/ё/g, tr('е'));
+  const norm = (s) => s.toLowerCase().replace(/ё/g, 'е');
   const nq = norm(q.trim());
   const options = [...store.data.tasks.values()]
     .filter((x) => S.isActive(x) && x.id !== taskId && !S.nestError(store.data, taskId, x.id))
@@ -193,7 +193,7 @@ function TaskMenuSheet({ taskId, date }) {
             onClick=${() => openSheet('repeat', { taskId })}/>`}
       <${MenuItem} icon="lists" label="Списки…" hint=${S.taskLists(store.data, t).map((l) => l.name).join(', ') || null}
         onClick=${() => openSheet('listPicker', { taskId })}/>
-      <${MenuItem} icon="flag" label="Приоритет…" hint=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : null}
+      <${MenuItem} icon="flag" label="Приоритет…" hint=${prio && prio.id !== PRIORITY_NONE_ID ? priorityLabel(prio) : null}
         onClick=${() => openSheet('priority', { taskId })}/>
       <${MenuItem} icon="list" label="Сделать подзадачей…" onClick=${() => openSheet('parentPicker', { taskId })}/>
       ${parent ? html`<${MenuItem} icon="up" label="Вынести на верхний уровень" hint=${tr('сейчас внутри «') + parent.title + '»'}

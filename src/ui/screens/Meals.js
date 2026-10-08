@@ -30,7 +30,7 @@ export function MealsScreen() {
         <h2>Только сегодня</h2>
         <ul class="meal-set-list">${dayOnly.map((m) => html`<li class="meal-set-row" key=${m.id}>
           <span class="meal-icon" aria-hidden="true">${m.icon}</span>
-          <${Link} to=${'/meal/' + m.id} className="msr-name">${m.name}<//>
+          <${Link} to=${'/meal/' + m.id} className="msr-name">${F.mealName(m)}<//>
           <span class="muted msr-time">${m.time || ''}</span>
         </li>`)}</ul>
       </section>` : null}

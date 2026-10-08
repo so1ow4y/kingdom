@@ -7,11 +7,11 @@ import * as AN from '../../core/analytics.js';
 import { addDays, daysBetween, dayLabel, longDate, WEEKDAY_SHORT } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { readLocal, writeLocal } from '../hooks.js';
-import { tr } from '../../core/i18n.js';
+import { tr, locale } from '../../core/i18n.js';
 
 const TASKS = ['задача', 'задачи', 'задач'];
 const MONTHS = [tr('янв'), tr('фев'), tr('мар'), tr('апр'), tr('май'), tr('июн'), tr('июл'), tr('авг'), tr('сен'), tr('окт'), tr('ноя'), tr('дек')];
-const fmt1 = (x) => (Math.round(x * 10) / 10).toLocaleString('ru-RU');
+const fmt1 = (x) => (Math.round(x * 10) / 10).toLocaleString(locale());
 const short = (d) => `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]}`;
 
 function bucketLabel(b, unit) {

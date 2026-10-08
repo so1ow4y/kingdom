@@ -1,9 +1,10 @@
 // Feast (обновление 0.11): справочник пищевых веществ и арифметика дневника. Чистые функции, без браузерных API.
-import { tr } from './i18n.js';
 //
 // Значения продукта хранятся на 100 г (или 100 мл) — разреженно: чего нет, то 0 (по умолчанию нули у всех).
 // Нормы (rdi) — справочные суточные значения для взрослого (как NRV/RI на этикетках ЕС и России): по ним
 // считаются проценты «от нормы» в дневнике и аналитике. Калории и БЖУ — из целей человека (feast settings).
+
+import { tr, dec } from './i18n.js';
 
 /** Основные рационы по умолчанию (0.12 — это записи коллекции meals с этими id, их можно переименовать). */
 export const MEALS = [
@@ -122,7 +123,7 @@ export function fmt(v, key = 'protein') {
   const x = Number.isFinite(v) ? v : 0;
   if (key === 'kcal') return String(Math.round(x));
   const d = Math.abs(x) >= 10 ? 1 : Math.abs(x) >= 0.1 || x === 0 ? 1 : 2;
-  return String(Math.round(x * 10 ** d) / 10 ** d).replace('.', ',');
+  return dec(Math.round(x * 10 ** d) / 10 ** d);
 }
 
 export const fmtWithUnit = (v, key) => `${fmt(v, key)} ${NUTRIENT[key]?.unit || ''}`.trim();

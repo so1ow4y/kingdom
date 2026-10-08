@@ -53,7 +53,7 @@ const step = (text) => setSync({ step: text });
 async function mergeIntoLocal(db, revId) {
   if (sessionRevoked(db.data.devices || [], store.deviceId, store.auth?.authenticatedAt)) {
     await endLocalSession();
-    throw Object.assign(new Error('Сессия завершена с другого устройства. Войди заново через настройки. Локальные изменения сохранены.'), { code: 'E-SESSION-REVOKED' });
+    throw Object.assign(new Error(tr('Сессия завершена с другого устройства. Войди заново через настройки. Локальные изменения сохранены.')), { code: 'E-SESSION-REVOKED' });
   }
   const repo = getRepo();
   const base = await repo.loadBase();
@@ -550,7 +550,7 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
  * Создаёт LifeTasks/revision-test.bin, перезаписывает 3 раза (с паузой и без), смотрит ревизии, отправляет файл в корзину.
  */
 export async function revisionSpike() {
-  if (!tokenValid() || !store.sync.layout) throw new Error('Сначала войди и сделай «Обновить»');
+  if (!tokenValid() || !store.sync.layout) throw new Error(tr('Сначала войди и сделай «Обновить»'));
   const mime = 'application/octet-stream';
   const f = await drive.createFile({ name: 'revision-test.bin', parentId: store.sync.layout.rootId, mimeType: mime, appProperties: { lifetasks: 'debug' } }, new Uint8Array([1]));
   await sleep(1500);
