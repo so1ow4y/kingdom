@@ -217,3 +217,73 @@ test('время суток: смена каждые 5 минут, по часа
   assert.ok(day < 0.1 && night > 0.9, `${day} ${night}`);
   assert.ok(villageStyle('lavender').gothic && villageStyle('nope').name === 'Классическая деревня');
 });
+
+test('прокачка (0.12.4): уровни 1…5 у каждой постройки, цена растёт, бонусы, продажа — вместе с улучшениями', async () => {
+  const V = await import('../src/core/village.js');
+  const c = makeCtx(NOW);
+  const d = makeData();
+  d.coinEvents.set('rich', { id: 'rich', deletedAt: null, active: true, type: 'award', amount: 100000, at: '2026-10-01T00:00:00.000Z', gems: 500 });
+  buy(d, 'v:house', c);
+  buy(d, 'v:house', makeCtx(NOW + 1000));
+  const [h1, h2] = V.villageObjects(d).filter((o) => o.place === 'house');
+  assert.equal(h1.level, 1);
+  assert.deepEqual(V.nextUpgrade(h1), { level: 2, price: { coins: 180 } });
+  const up = (o, level, at = NOW + 5000) => {
+    const nu = V.nextUpgrade({ ...o, level: level - 1 });
+    put(d, purchaseEvent({ price: nu.price.coins || 0, gems: nu.price.gems || 0, title: 'up', itemId: V.UPGRADE_ITEM, target: o.key, level }, makeCtx(at)));
+  };
+  up(h1, 2);
+  up(h1, 3);
+  const after = V.villageObjects(d);
+  assert.equal(after.find((o) => o.key === h1.key).level, 3, 'у первого дома — 3-й');
+  assert.equal(after.find((o) => o.key === h2.key).level, 1, 'у второго — свой, 1-й');
+  assert.equal(V.villageBonuses(d).coins, 2, 'дом 3-го уровня: +2 % монет');
+  assert.equal(V.bonusText('house', 3), '+2 % монет за задачи');
+  assert.ok(V.nextUpgrade({ place: 'house', level: 5 }) === null, '5-й — максимум');
+  assert.equal(V.nextUpgrade({ place: 'tree', level: 1 }), null, 'декор не прокачивается');
+  // шахта: 2–3 — прежние покупки, 4–5 — улучшения; монеты +10 % за уровень
+  buy(d, 'v:mine-gold:1', c);
+  const mine = V.villageObjects(d).find((o) => o.place === 'goldmine');
+  assert.equal(V.nextUpgrade(mine).itemId, 'v:mine-gold:2');
+  buy(d, 'v:mine-gold:2', makeCtx(NOW + 6000));
+  buy(d, 'v:mine-gold:3', makeCtx(NOW + 7000));
+  const m3 = V.villageObjects(d).find((o) => o.place === 'goldmine');
+  assert.deepEqual(V.nextUpgrade(m3), { level: 4, price: { gems: 30 } });
+  up(m3, 4, NOW + 8000);
+  assert.equal(V.levelAt(d, 'goldmine'), 4);
+  assert.equal(V.levelAt(d, 'goldmine', new Date(NOW + 7500).toISOString()), 3, 'уровень по времени');
+  assert.ok(Math.abs(V.coinMultiplierAt(d) - 1.42) < 1e-9, 'шахта 4 (+40 %) и дом 3 (+2 %)');
+  // продажа дома возвращает и его улучшения
+  const plan = V.sellPlan(d, h1.key);
+  assert.equal(plan.events.length, 3);
+  assert.equal(plan.coins, 120 + 180 + 300);
+});
+
+test('замок и бонусы деревни (0.12.4): еда, настроение, фокус, пределы', async () => {
+  const V = await import('../src/core/village.js');
+  const c = makeCtx(NOW);
+  const d = makeData();
+  assert.ok(V.villageItem('v:castle') && V.villageItem('v:castle').place === 'castle');
+  buy(d, 'v:castle', c);
+  const castle = V.villageObjects(d).find((o) => o.place === 'castle');
+  assert.deepEqual(V.bonusOf('castle', 1), { coins: 5, food: 5, mood: 2 });
+  assert.deepEqual(V.villageBonuses(d), { coins: 5, food: 5, mood: 2, focus: 0 });
+  put(d, purchaseEvent({ price: 3500, title: 'up', itemId: V.UPGRADE_ITEM, target: castle.key, level: 2 }, makeCtx(NOW + 1000)));
+  assert.equal(V.villageBonuses(d).food, 10);
+  buy(d, 'v:forge', c);
+  const forge = V.villageObjects(d).find((o) => o.place === 'forge');
+  put(d, purchaseEvent({ price: 260, title: 'up', itemId: V.UPGRADE_ITEM, target: forge.key, level: 3 }, makeCtx(NOW + 2000)));
+  assert.equal(V.villageBonuses(d).focus, 1, 'мастерская 3-го уровня: +1 💎 за фокус');
+  assert.equal(V.gemsForFocus(25, 0, 1), 2);
+  // чужой target и неверный уровень не ломают
+  put(d, purchaseEvent({ price: 1, title: 'x', itemId: V.UPGRADE_ITEM, target: 'нет-такой', level: 5 }, c));
+  assert.equal(V.villageObjects(d).length, 2);
+  assert.ok(V.happiness(d, 'Europe/Moscow', '2026-10-05').parts.cozy === 4, 'замок 2-го уровня: настроение +4');
+});
+
+test('место для новой шахты без клетки (suggestPlace) — не падает', async () => {
+  const { suggestPlace } = await import('../src/village/map.js');
+  const p = suggestPlace([], 'goldmine');
+  assert.ok(p && Number.isInteger(p.x) && Number.isInteger(p.y));
+  assert.ok(suggestPlace([], 'castle'), 'и для замка');
+});

@@ -104,10 +104,12 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
   const serving = F.servingOf(food);
   const usage = F.foodUsage(store.feast).get(food.id);
   const [amount, setAmount] = useState(String(usage?.amount ?? serving ?? 100).replace('.', ','));
+  const [itemNote, setItemNote] = useState('');
+  const [noteOpen, setNoteOpen] = useState(false);
   const a = num(amount);
   const n = scaleNutrients(food.nutrients, a / 100);
   const presets = [...new Set([serving, 50, 100, 150, 200, 250].filter(Boolean))];
-  const item = () => ({ key: ++basketKey, foodId: food.id, amount: a });
+  const item = () => ({ key: ++basketKey, foodId: food.id, amount: a, note: itemNote });
   const save = () => a && onSave(item());
   const total = basket.length ? basket.reduce((s, it) => s + nv(basketNutrients(it), 'kcal'), 0) + nv(n, 'kcal') : null;
   return html`<div class="add-amount">
@@ -125,6 +127,9 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
         ${p === serving && food.servingName ? `${food.servingName} (${fmt(p, 'x')} ${unitLabel(food)})` : p === serving ? `Порция ${fmt(p, 'x')} ${unitLabel(food)}` : `${p} ${unitLabel(food)}`}</button>`)}
       ${serving ? html`<button type="button" class="chip" onClick=${() => setAmount(String(serving * 2))}>2 порции</button>` : null}
     </div>
+    ${noteOpen ? html`<input class="item-note-input" value=${itemNote} maxlength=${F.NOTE_MAX} ref=${focusOnce}
+        placeholder="Заметка к продукту: например, 4 ед. инсулина" aria-label="Заметка к продукту" onInput=${(e) => setItemNote(e.target.value)}/>`
+      : html`<button type="button" class="link-btn item-note-btn" onClick=${() => setNoteOpen(true)}><${Icon} name="edit" size=${14}/> Заметка к продукту</button>`}
     ${entryMode ? null : html`<${EntryMeta} ...${meta}/>`}
     <div class="aa-total">
       <b>${fmt(nv(n, 'kcal'), 'kcal')} ккал</b>
@@ -184,7 +189,8 @@ function QuickStep({ meta, entryMode, onBack, onAdd, onSave }) {
   const [name, setName] = useState('');
   const [n, setN] = useState({});
   const ok = num(n.kcal) || num(n.protein) || num(n.fat) || num(n.carbs);
-  const item = () => ({ key: ++basketKey, quick: { name, nutrients: n }, amount: 1 });
+  const [itemNote, setItemNote] = useState('');
+  const item = () => ({ key: ++basketKey, quick: { name, nutrients: n }, amount: 1, note: itemNote });
   const go = (fn) => (ok ? fn(item()) : showSnackbar('Укажи калории или БЖУ'));
   return html`<form class="add-quick" onSubmit=${(e) => { e.preventDefault(); go(onSave); }}>
     <label class="field"><span>Что съел(а)</span><input value=${name} ref=${focusOnce} placeholder="Быстрая запись" onInput=${(e) => setName(e.target.value)}/></label>
@@ -192,6 +198,8 @@ function QuickStep({ meta, entryMode, onBack, onAdd, onSave }) {
       ${['kcal', ...MACROS].map((k) => html`<${NumField} key=${k} big label=${NUTRIENT[k].label} unit=${NUTRIENT[k].unit}
         value=${nv(n, k)} onCommit=${(v) => setN({ ...n, [k]: v })}/>`)}
     </div>
+    <input class="item-note-input" value=${itemNote} maxlength=${F.NOTE_MAX} placeholder="Заметка к продукту (необязательно)"
+      aria-label="Заметка к продукту" onInput=${(e) => setItemNote(e.target.value)}/>
     ${entryMode ? null : html`<${EntryMeta} ...${meta}/>`}
     <div class="sheet-actions">
       <button type="button" class="btn" onClick=${onBack}>Назад</button>
@@ -204,6 +212,7 @@ function QuickStep({ meta, entryMode, onBack, onAdd, onSave }) {
 /** Шаг «Запись»: собранные продукты (количество можно поправить), время, рацион, заметка. */
 function ReviewStep({ basket, setBasket, meta, entryMode, onMore, onSave }) {
   const setAmount = (key, v) => setBasket(basket.map((it) => (it.key === key ? { ...it, amount: num(v) } : it)));
+  const setNote = (key, v) => setBasket(basket.map((it) => (it.key === key ? { ...it, note: v } : it)));
   const total = sumNutrients(basket.map(basketNutrients));
   return html`<div class="add-review">
     <ul class="item-edit-list">
@@ -214,6 +223,8 @@ function ReviewStep({ basket, setBasket, meta, entryMode, onMore, onSave }) {
         <b class="ie-kcal">${fmt(nv(basketNutrients(it), 'kcal'), 'kcal')}</b>
         <button type="button" class="icon-btn small" aria-label=${'Убрать ' + basketName(it)} onClick=${() => setBasket(basket.filter((x) => x.key !== it.key))}>
           <${Icon} name="close" size=${16}/></button>
+        <input class="item-note-input ie-note" value=${it.note || ''} maxlength=${F.NOTE_MAX} placeholder="Заметка к продукту"
+          aria-label=${'Заметка: ' + basketName(it)} onInput=${(e) => setNote(it.key, e.target.value)}/>
       </li>`)}
     </ul>
     <button type="button" class="btn small" onClick=${onMore}><${Icon} name="plus" size=${16}/> Ещё продукт</button>
@@ -317,6 +328,7 @@ export function EntrySheet({ id }) {
   const e = store.feast.entries.get(id);
   const items = e && !e.deletedAt ? F.entryItems(e) : [];
   const [amounts, setAmounts] = useState(() => Object.fromEntries(items.map((it) => [it.id, it.amount])));
+  const [notes, setNotes] = useState(() => Object.fromEntries(items.map((it) => [it.id, it.note || ''])));
   const [removed, setRemoved] = useState([]);
   const [meal, setMeal] = useState(e?.meal || 'snack');
   const [time, setTime] = useState(e?.time || null);
@@ -325,7 +337,8 @@ export function EntrySheet({ id }) {
   const live = items.filter((it) => !removed.includes(it.id));
   const amountOf = (it) => (it.id in amounts ? amounts[it.id] : it.amount);
   const preview = sumNutrients(live.map((it) => itemNutrients({ ...it, amount: amountOf(it) })));
-  const changes = () => ({ meal, time, note, amounts: Object.fromEntries(live.map((it) => [it.id, amountOf(it)])), removed });
+  const changes = () => ({ meal, time, note, amounts: Object.fromEntries(live.map((it) => [it.id, amountOf(it)])),
+    notes: Object.fromEntries(live.map((it) => [it.id, notes[it.id] ?? ''])), removed });
   const save = async () => {
     await FA.saveEntry(id, changes());
     closeSheet();
@@ -348,6 +361,9 @@ export function EntrySheet({ id }) {
           <b class="ie-kcal">${fmt(nv(itemNutrients({ ...it, amount: amountOf(it) }), 'kcal'), 'kcal')}</b>
           <button type="button" class="icon-btn small" aria-label=${'Убрать из записи: ' + it.name} disabled=${readOnly()}
             onClick=${() => setRemoved([...removed, it.id])}><${Icon} name="close" size=${16}/></button>
+          <input class="item-note-input ie-note" value=${notes[it.id] ?? ''} maxlength=${F.NOTE_MAX} disabled=${readOnly()}
+            placeholder="Заметка к продукту: например, 4 ед. инсулина" aria-label=${'Заметка: ' + it.name}
+            onInput=${(e) => setNotes({ ...notes, [it.id]: e.target.value })}/>
         </li>`)}
       </ul>
       ${!live.length ? html`<p class="hint warn">В записи не осталось продуктов — при сохранении она удалится.</p>` : null}

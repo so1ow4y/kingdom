@@ -21,7 +21,7 @@ import { readLocal, writeLocal } from '../hooks.js';
 import { getFocus } from '../../store/focus.js';
 import { navigate } from '../router.js';
 
-const TABS = [['building', 'Постройки'], ['char', 'Жители'], ['light', 'Свет и небо'], ['decor', 'Декор']];
+const TABS = [['building', 'Постройки'], ['upgrade', 'Прокачка'], ['char', 'Жители'], ['light', 'Свет и небо'], ['decor', 'Декор']];
 const BASE_INFO = {
   'base:house': { name: 'Дом старосты', emoji: '🏠', desc: 'С него началась деревня. Ночью в окнах горит свет — нажми на дом, чтобы выключить.' },
   'base:wanderer': { name: 'Странник', emoji: '🧑‍🌾', desc: 'Живёт в деревне с самого начала. Без строителя сам берётся за работу во время фокуса.' },
@@ -29,6 +29,28 @@ const BASE_INFO = {
 
 const infoOf = (id) => BASE_INFO[id] || V.villageItem(id);
 const price = (it) => (it.gems ? `${it.gems} 💎` : `${it.coins} 🪙`);
+/** Уровень звёздами: заполненные — золотые, остальные — бледные. */
+const stars = (level) => html`${'★'.repeat(level)}<span class="v-level-rest">${'★'.repeat(V.MAX_LEVEL - level)}</span>`;
+
+/** Кнопка «⬆ Ур. N · цена» для постройки (или «Макс.»). */
+function UpgradeButton({ obj, bal, small = true }) {
+  const nu = V.nextUpgrade(obj);
+  if (!nu) return V.isUpgradable(obj.place) ? html`<span class="v-owned">★ Макс. уровень</span>` : null;
+  const check = V.canUpgrade(store.data, obj, bal);
+  return html`<button class=${'btn' + (small ? ' small' : '') + (check.ok ? ' primary' : '')} disabled=${!check.ok || !!store.ui.readOnly}
+    title=${check.reason || `Дальше: ${V.bonusText(obj.place, nu.level)}`} onClick=${() => A.upgradeVillageObject(obj.key)}>
+    ⬆ Ур. ${nu.level} · ${price(nu.price)}</button>`;
+}
+
+/** Бонусы деревни одной строкой. */
+function bonusesLine(b) {
+  const parts = [];
+  if (b.coins) parts.push(`+${b.coins} % монет за задачи`);
+  if (b.food) parts.push(`+${b.food} % наград за еду`);
+  if (b.focus) parts.push(`+${b.focus} 💎 за фокус`);
+  if (b.mood) parts.push(`настроение +${b.mood}`);
+  return parts.join(' · ');
+}
 
 export function openVillageShop() {
   writeLocal('shopTab', 'village');
@@ -65,7 +87,7 @@ function objInfo(o) {
   return V.shopItems().find((it) => it.place === o.place && !it.upgrade) || V.villageItem(o.itemId) || { name: o.place, emoji: '🏠', desc: '' };
 }
 
-const LIT = (b) => b.type.startsWith('house') || ['tavern', 'tower', 'windmill'].includes(b.type);
+const LIT = (b) => b.type.startsWith('house') || ['tavern', 'tower', 'windmill', 'castle'].includes(b.type);
 
 function Selected({ sel, bal }) {
   const [build, setBuild] = useState(false);
@@ -117,19 +139,19 @@ function Selected({ sel, bal }) {
   const own = !o.fixed && !o.virtual;
   const plan = own ? V.sellPlan(store.data, o.key) : null;
   const back = plan && !plan.error ? [plan.coins ? `+${plan.coins} 🪙` : '', plan.gems ? `+${plan.gems} 💎` : ''].filter(Boolean).join(' ') : '';
-  const next = o.place === 'goldmine' || o.place === 'gemmine' ? V.VILLAGE_ITEMS.find((x) => x.requires === o.id) : null;
-  const check = next ? V.canBuy(store.data, next, bal) : null;
+  const up = own && V.isUpgradable(o.place);
+  const nu = up ? V.nextUpgrade(o) : null;
   const lightId = sel.type === 'lantern' ? o.key : o.id;
   const lights = sel.type === 'lantern' || (sel.type === 'building' && LIT(o));
   const count = own ? V.villageObjects(store.data).filter((x) => x.place === o.place).length : 0;
   return html`<div class="village-sel">
     <span class="vs-emoji">${it.emoji}</span>
-    <div class="vs-main"><b>${it.name}${count > 1 && !next ? html` <small class="muted">· таких ${count}</small>` : null}</b>
+    <div class="vs-main"><b>${(it.name || '').replace(/ · ур\. \d$/, '')}${up ? html` <small class="v-level" title=${'Уровень ' + o.level + ' из ' + V.MAX_LEVEL}>${stars(o.level)}</small>` : null}${count > 1 ? html` <small class="muted">· таких ${count}</small>` : null}</b>
       <p class="muted small">${o.fixed ? 'С него началась деревня — он всегда на своём месте.' : it.desc || ''}</p>
-      ${next ? html`<p class="small">Дальше: ${next.emoji} ${next.name} — ${next.desc || ''}</p>` : null}</div>
+      ${up ? html`<p class="small">Ур. ${o.level}: ${V.bonusText(o.place, o.level)}${nu ? html` <span class="muted">→ ур. ${nu.level}: ${V.bonusText(o.place, nu.level)}</span>` : ''}</p>` : null}</div>
     <div class="vs-actions">
       ${lights ? html`<button class="btn small" onClick=${() => setPrefs({ villageLightsOff: world.toggleLight(lightId) })}>${world.lightOn(lightId) ? '💡 Погасить' : '💡 Зажечь'}</button>` : null}
-      ${next ? html`<button class="btn small primary" disabled=${!check.ok || readOnly} title=${check.reason || 'Улучшить'} onClick=${() => A.buyVillageItem(next.id)}>⬆ ${price(V.priceOf(store.data, next))}</button>` : null}
+      ${up ? html`<${UpgradeButton} obj=${o} bal=${bal}/>` : null}
       ${own ? html`<button class="btn small" disabled=${readOnly} onClick=${() => startMove(o.key)}><${Icon} name="move" size=${16}/> Переставить</button>` : null}
       ${own ? html`<button class="btn small" disabled=${!!plan.error || readOnly} title=${plan.error || 'Вернётся полная цена'}
         onClick=${async () => { if (await A.sellVillageObject(o.key)) selectInVillage(null); }}>Продать${back ? ` · ${back}` : ''}</button>` : null}
@@ -208,28 +230,62 @@ function ShopGrid({ bal }) {
   const owned = V.ownedVillage(store.data);
   const objects = V.villageObjects(store.data);
   const readOnly = !!store.ui.readOnly;
-  const items = V.shopItems().filter((it) => (tab === 'light' ? ['light', 'sky'].includes(it.kind) : it.kind === tab));
+  // уровни шахт (0.12.4) — не отдельные покупки, а «Прокачка»
+  const items = V.shopItems().filter((it) => !it.upgrade && (tab === 'light' ? ['light', 'sky'].includes(it.kind) : it.kind === tab));
   return html`
     <div class="chip-row wrap" role="tablist">
       ${TABS.map(([k, label]) => html`<button role="tab" aria-selected=${tab === k} class=${'chip' + (tab === k ? ' selected' : '')} onClick=${() => setTab(k)}>${label}</button>`)}
     </div>
-    <div class="village-items">
+    ${tab === 'upgrade' ? html`<${UpgradeList} bal=${bal}/>` : html`<div class="village-items">
       ${items.map((it) => {
         const has = !it.repeatable && owned.has(it.id);
         const count = it.repeatable ? objects.filter((o) => o.place === it.place).length : 0;
+        const mine = has && it.place ? objects.find((o) => o.place === it.place) : null;
         const check = has ? null : V.canBuy(store.data, it, bal);
         const locked = check && check.reason.startsWith('Сначала');
         return html`<div class=${'v-item' + (has || count ? ' owned' : '') + (locked ? ' locked' : '')} key=${it.id}>
           <span class="v-emoji">${it.emoji}</span>
-          <div class="v-name">${it.name}${it.big ? html` <small class="v-tag">большой</small>` : null}${count ? html` <small class="v-tag">×${count}</small>` : null}</div>
+          <div class="v-name">${it.name}${it.big ? html` <small class="v-tag">большой</small>` : null}${count ? html` <small class="v-tag">×${count}</small>` : null}${mine && V.isUpgradable(mine.place) ? html` <small class="v-level">${stars(mine.level)}</small>` : null}</div>
           <p class="muted small">${it.desc || ''}</p>
-          ${has ? html`<span class="v-owned">✓ Есть</span>`
+          ${mine && V.isUpgradable(mine.place) ? html`<${UpgradeButton} obj=${mine} bal=${bal}/>`
+            : has ? html`<span class="v-owned">✓ Есть</span>`
             : locked ? html`<small class="muted">${check.reason}</small>`
             : html`<button class=${'btn small' + (check.ok ? ' primary' : '')} disabled=${!check.ok || readOnly} title=${check.reason || 'Купить'}
                 onClick=${() => A.buyVillageItem(it.id)}>${count ? 'Ещё · ' : ''}${price(V.priceOf(store.data, it))}</button>`}
         </div>`;
       })}
-    </div>`;
+    </div>`}`;
+}
+
+/**
+ * «Прокачка» (0.12.4, как в Clash of Clans): каждая постройка — уровни 1…5; на каждом — бонус больше и вид богаче.
+ * У домов и огородов уровень у каждого свой.
+ */
+function UpgradeList({ bal }) {
+  const objects = V.villageObjects(store.data).filter((o) => V.isUpgradable(o.place));
+  const b = V.villageBonuses(store.data);
+  const num = new Map();
+  if (!objects.length) return html`<p class="muted">Пока нечего прокачивать — построй что-нибудь во вкладке «Постройки».</p>`;
+  return html`
+    <p class="muted small">Сейчас деревня даёт: <b>${bonusesLine(b) || 'бонусов пока нет'}</b>. Улучшенная постройка выглядит богаче:
+      цветы у входа, флажок цвета иконки, золотая кайма и фонари, герб со свечением.</p>
+    <ul class="upgrade-list">
+      ${objects.sort((x, y) => (x.place < y.place ? -1 : x.place > y.place ? 1 : x.at < y.at ? -1 : 1)).map((o) => {
+        const it = V.villageItem(o.itemId);
+        const n = (num.get(o.place) || 0) + 1;
+        num.set(o.place, n);
+        const many = objects.filter((x) => x.place === o.place).length > 1;
+        const nu = V.nextUpgrade(o);
+        return html`<li class="upgrade-row" key=${o.key}>
+          <span class="v-emoji">${it?.emoji || '🏠'}</span>
+          <div class="ur-main">
+            <b>${(it?.name || o.place).replace(/ · ур\. \d$/, '')}${many ? ` №${n}` : ''}</b> <small class="v-level">${stars(o.level)}</small>
+            <small class="muted">ур. ${o.level}: ${V.bonusText(o.place, o.level)}${nu ? ` → ${V.bonusText(o.place, nu.level)}` : ''}</small>
+          </div>
+          <${UpgradeButton} obj=${o} bal=${bal}/>
+        </li>`;
+      })}
+    </ul>`;
 }
 
 export function VillageSettings() {
@@ -240,8 +296,8 @@ export function VillageSettings() {
   return html`<div class="village-settings">
     <label class="toggle-row compact"><input type="checkbox" checked=${p.villageBackdrop !== false} onChange=${(e) => setPrefs({ villageBackdrop: e.target.checked })}/>
       <span>Деревня на фоне вкладок<small>Во весь экран за карточками, приглушённая. На экране «Деревня» видна всегда</small></span></label>
-    <label class="field village-dim-field"><span>Затемнение на вкладках: ${Math.round(dim * 100)} %</span>
-      <input type="range" min="0" max="0.9" step="0.05" value=${dim} onInput=${(e) => setPrefs({ villageDim: +e.target.value })} aria-label="Затемнение деревни на вкладках"/></label>
+    <label class="field village-dim-field"><span>Затемнение на вкладках: ${Math.round(dim * 100)} %${dim >= 1 ? ' — деревни на вкладках не видно' : ''}</span>
+      <input type="range" min="0" max="1" step="0.05" value=${dim} onInput=${(e) => setPrefs({ villageDim: +e.target.value })} aria-label="Затемнение деревни на вкладках"/></label>
     <label class="toggle-row compact"><input type="checkbox" checked=${p.visitors !== false} onChange=${(e) => setPrefs({ visitors: e.target.checked })}/>
       <span>Жители подходят к экрану<small>Иногда кто-нибудь выходит из леса и стучит по «стеклу»</small></span></label>
     <${DecorationSettings}/>
@@ -284,13 +340,17 @@ export function VillageShopPanel() {
         <ul>
           <li>За выполненные задачи — монеты 🪙 (по приоритету). На них строишь деревню и заселяешь жителей.</li>
           <li>Изумруды 💎 — вторая валюта. Их добывает изумрудная шахта (за важные и критичные задачи) и дают фокус-сессии от 15 минут.</li>
-          <li>Золотая шахта увеличивает монеты за каждую задачу: +10 / 20 / 30 % по уровню.</li>
+          <li>Золотая шахта увеличивает монеты за каждую задачу: +10 % за уровень (до 5-го — +50 %).</li>
+          <li>Прокачка (как в Clash of Clans): у каждой постройки уровни 1…5, цена растёт с уровнем. Улучшенная постройка богаче
+            на вид и даёт больше: дома и башня — монеты за задачи, мельница, огороды и замок — награды за еду, таверна и
+            фонтан — настроение, мастерская — 💎 за фокус. Улучшить — в «Прокачке» или нажав на постройку в деревне.</li>
+          <li>Чёрный замок — тёмная крепость: +5 % монет и наград за еду за каждый уровень.</li>
           <li>Настроение жителей зависит от выполненных задач за 3 дня (чем важнее, тем больше радости), фокуса сегодня и просроченных задач.</li>
           <li>«Взяться за задачу» — фокус-сессия: таймер, строитель трудится в мастерской, в конце — фейерверк и изумруды. Время по задаче сохраняется в ней самой.</li>
           <li>Стиль деревни следует цветовой схеме (Lavender — готика, Lime — сказочный луг, «Океан» — море с маяком, «Закат» — осень), флаги — цвету квадрата с буквой.</li>
           <li>Дома, огороды, фонари и декор можно покупать сколько угодно — земля деревни сама расширяется, а вид отдаляется.</li>
           <li>На экране «Деревня» нажми на постройку — её можно переставить или продать (вернётся полная цена), на пустую клетку — построить там что-нибудь.</li>
-          <li>Продать или вернуть шахту нельзя, если её изумруды уже потрачены; уровень шахты продаётся вместе с ней.</li>
+          <li>Продать или вернуть шахту нельзя, если её изумруды уже потрачены; уровни постройки продаются вместе с ней (вернётся всё).</li>
         </ul>
       </details>
     </div>`;

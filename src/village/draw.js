@@ -508,7 +508,10 @@ function paintHouse(c, b, K, out) {
   const W = b.w;
   const base = SPRITE_H[b.type];
   const v = b.v;
-  const roofCol = v === 1 ? mix(K.pal.roof, '#b8452f', 0.6) : v === 2 ? mix(K.pal.roof, '#4f6a8f', 0.55) : K.pal.roof;
+  const L = b.level || 1;
+  const roofBase = v === 1 ? mix(K.pal.roof, '#b8452f', 0.6) : v === 2 ? mix(K.pal.roof, '#4f6a8f', 0.55) : K.pal.roof;
+  // прокачка (0.12.4): с 4-го уровня — багровая черепица, с 5-го — золотой конёк
+  const roofCol = L >= 4 ? mix(roofBase, '#8e1b2c', 0.45) : roofBase;
   const wallCol = v === 2 ? tint(K.pal.wall, 0.08) : K.pal.wall;
   const beam = shade(K.pal.wood, 0.12);
   const wallH = big ? 36 : 22;
@@ -535,8 +538,9 @@ function paintHouse(c, b, K, out) {
   const doorX = wx + Math.round(ww / 2) - 5;
   doorAt(c, doorX, base - 16, 10, 15, K);
   wallLamp(c, doorX + 12, base - 17, K, out.lamps);
-  const box = K.flowers || K.flavor === 'meadow';
-  const sh = v === 1 ? shade(K.style.accent || '#3949ab', 0.1) : null;
+  // прокачка: со 2-го уровня — ящики с цветами на окнах, с 3-го — ставни цвета иконки
+  const box = K.flowers || K.flavor === 'meadow' || L >= 2;
+  const sh = v === 1 ? shade(K.style.accent || '#3949ab', 0.1) : L >= 3 ? shade(K.letter || '#3949ab', 0.15) : null;
   if (big) {
     out.win(wx + 7, base - 14, 8, 7, {});
     out.win(wx + ww - 15, base - 14, 8, 7, {});
@@ -550,6 +554,11 @@ function paintHouse(c, b, K, out) {
   // крыша
   const roofH = top - 2;
   roofSlope(c, 0, 2, W + 4, roofH, roofCol, big ? 7 : 6);
+  if (L >= 5) {
+    const ins = big ? 7 : 6;
+    R(c, ins, 2, W + 4 - ins * 2, 1, '#d9b44a');
+    R(c, ins, 3, W + 4 - ins * 2, 1, shade('#d9b44a', 0.3));
+  }
   if (K.flavor === 'gothic') {
     // острое слуховое окно со шпилем
     const dx = Math.floor((W + 4) / 2) - 6;
@@ -839,7 +848,185 @@ function paintField(c, b, K) {
   }
 }
 
-const PAINTERS = { house: paintHouse, house4: paintHouse, tavern: paintTavern, forge: paintForge, windmill: paintWindmill, tower: paintTower, fountain: paintFountain, goldmine: paintMine, gemmine: paintMine, field: paintField };
+/**
+ * Чёрный замок (0.12.4): тёмный камень, донжон со шпилем, две башни с зубцами и шпилями, ворота с решёткой,
+ * багровые знамёна с полумесяцем. С уровнем: знамёна на башнях (2), факелы у ворот и флажки на шпилях (3),
+ * башенки на донжоне (4), багровое свечение окон и золотая корона на шпиле (5). Палитра своя — не зависит от стиля.
+ */
+function paintCastle(c, b, K, out) {
+  const W = b.w + 4;
+  const base = SPRITE_H.castle;
+  const L = b.level || 1;
+  const stone = '#3b3743';
+  const lite = '#5a5462';
+  const slate = '#221e29';
+  const crimson = '#8e1b2c';
+  const gold = '#c9a24a';
+  const iron = '#4a4652';
+  const merlons = (x0, x1, y) => {
+    for (let x = x0; x < x1; x += 6) masonry(c, x, y - 5, 4, 5, stone, 4, 2, x + y);
+  };
+  const spire = (cx, top, half, h, col) => {
+    for (let r = 0; r < h; r++) {
+      const hw = Math.max(0, Math.round(half * (1 - r / h)));
+      R(c, cx - hw, top - r, hw * 2 + 1, 1, r % 3 ? col : shade(col, 0.35));
+      P(c, cx + hw, top - r, shade(col, 0.5));
+    }
+    R(c, cx, top - h - 3, 1, 4, iron);
+  };
+  const pennant = (x, y) => {
+    R(c, x, y, 1, 8, iron);
+    for (let r = 0; r < 4; r++) R(c, x + 1, y + r, 6 - r, 1, crimson);
+  };
+  const banner = (x, y, w, h) => {
+    R(c, x - 1, y - 1, w + 2, 1, gold);
+    for (let r = 0; r < h; r++) {
+      if (r < h - 3) {
+        R(c, x, y + r, w, 1, r % 5 === 4 ? shade(crimson, 0.12) : crimson);
+      } else {
+        const gap = r - (h - 4);
+        R(c, x, y + r, Math.max(0, Math.floor(w / 2) - gap), 1, crimson);
+        R(c, x + Math.ceil(w / 2) + gap, y + r, Math.max(0, Math.floor(w / 2) - gap), 1, crimson);
+      }
+    }
+    R(c, x, y, 1, h - 3, shade(crimson, 0.3));
+    R(c, x, y + h - 5, w, 1, gold);
+    // полумесяц
+    const cx = x + Math.floor(w / 2);
+    const cy = y + Math.floor((h - 5) / 2);
+    ellipse(c, cx, cy, 2, 2, '#120d12');
+    ellipse(c, cx + 1, cy - 1, 2, 2, crimson);
+  };
+  // узкая бойница с полукруглым верхом (ночью светится тёплым, без деревянного креста)
+  const slit = (x, y, w, h) => {
+    R(c, x - 1, y, w + 2, h + 1, '#1a1720');
+    R(c, x, y + 1, w, h - 1, '#2b2233');
+    R(c, x + (w > 2 ? 1 : 0), y, w > 2 ? w - 2 : w, 1, '#2b2233');
+    P(c, x, y + 2, '#4a3a55');
+    out.wins.push({ x, y: y + 1, w, h: h - 1 });
+  };
+  const torch = (x, y) => {
+    R(c, x, y, 1, 4, iron);
+    R(c, x - 1, y - 1, 3, 1, iron);
+    R(c, x - 1, y - 3, 3, 2, '#ff7a2a');
+    P(c, x, y - 4, '#ffd36a');
+    out.cores.push({ x: x - 1, y: y - 4, w: 3, h: 3, warm: '#ff8a3a', always: true });
+    out.glows.push({ x, y: y - 3, r: 11, warm: '#ff7a2a', base: 0.25 });
+  };
+
+  // башни по краям
+  const tw = 22;
+  const th = 80;
+  for (const tx of [0, W - tw]) {
+    const top = base - th;
+    masonry(c, tx, top, tw, th, stone, 6, 3, tx + b.x);
+    R(c, tx + tw - 4, top, 4, th, 'rgba(0,0,0,0.25)');
+    R(c, tx, top, tw, 1, lite);
+    merlons(tx, tx + tw, top);
+    spire(tx + Math.floor(tw / 2), top - 6, Math.floor(tw / 2) - 1, 22, slate);
+    for (const yy of [top + 14, top + 34]) slit(tx + Math.floor(tw / 2) - 1, yy, 3, 8);
+    if (L >= 2) banner(tx + Math.floor(tw / 2) - 4, top + 46, 8, 16);
+    if (L >= 3) pennant(tx + Math.floor(tw / 2), top - 39);
+  }
+  // донжон
+  const kw = 42;
+  const kx = Math.round(W / 2 - kw / 2);
+  const kTop = base - 102;
+  masonry(c, kx, kTop, kw, 102 - 30, tint(stone, 0.04), 6, 3, kx + b.x + 7);
+  R(c, kx + kw - 5, kTop, 5, 72, 'rgba(0,0,0,0.22)');
+  R(c, kx, kTop, kw, 1, lite);
+  merlons(kx, kx + kw, kTop);
+  spire(Math.round(W / 2), kTop - 6, 13, 24, slate);
+  for (const yy of [kTop + 12, kTop + 30]) for (const xx of [kx + 7, kx + kw / 2 - 2, kx + kw - 11]) slit(Math.round(xx), yy, 4, 9);
+  banner(Math.round(W / 2) - 5, kTop + 44, 10, 20);
+  if (L >= 4) {
+    for (const cx of [kx + 4, kx + kw - 5]) {
+      R(c, cx - 4, kTop - 14, 9, 14, stone);
+      R(c, cx - 4, kTop - 14, 9, 1, lite);
+      spire(cx, kTop - 15, 5, 12, slate);
+    }
+  }
+  if (L >= 5) {
+    const cx = Math.round(W / 2);
+    const tipY = kTop - 6 - 24 - 4;
+    R(c, cx - 3, tipY - 2, 7, 2, gold);
+    for (const dx of [-3, 0, 3]) R(c, cx + dx, tipY - 5, 1, 3, gold);
+    out.glows.push({ x: cx, y: tipY - 2, r: 12, warm: '#ffd36a', base: 0.3 });
+    for (const yy of [kTop + 15, kTop + 33]) out.glows.push({ x: Math.round(W / 2), y: yy, r: 22, warm: '#c4203a', base: 0.18 });
+  }
+  // крепостная стена с зубцами
+  const wallTop = base - 34;
+  masonry(c, tw - 2, wallTop, W - tw * 2 + 4, 34, stone, 6, 3, b.x + 3);
+  R(c, tw - 2, wallTop, W - tw * 2 + 4, 1, lite);
+  merlons(tw, W - tw, wallTop);
+  // ворота: арка, решётка, створки
+  const gw = 18;
+  const gh = 24;
+  const gx = Math.round(W / 2) - gw / 2;
+  const gy = base - gh;
+  masonry(c, gx - 3, gy - 4, gw + 6, gh + 4, lite, 4, 2, gx);
+  R(c, gx, gy + 3, gw, gh - 3, '#120d12');
+  for (let r = 0; r < 4; r++) R(c, gx + 3 - r, gy + 3 - r, gw - 6 + r * 2, 1, '#120d12');
+  for (let x = gx + 2; x < gx + gw - 1; x += 3) R(c, x, gy + 2, 1, gh - 6, iron);
+  for (let y = gy + 6; y < base - 4; y += 4) R(c, gx + 1, y, gw - 2, 1, iron);
+  R(c, gx - 4, base - 2, gw + 8, 2, shade(stone, 0.3));
+  if (L >= 3) {
+    torch(gx - 6, base - 16);
+    torch(gx + gw + 5, base - 16);
+  }
+}
+
+/**
+ * Прокачка (0.12.4): чем выше уровень постройки, тем она богаче — горшки с цветами у входа, флажок цвета иконки,
+ * золотая кайма и фонари, золотой герб со свечением. У шахт первые уровни уже нарисованы (ур. 2–3), это — с 4-го.
+ */
+function paintLevel(c, b, K, out) {
+  if (b.type === 'castle') return;
+  const mine = b.type === 'goldmine' || b.type === 'gemmine';
+  const stage = mine ? (b.level || 1) - 3 : (b.level || 1) - 1;
+  if (stage <= 0) return;
+  const W = b.w + 4;
+  const base = SPRITE_H[b.type];
+  const flat = b.type === 'fountain' || b.type === 'field';
+  const gold = '#d9b44a';
+  const pot = (x) => {
+    R(c, x, base - 5, 5, 4, '#a5532e');
+    R(c, x, base - 5, 5, 1, '#c8714a');
+    ellipse(c, x + 2, base - 7, 3, 2, '#3f8a3a');
+    P(c, x + 1, base - 8, '#ff6f91');
+    P(c, x + 3, base - 7, '#ffd23a');
+  };
+  pot(-1);
+  pot(W - 5);
+  const px = Math.floor(W / 2);
+  if (stage >= 2) {
+    if (flat) {
+      pot(Math.floor(W / 2) - 8);
+      pot(Math.floor(W / 2) + 3);
+    } else {
+      R(c, px, -14, 1, 16, K.pal.iron);
+      for (let r = 0; r < 5; r++) R(c, px + 1, -14 + r, Math.round(8 - r * 1.5), 1, r % 2 ? shade(K.letter, 0.15) : K.letter);
+    }
+  }
+  if (stage >= 3) {
+    R(c, 1, base - 1, W - 2, 1, gold);
+    for (const lx of [-3, W + 1]) {
+      R(c, lx, base - 16, 1, 15, K.pal.iron);
+      R(c, lx - 1, base - 19, 3, 3, '#f2d27a');
+      out.lamps.push({ x: lx - 1, y: base - 19, w: 3, h: 3, r: 18 });
+    }
+  }
+  if (stage >= 4) {
+    if (flat) out.glows.push({ x: px, y: base - 12, r: 18, warm: '#ffd36a', base: 0.22 });
+    else {
+      ellipse(c, px, -17, 2, 2, gold);
+      P(c, px, -18, '#fff2b0');
+      out.glows.push({ x: px, y: -17, r: 10, warm: '#ffd36a', base: 0.3 });
+    }
+  }
+}
+
+const PAINTERS = { house: paintHouse, house4: paintHouse, tavern: paintTavern, forge: paintForge, windmill: paintWindmill, tower: paintTower, fountain: paintFountain, goldmine: paintMine, gemmine: paintMine, field: paintField, castle: paintCastle };
 
 // ---------- Спрайты: обстановка (холст 32 × 34, точка у основания — (16, 30)) ----------
 
@@ -1333,13 +1520,17 @@ export class VillageRenderer {
   /** Спрайт постройки (огород, шахта, дом…) из кэша. */
   buildingSprite(b, K) {
     const sh = SPRITE_H[b.type];
-    return this.sprite(`b|${b.type}|${b.v}|${b.level}|${b.x}|${b.y}`, b.w + 8, sh + 10, 4, sh + 6, (c, meta) => {
-      c.translate(2, 6);
+    // над улучшенными постройками — место для флажка и герба (0.12.4), по бокам — для фонарей
+    const top = (b.level || 1) > 1 || b.type === 'castle' ? 22 : 6;
+    const side = (b.level || 1) > 1 ? 4 : 0;
+    return this.sprite(`b|${b.type}|${b.v}|${b.level}|${b.x}|${b.y}`, b.w + 8 + side * 2, sh + top + 4, 4 + side, sh + top, (c, meta) => {
+      c.translate(2 + side, top);
       PAINTERS[b.type](c, b, K, meta);
+      paintLevel(c, b, K, meta);
       c.setTransform(1, 0, 0, 1, 0, 0);
       for (const list of [meta.wins, meta.lamps, meta.cores, meta.glows]) for (const o of list) {
-        o.x += 2;
-        o.y += 6;
+        o.x += 2 + side;
+        o.y += top;
       }
     });
   }

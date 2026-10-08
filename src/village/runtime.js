@@ -90,4 +90,5 @@ onVillage((type, p) => {
   else if (type === 'focus-fail') world.focusFailed();
   else if (type === 'levelup') world.cheer(p.listId, !!p.prestige);
   else if (type === 'prestige') world.cheer(p.listId, true);
+  else if (type === 'upgraded') world.upgraded(p.key);
 });

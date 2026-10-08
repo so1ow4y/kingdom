@@ -13,7 +13,7 @@ export const GRAVITY = 260;
 const TAU = Math.PI * 2;
 
 // Высота спрайтов построек над нижним краем основания — для попадания кликом и дыма из труб.
-export const SPRITE_H = { house: 60, house4: 78, forge: 52, tavern: 72, tower: 96, windmill: 86, fountain: 34, goldmine: 40, gemmine: 40, field: 40 };
+export const SPRITE_H = { house: 60, house4: 78, forge: 52, tavern: 72, tower: 96, windmill: 86, fountain: 34, goldmine: 40, gemmine: 40, field: 40, castle: 132 };
 const CHIMNEY = { house: [0.74, 54], house4: [0.78, 72], tavern: [0.8, 66], forge: [0.82, 54] };
 
 export const KINDS = {
@@ -294,6 +294,16 @@ export class World {
       const sp = 26 + this.rand() * 10;
       this.particles.push({ x, y, z, vx: Math.cos(ang) * sp, vy: 0, vz: Math.sin(ang) * sp, life: 1.4 + this.rand() * 0.4, kind: 'fw', c: this.rand(), g: 0.25 });
     }
+  }
+
+  /** Постройку улучшили (0.12.4): фейерверк и искры над ней. */
+  upgraded(key) {
+    const b = this.map?.buildings.find((x) => x.key === key);
+    if (!b) return;
+    const x = b.x + b.w / 2;
+    const y = b.base - 4;
+    this.firework(x, y, 46);
+    this.burst(x, y, 20, 'spark', 18, 44);
   }
 
   /** Задача выполнена: все прыгают, монетки из домика; за важную — фейерверк и дракон. */

@@ -11,12 +11,13 @@ import { addDays } from './dates.js';
 import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 import { countLabel } from './plural.js';
-import { coinMultiplierAt, focusFields, levelAt } from './village.js';
+import { coinMultiplierAt, focusFields, levelAt, villageBonuses } from './village.js';
 import { extraEarnings } from './earnings.js';
 
 // gems и minutes — с 0.7 (деревня): изумруды у покупок и фокус-сессий, длительность фокуса. x, y — с 0.7.2: клетка
 // объекта деревни (перестановка — обычное изменение полей, сливается по времени поля). Старые версии их просто хранят.
-export const COIN_EVENT_FIELDS = ['type', 'amount', 'active', 'taskId', 'occKey', 'rewardId', 'itemId', 'title', 'at', 'gems', 'minutes', 'x', 'y', 'deletedAt'];
+// target, level — с 0.12.4: улучшение постройки деревни (id её покупки и новый уровень).
+export const COIN_EVENT_FIELDS = ['type', 'amount', 'active', 'taskId', 'occKey', 'rewardId', 'itemId', 'title', 'at', 'gems', 'minutes', 'x', 'y', 'target', 'level', 'deletedAt'];
 
 export const awardId = (taskId, occKey = null) => (occKey ? `a:${taskId}:${occKey}` : `a:${taskId}`);
 
@@ -61,8 +62,13 @@ export function revokeEvent(data, taskId, occKey, ctx) {
 }
 
 /** Покупка: награда пользователя (rewardId) или встроенный предмет магазина (itemId). gems — цена в изумрудах. */
-export function purchaseEvent({ price = 0, gems = 0, title, rewardId = null, itemId = null, x = null, y = null }, ctx) {
+export function purchaseEvent({ price = 0, gems = 0, title, rewardId = null, itemId = null, x = null, y = null, target = null, level = null }, ctx) {
   const fields = { type: 'purchase', amount: -Math.abs(price | 0), rewardId, itemId, title };
+  // улучшение постройки (0.12.4)
+  if (target) {
+    fields.target = target;
+    fields.level = level;
+  }
   if (gems) fields.gems = -Math.abs(gems | 0);
   // клетка объекта деревни относительно центра площади (0.7.2)
   if (Number.isInteger(x) && Number.isInteger(y)) {
@@ -74,7 +80,7 @@ export function purchaseEvent({ price = 0, gems = 0, title, rewardId = null, ite
 
 /** Завершённая фокус-сессия: изумруды и минуты (монеты не меняются). */
 export function focusEvent(data, { minutes, taskId = null, title = '' }, ctx) {
-  return newEvent(uuidv7(ctx.now), focusFields({ minutes, taskId, title, gemLevel: levelAt(data, 'gemmine') }), ctx);
+  return newEvent(uuidv7(ctx.now), focusFields({ minutes, taskId, title, gemLevel: levelAt(data, 'gemmine'), forge: villageBonuses(data).focus }), ctx);
 }
 
 const live = (data) => [...data.coinEvents.values()].filter((e) => !e.deletedAt && e.active);

@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.12.3';
+const VERSION = '0.12.4';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',

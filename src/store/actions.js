@@ -1140,6 +1140,16 @@ export async function refundPurchase(eventId) {
     showSnackbar(`Сначала верни «${dependent.name}»`);
     return false;
   }
+  // улучшения (0.12.4): нельзя вернуть уровень, над которым стоит следующий, и саму постройку с улучшениями
+  const ups = [...store.data.coinEvents.values()].filter((x) => !x.deletedAt && x.active && x.itemId === V.UPGRADE_ITEM);
+  if (e.itemId === V.UPGRADE_ITEM && ups.some((x) => x.target === e.target && x.level > e.level)) {
+    showSnackbar('Сначала верни следующий уровень этой постройки');
+    return false;
+  }
+  if (e.itemId !== V.UPGRADE_ITEM && ups.some((x) => x.target === eventId)) {
+    showSnackbar('У постройки есть улучшения — продай её в деревне, вернутся и они');
+    return false;
+  }
   const test = { ...store.data, coinEvents: new Map(store.data.coinEvents) };
   test.coinEvents.set(eventId, { ...e, active: false });
   if (V.gemBalance(test) < 0) {
@@ -1200,6 +1210,45 @@ export async function buyVillageItem(itemId, pos = null) {
   if (!(await commit(changes))) return false;
   showSnackbar(`Куплено: ${item.emoji} ${item.name} · −${cost}`);
   emitVillage('bought', { itemId, key: e.id });
+  return true;
+}
+
+/**
+ * Улучшить постройку деревни (0.12.4, «как в Clash of Clans»): следующий уровень за монеты или 💎. У шахт уровни 2–3 —
+ * прежние покупки, дальше и у остальных — событие 'v:upgrade' с target (id постройки) и level.
+ */
+export async function upgradeVillageObject(key) {
+  const obj = V.villageObjects(store.data).find((o) => o.key === key);
+  const nu = V.nextUpgrade(obj);
+  if (!obj || !nu) {
+    showSnackbar(obj && V.isUpgradable(obj.place) ? 'Это уже максимальный уровень' : 'Эта постройка не улучшается');
+    return false;
+  }
+  const check = V.canUpgrade(store.data, obj, G.balance(store.data));
+  if (!check.ok) {
+    showSnackbar(check.reason);
+    return false;
+  }
+  const item = V.villageItem(obj.itemId);
+  const name = (item?.name || 'Постройка').replace(/ · ур\. \d$/, '');
+  const gems = nu.price.gems || 0;
+  const price = nu.price.coins || 0;
+  const cost = gems ? `${gems} 💎` : `${price} 🪙`;
+  const ok = await confirm({
+    title: `Улучшить «${name}» до ${nu.level}-го уровня?`,
+    text: `Спишется ${cost}. Бонус: ${V.bonusText(obj.place, obj.level)} → ${V.bonusText(obj.place, nu.level)}.`,
+    confirmLabel: 'Улучшить',
+  });
+  if (!ok) return false;
+  const again = V.villageObjects(store.data).find((o) => o.key === key);
+  if (!again || again.level !== obj.level || !V.canUpgrade(store.data, again, G.balance(store.data)).ok) return false;
+  const title = `${name} · ур. ${nu.level}`;
+  const e = nu.itemId
+    ? G.purchaseEvent({ price, gems, title, itemId: nu.itemId }, ctx())
+    : G.purchaseEvent({ price, gems, title, itemId: V.UPGRADE_ITEM, target: key, level: nu.level }, ctx());
+  if (!(await commit([{ coll: 'coinEvents', prev: undefined, next: e }]))) return false;
+  showSnackbar(`${item?.emoji || '⬆'} ${name} — уровень ${nu.level} · −${cost}`);
+  emitVillage('upgraded', { key, level: nu.level });
   return true;
 }
 

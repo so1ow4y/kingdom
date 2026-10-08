@@ -607,9 +607,11 @@ export function VillageHost({ route }) {
   }, [exp, gems]);
 
   if (!on) return null;
+  // затемнение 100 % (0.12.4): на вкладках деревни не видно совсем — не рисуем её и гостей (экономия батареи)
+  const black = !full && dim >= 0.999;
   return html`
-    ${full || p.villageBackdrop !== false ? html`<${VillageBackdrop} interactive=${full} dim=${dim}/>` : null}
-    ${motion && p.visitors !== false ? html`<${VillageVisitor}/>` : null}
+    ${(full || p.villageBackdrop !== false) && !black ? html`<${VillageBackdrop} interactive=${full} dim=${dim}/>` : null}
+    ${motion && p.visitors !== false && !black ? html`<${VillageVisitor}/>` : null}
     ${!full && talk.current ? html`<div class="village-bottom talking village-talk-global"><${VillageDialog}/></div>` : null}`;
 }
 

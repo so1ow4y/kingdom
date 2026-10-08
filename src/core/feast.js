@@ -35,7 +35,8 @@ export const FOOD_FIELDS = ['name', 'brand', 'unit', 'servingName', 'servingSize
 export const ENTRY_FIELDS = ['date', 'meal', 'time', 'note', 'deletedAt'];
 export const LEGACY_ENTRY_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients'];
 // order — порядок продуктов в записи (как добавляли), дробный ключ
-export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'deletedAt'];
+// note (0.12.4) — заметка к продукту в записи (например, сколько единиц инсулина)
+export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'note', 'deletedAt'];
 export const MEAL_FIELDS = ['name', 'icon', 'time', 'order', 'date', 'archived', 'deletedAt'];
 export const MEAL_NOTE_FIELDS = ['date', 'meal', 'text', 'deletedAt'];
 export const BODY_FIELDS = ['date', 'weightKg', 'waistCm', 'neckCm', 'hipCm', 'bodyFatPct', 'note', 'deletedAt'];
@@ -407,9 +408,13 @@ function nestedItem(fields, ctx) {
  * amount в граммах/мл. Быстрая запись без продукта — unit 'portion', amount — число порций, значения — на порцию.
  * snapshot — копия продукта другой записи («как вчера»).
  */
-export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null }) {
-  // награда — снимок на момент записи (правка продукта или настроек прошлые записи не меняет)
-  const withRewards = (f, r) => (hasRewards(r) ? { ...f, rewards: cleanRewards(r) } : f);
+export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null, note = null }) {
+  // награда — снимок на момент записи (правка продукта или настроек прошлые записи не меняет); заметка — если есть
+  const text = cleanNote(note ?? snapshot?.note ?? '').trim() ? cleanNote(note ?? snapshot?.note) : '';
+  const withRewards = (f, r) => {
+    const out = hasRewards(r) ? { ...f, rewards: cleanRewards(r) } : f;
+    return text ? { ...out, note: text } : out;
+  };
   if (snapshot) {
     return withRewards({
       foodId: snapshot.foodId ?? null, name: normalizeName(snapshot.name) || 'Запись',
@@ -506,6 +511,12 @@ export function addItems(e, specs, ctx) {
   const orders = nextOrders(last, specs.length);
   const added = specs.map((x, i) => newItem(x, ctx, orders[i]));
   return { ...base, items: [...base.items, ...added].sort((a, b) => (a.id < b.id ? -1 : 1)), updatedAt: iso(ctx), updatedBy: ctx.deviceId };
+}
+
+/** Заметка к продукту в записи (0.12.4); пустая — убрать. */
+export function setItemNote(e, itemId, note, ctx) {
+  const base = upgradeEntry(e, ctx);
+  return touchNested(base, 'items', itemId, { note: cleanNote(note) }, ctx);
 }
 
 /** Изменить количество продукта в записи. */

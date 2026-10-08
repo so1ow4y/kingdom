@@ -23,16 +23,16 @@ export const STEP_COST = { [T.PATH]: 1, [T.PLAZA]: 1, [T.BRIDGE]: 1, [T.GRASS]: 
 export const FOOT = {
   house: [5, 3], manor: [6, 4], tavern: [7, 4], forge: [5, 3], windmill: [4, 3], tower: [3, 3], fountain: [3, 2],
   goldmine: [3, 2], gemmine: [3, 2], field: [4, 3], lantern: [1, 1], bench: [2, 1], pumpkin: [1, 1], flowerbed: [2, 1],
-  tree: [1, 1], bonfire: [1, 1], target: [1, 1],
+  tree: [1, 1], bonfire: [1, 1], target: [1, 1], castle: [9, 5],
 };
-const BIG = new Set(['house', 'manor', 'tavern', 'forge', 'windmill', 'tower', 'fountain', 'goldmine', 'gemmine', 'field']);
+const BIG = new Set(['house', 'manor', 'tavern', 'forge', 'windmill', 'tower', 'fountain', 'goldmine', 'gemmine', 'field', 'castle']);
 /** Тип для рисования (дом с мансардой рисуется как house4). */
 export const DRAW = { manor: 'house4' };
 /** Куда тянется объект без позиции (относительно центра площади). */
 const ANCHOR = {
   house: [-3, -8], manor: [4, -8], tavern: [8, -2], forge: [-10, -8], windmill: [-10, 7], field: [-14, 7], tower: [13, -7],
   fountain: [-1, -1], goldmine: [-14, -8], gemmine: [13, -8], lantern: [-1, 2], bench: [-3, 2], pumpkin: [-6, 1],
-  flowerbed: [3, 1], tree: [8, 9], bonfire: [-6, 6], target: [13, 7],
+  flowerbed: [3, 1], tree: [8, 9], bonfire: [-6, 6], target: [13, 7], castle: [-5, -15],
 };
 
 export const MARGIN = { w: 26, e: 26, n: 20, s: 20 };
@@ -288,7 +288,8 @@ export function buildMap(objects = [], opts = {}) {
   for (const { o, tx, ty } of res.placed) {
     const big = BIG.has(o.place);
     const item = mk(o.key, o.place, tx, ty, { itemId: o.itemId, level: o.level || 1, virtual: !!o.virtual, v: o.place === 'house' ? (++houses % 3) : 0 });
-    if (o.place === 'goldmine' || o.place === 'gemmine') item.id = `${o.itemId.replace(/:\d+$/, '')}:${o.level}`;
+    // у временного объекта «куда поставить новую покупку» (suggestPlace) itemId нет
+    if ((o.place === 'goldmine' || o.place === 'gemmine') && o.itemId) item.id = `${o.itemId.replace(/:\d+$/, '')}:${o.level}`;
     if (big) buildings.push(item);
     else smalls.push(item);
   }

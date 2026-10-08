@@ -364,3 +364,23 @@ test('«Рассчитать»: лимит по рекомендации, бел
   const tiny = B.calcGoals({ ...p, weightKg: 150 }, { recKcal: 900 });
   assert.ok(N.macrosKcal(tiny.grams) <= 900 && tiny.grams.carbs >= 0, 'маленький лимит — всё равно в пределах');
 });
+
+test('Заметка к продукту в записи (0.12.4): при записи, правка поэлементно, копия, пустая — убрать', () => {
+  const c = makeCtx(NOW);
+  const oat = F.newFood({ name: 'Овсянка', nutrients: { kcal: 350 } }, c);
+  let e = F.newEntry({ date: TODAY, meal: 'breakfast', items: [{ food: oat, amount: 60, note: '4 ед. инсулина' }, { quick: { name: 'Кофе', nutrients: { kcal: 5 } } }] }, c);
+  const [oatItem, coffee] = F.entryItems(e);
+  assert.equal(oatItem.note, '4 ед. инсулина');
+  assert.equal(coffee.note, undefined, 'без заметки — поля нет');
+  e = F.setItemNote(e, coffee.id, 'без сахара', c);
+  assert.equal(F.entryItems(e)[1].note, 'без сахара');
+  const other = { ...makeCtx(NOW + 5000), deviceId: '01926f3a-8c1e-7b2a-9f00-000000000002' };
+  const a = F.setItemNote(e, oatItem.id, '5 ед.', c);
+  const b = F.setItemAmount(e, coffee.id, 2, other);
+  const m = mergeEntity(a, b);
+  assert.equal(F.entryItems(m)[0].note, '5 ед.');
+  assert.equal(F.entryItems(m)[1].amount, 2, 'заметка и количество с двух устройств — оба');
+  const copy = F.newEntry({ date: '2026-10-09', meal: 'breakfast', items: F.entryItems(m).map((it) => ({ snapshot: it })) }, c);
+  assert.equal(copy.items.find((x) => x.name === 'Овсянка').note, '5 ед.');
+  assert.equal(F.entryItems(F.setItemNote(m, oatItem.id, '', c))[0].note, '');
+});

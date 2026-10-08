@@ -7,6 +7,7 @@ import { touch, tombstone, revert } from '../core/model.js';
 import { keyForIndex } from '../core/order.js';
 import * as F from '../core/feast.js';
 import * as B from '../core/body.js';
+import * as V from '../core/village.js';
 import { uuidv7 } from '../core/ids.js';
 import { normalizeBarcode } from '../core/barcode.js';
 import { num, fmt, entryKcal, checkGoals, goalChanges, kcalGoalChanges } from '../core/nutrition.js';
@@ -268,13 +269,16 @@ export async function duplicateFood(id) {
 function itemSpecs(items) {
   const out = [];
   const s = D().settings;
+  // ветряная мельница, огороды и замок деревни (0.12.4) прибавляют к наградам за еду
+  const boost = 1 + (store.data?.coinEvents ? V.villageBonuses(store.data).food : 0) / 100;
+  const boosted = (r) => (boost === 1 ? r : Object.fromEntries(Object.entries(r).map(([k, v]) => [k, Math.round(v * boost * 100) / 100])));
   for (const it of items || []) {
     if (it.foodId) {
       const food = D().foods.get(it.foodId);
-      if (food && !food.deletedAt) out.push({ food, amount: it.amount, rewards: F.rewardsOf(food, s) });
+      if (food && !food.deletedAt) out.push({ food, amount: it.amount, note: it.note, rewards: boosted(F.rewardsOf(food, s)) });
     } else if (it.quick) {
       const n = it.quick.nutrients || {};
-      if (num(n.kcal) || num(n.protein) || num(n.fat) || num(n.carbs)) out.push({ quick: it.quick, amount: it.amount, rewards: F.rewardDefaults(s) });
+      if (num(n.kcal) || num(n.protein) || num(n.fat) || num(n.carbs)) out.push({ quick: it.quick, amount: it.amount, note: it.note, rewards: boosted(F.rewardDefaults(s)) });
     }
   }
   return out;
@@ -342,12 +346,16 @@ export async function addToEntry(id, items) {
  * Сохранить запись из листа: { time, note, meal, date, amounts: { itemId: количество }, removed: [itemId] }.
  * Убрали все продукты — запись удаляется (с «Отменить»).
  */
-export async function saveEntry(id, { amounts = {}, removed = [], ...fields }) {
+export async function saveEntry(id, { amounts = {}, notes = {}, removed = [], ...fields }) {
   const c = changeEntry(id, (e, c0) => {
     let next = F.editEntry(e, fields, c0);
     for (const [itemId, a] of Object.entries(amounts)) {
       const it = (next.items || []).find((x) => x.id === itemId);
       if (it && !it.deletedAt && num(a) && num(a) !== it.amount) next = F.setItemAmount(next, itemId, a, c0);
+    }
+    for (const [itemId, text] of Object.entries(notes)) {
+      const it = (next.items || []).find((x) => x.id === itemId);
+      if (it && !it.deletedAt && (it.note || '') !== String(text || '')) next = F.setItemNote(next, itemId, text, c0);
     }
     for (const itemId of removed) next = F.removeItem(next, itemId, c0);
     return next;

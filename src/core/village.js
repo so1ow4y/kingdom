@@ -5,6 +5,10 @@
 // числом: баланс 💎 = добыча изумрудных шахт (считается по начислениям за задачи и времени покупки шахты)
 // + изумруды за фокус-сессии (события type 'focus', поле gems) − траты (поле gems < 0 у покупок за изумруды).
 // У покупок за изумруды amount = 0, поэтому старые версии приложения считают монеты по-прежнему верно.
+// 0.12.4 — прокачка построек «как в Clash of Clans»: уровни 1…5, у каждого уровня своя цена (растёт), постройка
+// выглядит богаче, бонус больше. Улучшение — тоже покупка (itemId 'v:upgrade', target — id постройки, level — новый
+// уровень); продаётся вместе с постройкой. Старые версии приложения улучшения не видят, но монеты считают верно.
+// Замок (0.12.4) — большая тёмная крепость с багровыми знамёнами.
 
 import { localDateOf, addDays } from './dates.js';
 import { doneEntries } from './retention.js';
@@ -35,7 +39,9 @@ export const VILLAGE_ITEMS = [
   { id: 'v:forge', kind: 'building', place: 'forge', name: 'Мастерская', emoji: '🔨', coins: 180, desc: 'Во время фокус-сессии строитель работает здесь.' },
   { id: 'v:windmill', kind: 'building', place: 'windmill', name: 'Мельница', emoji: '🌾', coins: 220, desc: 'Крутится, когда жители довольны.' },
   { id: 'v:tavern', kind: 'building', place: 'tavern', name: 'Таверна', emoji: '🍺', coins: 350, desc: 'Вечером жители собираются здесь поболтать.' },
-  { id: 'v:tower', kind: 'building', place: 'tower', name: 'Сторожевая башня', emoji: '🏰', gems: 12, desc: 'Флаг цвета твоей иконки приложения.' },
+  { id: 'v:tower', kind: 'building', place: 'tower', name: 'Сторожевая башня', emoji: '🚩', gems: 12, desc: 'Флаг цвета твоей иконки приложения.' },
+  { id: 'v:castle', kind: 'building', place: 'castle', name: 'Чёрный замок', emoji: '🏰', coins: 2500, big: true,
+    desc: 'Тёмная крепость с багровыми знамёнами и огнём в бойницах. +5 % монет и наград за еду за каждый уровень, жители спокойнее.' },
   { id: 'v:fountain', kind: 'building', place: 'fountain', name: 'Фонтан', emoji: '⛲', gems: 5, desc: 'Сначала встаёт посреди площади, но его можно переставить.' },
   { id: 'v:field', kind: 'building', place: 'field', repeatable: true, name: 'Огород', emoji: '🥕', coins: 60, step: 20, desc: 'Грядки за заборчиком. Урожай зависит от стиля деревни.' },
   // Свет и небо
@@ -75,6 +81,60 @@ export const VILLAGE_ITEMS = [
 
 export const villageItem = (id) => VILLAGE_ITEMS.find((x) => x.id === id) || null;
 
+// ---------- Прокачка построек (0.12.4) ----------
+
+export const UPGRADE_ITEM = 'v:upgrade';
+export const MAX_LEVEL = 5;
+
+/**
+ * Цена перехода на уровень 2…5 ({ coins } или { gems }; у шахт уровни 2–3 — прежние покупки «· ур. 2/3») и бонус.
+ * bonus: coins — % монет за задачи, food — % наград за еду (Crimson Harvest), mood — к настроению жителей,
+ * focus — 💎 за фокус-сессию. per — сколько даёт каждый уровень выше первого (у замка и шахт — каждый уровень).
+ */
+export const UPGRADES = {
+  house: { cost: [{ coins: 180 }, { coins: 300 }, { coins: 480 }, { coins: 720 }], bonus: 'coins', per: 1 },
+  manor: { cost: [{ gems: 8 }, { gems: 12 }, { gems: 18 }, { gems: 26 }], bonus: 'coins', per: 2 },
+  goldmine: { cost: [null, null, { gems: 30 }, { gems: 50 }], bonus: 'coins', per: 10, fromOne: true },
+  gemmine: { cost: [null, null, { gems: 40 }, { gems: 60 }], bonus: 'gems', per: 1, fromOne: true },
+  forge: { cost: [{ coins: 260 }, { coins: 400 }, { coins: 600 }, { coins: 900 }], bonus: 'focus', per: 0.5 },
+  windmill: { cost: [{ coins: 300 }, { coins: 450 }, { coins: 700 }, { coins: 1000 }], bonus: 'food', per: 5 },
+  tavern: { cost: [{ coins: 500 }, { coins: 750 }, { coins: 1100 }, { coins: 1600 }], bonus: 'mood', per: 4 },
+  tower: { cost: [{ gems: 16 }, { gems: 22 }, { gems: 30 }, { gems: 40 }], bonus: 'coins', per: 2 },
+  fountain: { cost: [{ gems: 7 }, { gems: 10 }, { gems: 14 }, { gems: 20 }], bonus: 'mood', per: 3 },
+  field: { cost: [{ coins: 90 }, { coins: 130 }, { coins: 190 }, { coins: 270 }], bonus: 'food', per: 3 },
+  castle: { cost: [{ coins: 3500 }, { coins: 5000 }, { gems: 60 }, { gems: 90 }], bonus: 'castle', per: 5, fromOne: true },
+};
+
+/** Предел суммы бонусов деревни. */
+export const BONUS_CAP = { coins: 200, food: 100, mood: 30 };
+
+export const isUpgradable = (place) => !!UPGRADES[place];
+
+/** Сколько бонуса у постройки уровня level: { coins, food, mood, focus } (только ненулевые). */
+export function bonusOf(place, level) {
+  const u = UPGRADES[place];
+  if (!u || !level) return {};
+  const steps = u.fromOne ? level : level - 1;
+  if (u.bonus === 'castle') return { coins: 5 * level, food: 5 * level, mood: 2 * level };
+  if (u.bonus === 'gems') return {};
+  if (u.bonus === 'focus') return { focus: Math.floor(steps * u.per) };
+  return { [u.bonus]: steps * u.per };
+}
+
+/** «+3 % монет за задачи», «+2 💎 за важную задачу» — подпись бонуса постройки уровня level. */
+export function bonusText(place, level) {
+  const u = UPGRADES[place];
+  if (!u) return '';
+  if (u.bonus === 'gems') return `+${level} 💎 за важную задачу${level >= 2 ? ', +1 💎 за фокус' : ''}`;
+  const b = bonusOf(place, level);
+  const parts = [];
+  if (b.coins) parts.push(`+${b.coins} % монет за задачи`);
+  if (b.food) parts.push(`+${b.food} % наград за еду`);
+  if (b.mood) parts.push(`настроение +${b.mood}`);
+  if (b.focus) parts.push(`+${b.focus} 💎 за фокус`);
+  return parts.join(', ') || 'бонус — со 2-го уровня';
+}
+
 /** Что есть в деревне с самого начала (покупать не нужно). */
 export const BASE_VILLAGE = ['base:house', 'base:wanderer'];
 
@@ -98,13 +158,20 @@ export function ownedVillage(data) {
  * Объекты на карте деревни — по одному на каждую покупку того, что ставится (place). Шахта — один объект на тип,
  * уровень — по купленным уровням, позицию хранит самая ранняя её покупка. x, y — клетка левого верхнего угла
  * относительно центра площади (null — ещё не ставили вручную, место выберется само).
+ * 0.12.4: улучшения (UPGRADE_ITEM) поднимают уровень своей постройки (target) и продаются вместе с ней.
+ * atIso — какой деревня была на этот момент (для бонусов: награда считается по деревне на момент выполнения).
  * → [{ key, itemId, place, level, x, y, events: [id], at }]
  */
-export function villageObjects(data) {
+export function villageObjects(data, atIso = null) {
   const out = [];
   const mines = new Map();
-  const events = liveEvents(data).filter((e) => e.type === 'purchase' && e.itemId).sort(byAt);
+  const events = liveEvents(data).filter((e) => e.type === 'purchase' && e.itemId && (!atIso || (e.at || '') <= atIso)).sort(byAt);
+  const ups = [];
   for (const e of events) {
+    if (e.itemId === UPGRADE_ITEM) {
+      ups.push(e);
+      continue;
+    }
     const it = villageItem(e.itemId);
     if (!it?.place) continue;
     if (it.type === 'goldmine' || it.type === 'gemmine') {
@@ -121,7 +188,59 @@ export function villageObjects(data) {
     }
     out.push({ key: e.id, itemId: e.itemId, place: it.place, level: 1, x: num(e.x), y: num(e.y), events: [e.id], at: e.at });
   }
+  if (ups.length) {
+    const byKey = new Map(out.map((o) => [o.key, o]));
+    for (const e of ups) {
+      const o = byKey.get(e.target);
+      if (!o || !isUpgradable(o.place) || !Number.isInteger(e.level)) continue;
+      o.level = Math.max(o.level, Math.min(MAX_LEVEL, e.level));
+      o.events.push(e.id);
+    }
+  }
   return out;
+}
+
+/**
+ * Следующий уровень постройки: { level, price: { coins } | { gems }, itemId? } или null (уже 5-й или не прокачивается).
+ * У шахт уровни 2–3 — прежние покупки «· ур. 2/3» (itemId), дальше — улучшения.
+ */
+export function nextUpgrade(obj) {
+  const u = obj && UPGRADES[obj.place];
+  if (!u || obj.level >= MAX_LEVEL) return null;
+  const level = obj.level + 1;
+  if ((obj.place === 'goldmine' || obj.place === 'gemmine') && level <= 3) {
+    const it = VILLAGE_ITEMS.find((x) => x.type === obj.place && x.n === level);
+    return it ? { level, price: it.gems ? { gems: it.gems } : { coins: it.coins }, itemId: it.id } : null;
+  }
+  const price = u.cost[level - 2];
+  return price ? { level, price } : null;
+}
+
+/** Можно ли улучшить: { ok, reason }. */
+export function canUpgrade(data, obj, coinBalance) {
+  const nu = nextUpgrade(obj);
+  if (!nu) return { ok: false, reason: obj && isUpgradable(obj.place) ? 'Максимальный уровень' : 'Не улучшается' };
+  if (nu.price.gems && gemBalance(data) < nu.price.gems) return { ok: false, reason: `Не хватает ${nu.price.gems - gemBalance(data)} 💎` };
+  if (nu.price.coins && coinBalance < nu.price.coins) return { ok: false, reason: `Не хватает ${nu.price.coins - coinBalance} 🪙` };
+  return { ok: true, reason: '' };
+}
+
+/**
+ * Бонусы деревни на момент atIso (или сейчас): { coins: %, food: %, mood, focus: 💎 } — сумма по постройкам
+ * (у каждого дома и огорода — свой уровень), с пределами BONUS_CAP.
+ */
+export function villageBonuses(data, atIso = null) {
+  const sum = { coins: 0, food: 0, mood: 0, focus: 0 };
+  for (const o of villageObjects(data, atIso)) {
+    const b = bonusOf(o.place, o.level);
+    for (const k of Object.keys(sum)) sum[k] += b[k] || 0;
+  }
+  return {
+    coins: Math.min(BONUS_CAP.coins, sum.coins),
+    food: Math.min(BONUS_CAP.food, sum.food),
+    mood: Math.min(BONUS_CAP.mood, sum.mood),
+    focus: sum.focus,
+  };
 }
 
 /** Цена с учётом повторов: { coins } или { gems }. */
@@ -135,21 +254,48 @@ export function priceOf(data, item) {
   return item.gems ? { gems: item.gems + extra } : { coins: (item.coins || 0) + extra };
 }
 
-/** Уровень постройки type (сколько уровней куплено) на момент atIso (или сейчас). */
+/** Уровень шахты type на момент atIso (или сейчас); 0 — шахты нет. С 0.12.4 — и с улучшениями до 4–5. */
 export function levelAt(data, type, atIso = null) {
-  let n = 0;
-  for (const e of liveEvents(data)) {
-    if (e.type !== 'purchase' || !e.itemId) continue;
-    const it = villageItem(e.itemId);
-    if (!it || it.type !== type) continue;
-    if (atIso && (e.at || '') > atIso) continue;
-    n = Math.max(n, it.n || 1);
-  }
-  return n;
+  return levelLookup(data, type)(atIso);
 }
 
-/** Множитель монет за задачи от золотой шахты на момент atIso: ×1.1 / 1.2 / 1.3. */
-export const coinMultiplierAt = (data, atIso = null) => 1 + 0.1 * levelAt(data, 'goldmine', atIso);
+/**
+ * Быстрый поиск уровня шахты по времени (для баланса 💎 по тысячам начислений): моменты, когда уровень менялся.
+ * → (atIso | null) => уровень.
+ */
+export function levelLookup(data, type) {
+  const events = liveEvents(data).filter((e) => e.type === 'purchase' && e.itemId).sort(byAt);
+  let key = null;
+  let level = 0;
+  const steps = [];
+  for (const e of events) {
+    const it = villageItem(e.itemId);
+    if (it && it.type === type) {
+      if (!key) key = e.id;
+      if ((it.n || 1) > level) {
+        level = it.n || 1;
+        steps.push([e.at || '', level]);
+      }
+    } else if (e.itemId === UPGRADE_ITEM && key && e.target === key && Number.isInteger(e.level) && e.level > level) {
+      level = Math.min(MAX_LEVEL, e.level);
+      steps.push([e.at || '', level]);
+    }
+  }
+  return (atIso = null) => {
+    if (!atIso) return level;
+    let lv = 0;
+    for (const [at, l] of steps) {
+      if (at > atIso) break;
+      lv = l;
+    }
+    return lv;
+  };
+}
+
+/**
+ * Множитель монет за задачи на момент atIso: золотая шахта (+10 % за уровень), замок, дома, башня (0.12.4).
+ */
+export const coinMultiplierAt = (data, atIso = null) => 1 + villageBonuses(data, atIso).coins / 100;
 
 /** Изумруды за одно начисление: шахта уровня L даёт L за важную задачу (монет ≥ 10), 2L за критичную (≥ 20). */
 export function gemsForAward(amount, level) {
@@ -159,17 +305,18 @@ export function gemsForAward(amount, level) {
   return 0;
 }
 
-/** Изумруды за фокус-сессию: 1 за каждые 25 минут (от 15 минут — уже 1), шахта ур. 2+ добавляет +1. */
-export function gemsForFocus(minutes, gemLevel = 0) {
+/** Изумруды за фокус-сессию: 1 за каждые 25 минут (от 15 минут — уже 1), шахта ур. 2+ добавляет +1, мастерская — свои. */
+export function gemsForFocus(minutes, gemLevel = 0, forge = 0) {
   if (minutes < 15) return 0;
-  return Math.max(1, Math.round(minutes / 25)) + (gemLevel >= 2 ? 1 : 0);
+  return Math.max(1, Math.round(minutes / 25)) + (gemLevel >= 2 ? 1 : 0) + (forge | 0);
 }
 
 /** Баланс изумрудов: добыча шахт по начислениям + фокус-сессии + 💎 за еду (0.12) + траты (поле gems у событий). */
 export function gemBalance(data) {
   let s = extraEarnings().gems;
+  const lv = levelLookup(data, 'gemmine');
   for (const e of liveEvents(data)) {
-    if (e.type === 'award') s += gemsForAward(e.amount | 0, levelAt(data, 'gemmine', e.at));
+    if (e.type === 'award') s += gemsForAward(e.amount | 0, lv(e.at));
     if (Number.isFinite(e.gems)) s += e.gems | 0;
   }
   return s;
@@ -178,8 +325,9 @@ export function gemBalance(data) {
 /** Сколько изумрудов добыто всего (без трат) — для статистики деревни. */
 export function gemsEarned(data) {
   let s = extraEarnings().gems;
+  const lv = levelLookup(data, 'gemmine');
   for (const e of liveEvents(data)) {
-    if (e.type === 'award') s += gemsForAward(e.amount | 0, levelAt(data, 'gemmine', e.at));
+    if (e.type === 'award') s += gemsForAward(e.amount | 0, lv(e.at));
     if ((e.gems | 0) > 0) s += e.gems | 0;
   }
   return s;
@@ -223,8 +371,8 @@ export function sellPlan(data, key) {
 export const FOCUS_PRESETS = [15, 25, 45, 60, 90];
 
 /** Поля события фокус-сессии для журнала coinEvents (amount = 0: монеты не меняются). */
-export function focusFields({ minutes, taskId = null, title = '', gemLevel = 0 }) {
-  return { type: 'focus', amount: 0, gems: gemsForFocus(minutes, gemLevel), minutes: Math.round(minutes), taskId, title };
+export function focusFields({ minutes, taskId = null, title = '', gemLevel = 0, forge = 0 }) {
+  return { type: 'focus', amount: 0, gems: gemsForFocus(minutes, gemLevel, forge), minutes: Math.round(minutes), taskId, title };
 }
 
 /** Минуты фокуса за день (по событиям focus). */
@@ -262,9 +410,11 @@ export function happiness(data, tz, today) {
   }
   const focus = Math.min(20, focusMinutes(data, tz, today) / 5);
   const penalty = Math.min(40, overdue * 6);
-  const value = Math.max(0, Math.min(100, Math.round(35 + done * 1.2 + focus - penalty)));
+  // таверна, фонтан и замок (0.12.4) — жителям уютнее
+  const cozy = villageBonuses(data).mood;
+  const value = Math.max(0, Math.min(100, Math.round(35 + done * 1.2 + focus + cozy - penalty)));
   const [, label, emoji] = MOODS.find(([min]) => value >= min);
-  return { value, label, emoji, parts: { done: Math.round(done), focus: Math.round(focus), overdue } };
+  return { value, label, emoji, parts: { done: Math.round(done), focus: Math.round(focus), overdue, cozy } };
 }
 
 // ---------- Стиль деревни ----------

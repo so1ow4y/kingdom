@@ -40,11 +40,13 @@ function EntryRow({ e }) {
     ${e.time ? html`<span class="er-time">${e.time}</span>` : null}
     <span class="er-main">
       ${multi ? html`
-        <span class="er-items">${items.map((it) => html`<span class="er-item" key=${it.id}>
-          <span class="er-name">${it.name}</span><small class="muted">${amountLabel(it)} · ${fmt(nv(itemNutrients(it), 'kcal'), 'kcal')}</small></span>`)}</span>
+        <span class="er-items">${items.map((it) => html`<span class="er-item-wrap" key=${it.id}><span class="er-item">
+          <span class="er-name">${it.name}</span><small class="muted">${amountLabel(it)} · ${fmt(nv(itemNutrients(it), 'kcal'), 'kcal')}</small></span>
+          ${it.note ? html`<small class="er-item-note">${it.note}</small>` : null}</span>`)}</span>
         <small class="muted">${macroLine(n)}</small>` : html`
         <span class="er-name">${items[0]?.name || 'Запись'}</span>
-        <small class="muted">${items[0] ? amountLabel(items[0]) + ' · ' : ''}${macroLine(n)}</small>`}
+        <small class="muted">${items[0] ? amountLabel(items[0]) + ' · ' : ''}${macroLine(n)}</small>
+        ${items[0]?.note ? html`<small class="er-item-note">${items[0].note}</small>` : null}`}
       ${e.note ? html`<small class="er-note">${e.note}</small>` : null}
     </span>
     <b class="er-kcal">${fmt(nv(n, 'kcal'), 'kcal')}</b>

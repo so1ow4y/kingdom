@@ -1960,3 +1960,17 @@ a.msr-name:hover { color: var(--accent); }
 @media (max-width: 520px) {
   .repeat-search { flex: 1 1 100%; max-width: none; }
 }
+/* 0.12.4: заметки к продуктам в записи */
+.item-note-input { width: 100%; margin: 6px 0 2px; font-size: 14px; }
+.item-edit .ie-note { grid-column: 1 / -1; margin: 0 0 2px; }
+.item-note-btn { display: inline-flex; align-items: center; gap: 4px; }
+.er-item-wrap { display: flex; flex-direction: column; min-width: 0; }
+.er-item-note { color: var(--accent); font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+/* 0.12.4: прокачка построек */
+.v-level { color: #d9a92e; letter-spacing: 1px; font-size: 12px; }
+.upgrade-list { margin: 8px 0; padding: 0; list-style: none; }
+.upgrade-row { display: flex; align-items: center; gap: 10px; padding: 8px 10px; margin-bottom: 6px; border-radius: var(--radius-sm); background: color-mix(in srgb, var(--surface) 88%, transparent); }
+.upgrade-row .v-emoji { font-size: 22px; }
+.ur-main { display: flex; flex: 1; flex-direction: column; min-width: 0; }
+.ur-main small.muted { overflow-wrap: anywhere; }
+.v-level-rest { color: color-mix(in srgb, var(--muted) 45%, transparent); }
