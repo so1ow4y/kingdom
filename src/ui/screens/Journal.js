@@ -6,24 +6,25 @@ import { store, setUi } from '../../store/appState.js';
 import { getRepo } from '../../store/localRepo.js';
 import { restoreConflict } from '../../store/actions.js';
 import { formatMoment } from '../../core/dates.js';
+import { tr } from '../../core/i18n.js';
 
 const FIELD_LABELS = {
-  title: 'Название', note: 'Заметка', listId: 'Список', priority: 'Приоритет', priorityId: 'Приоритет', parentId: 'Родитель', coins: 'Монеты', status: 'Статус',
-  completedAt: 'Выполнена', trashedAt: 'Корзина', scheduledDate: 'Дата', scheduledTime: 'Время',
-  deadlineDate: 'Дедлайн', deadlineTime: 'Время дедлайна', focusDate: 'Главное', name: 'Название',
-  color: 'Цвет', emoji: 'Значок', archived: 'Архив', timeZone: 'Часовой пояс', choresListId: 'Список «Быт»',
+  title: tr('Название'), note: tr('Заметка'), listId: tr('Список'), priority: tr('Приоритет'), priorityId: tr('Приоритет'), parentId: tr('Родитель'), coins: tr('Монеты'), status: tr('Статус'),
+  completedAt: tr('Выполнена'), trashedAt: tr('Корзина'), scheduledDate: tr('Дата'), scheduledTime: tr('Время'),
+  deadlineDate: tr('Дедлайн'), deadlineTime: tr('Время дедлайна'), focusDate: tr('Главное'), name: tr('Название'),
+  color: tr('Цвет'), emoji: tr('Значок'), archived: tr('Архив'), timeZone: tr('Часовой пояс'), choresListId: tr('Список «Быт»'),
 };
 
 function show(field, v) {
-  if (v === null || v === undefined || v === '') return 'пусто';
-  if (field === 'listId' || field === 'choresListId') return store.data.lists.get(v)?.name || 'удалённый список';
-  if (field === 'priorityId') return store.data.priorities.get(v)?.name || 'удалённый приоритет';
-  if (field === 'parentId') return store.data.tasks.get(v)?.title || 'верхний уровень';
+  if (v === null || v === undefined || v === '') return tr('пусто');
+  if (field === 'listId' || field === 'choresListId') return store.data.lists.get(v)?.name || tr('удалённый список');
+  if (field === 'priorityId') return store.data.priorities.get(v)?.name || tr('удалённый приоритет');
+  if (field === 'parentId') return store.data.tasks.get(v)?.title || tr('верхний уровень');
   if (typeof v === 'string') return v.length > 160 ? `«${v.slice(0, 160)}…»` : `«${v}»`;
   return JSON.stringify(v).slice(0, 160);
 }
 
-const dev = (id) => store.data.devices.get(id)?.name || 'другое устройство';
+const dev = (id) => store.data.devices.get(id)?.name || tr('другое устройство');
 
 export function JournalScreen() {
   const [conflicts, setConflicts] = useState(null);
@@ -65,8 +66,8 @@ export function JournalScreen() {
             ${r.kind === 'field' ? html`
               <div>${FIELD_LABELS[r.field] || r.field}: осталось ${show(r.field, r.winnerValue)} (${dev(r.winnerDevice)}),
                 не попало ${show(r.field, r.loserValue)} (${dev(r.loserDevice)})</div>` : null}
-            ${r.kind === 'resurrected' ? html`<div>Удалена ${r.deletedOn === 'local' ? 'на этом устройстве' : 'на другом устройстве'}, но позже изменена — оставлена.</div>` : null}
-            ${r.kind === 'deleted' ? html`<div>Удалена ${r.deletedOn === 'local' ? 'на этом устройстве' : 'на другом устройстве'}; правка была раньше удаления.</div>` : null}
+            ${r.kind === 'resurrected' ? html`<div>Удалена ${r.deletedOn === 'local' ? tr('на этом устройстве') : tr('на другом устройстве')}, но позже изменена — оставлена.</div>` : null}
+            ${r.kind === 'deleted' ? html`<div>Удалена ${r.deletedOn === 'local' ? tr('на этом устройстве') : tr('на другом устройстве')}; правка была раньше удаления.</div>` : null}
             ${!r.resolved ? html`
               <div class="form-actions">
                 ${r.kind === 'field' ? html`<button class="btn small" onClick=${() => restore(r)}>Восстановить этот вариант</button>` : null}
@@ -75,7 +76,7 @@ export function JournalScreen() {
               </div>` : null}
           </div>`)}
         ${hiddenCount ? html`<button class="link-btn" onClick=${() => setShowHidden(!showHidden)}>
-          ${showHidden ? 'Скрыть решённые' : `Показать решённые (${hiddenCount})`}</button>` : null}
+          ${showHidden ? tr('Скрыть решённые') : tr('Показать решённые ({hiddenCount})', { hiddenCount })}</button>` : null}
       </section>
       <section class="set-section">
         <h2>Журнал ошибок</h2>

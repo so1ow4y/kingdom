@@ -8,8 +8,9 @@ import { store, closeSheet } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as RP from '../../core/repeat.js';
 import { isoWeekday, WEEKDAY_SHORT, MONTH_NOM, humanDate } from '../../core/dates.js';
+import { tr } from '../../core/i18n.js';
 
-const KINDS = [['daily', 'Каждый день'], ['weekly', 'По дням недели'], ['monthly', 'Раз в месяц'], ['yearly', 'Раз в год'], ['every', 'Каждые N дней']];
+const KINDS = [['daily', tr('Каждый день')], ['weekly', tr('По дням недели')], ['monthly', tr('Раз в месяц')], ['yearly', tr('Раз в год')], ['every', tr('Каждые N дней')]];
 /** Сколько дней в месяце (февраль — 29: в невисокосный год повтор сработает 28-го). */
 const MONTH_DAYS = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
 

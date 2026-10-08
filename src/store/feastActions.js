@@ -13,6 +13,7 @@ import { normalizeBarcode } from '../core/barcode.js';
 import { num, fmt, entryKcal, checkGoals, goalChanges, kcalGoalChanges } from '../core/nutrition.js';
 import { countLabel } from '../core/plural.js';
 import { FEAST_RETENTION } from '../config.js';
+import { tr } from '../core/i18n.js';
 
 let repo = null;
 let clock = null;
@@ -49,7 +50,7 @@ async function commit(changes) {
   const list = changes.filter((c) => c && c.next && c.next !== c.prev);
   if (!list.length) return false;
   if (store.ui.feastReadOnly) {
-    showSnackbar('Crimson Harvest только для чтения: сначала обнови приложение');
+    showSnackbar(tr('Crimson Harvest только для чтения: сначала обнови приложение'));
     return false;
   }
   for (const c of list) setEntity(c.coll, c.next);
@@ -67,7 +68,7 @@ async function commit(changes) {
     }
     bumpData();
     console.error(e);
-    showSnackbar(`Не удалось сохранить: ${e?.message || e}`);
+    showSnackbar(tr('Не удалось сохранить: {p0}', { p0: e?.message || e }));
     return false;
   }
   refreshFeastDirty();
@@ -86,7 +87,7 @@ export async function refreshFeastDirty() {
 function offerUndo(text, changes) {
   const done = changes.filter((c) => c && c.next !== c.prev);
   if (!done.length) return showSnackbar(text);
-  showSnackbar(text, 'Отменить', () => undo(done));
+  showSnackbar(text, tr('Отменить'), () => undo(done));
 }
 
 async function undo(changes) {
@@ -136,7 +137,7 @@ export async function saveGoals(input) {
     return false;
   }
   const ok = await updateFeastSettings(goalChanges(input));
-  if (ok) showSnackbar('Цели сохранены');
+  if (ok) showSnackbar(tr('Цели сохранены'));
   return ok;
 }
 
@@ -147,15 +148,15 @@ export async function addActivity({ name, hint = '', kcal }) {
   const n = F.normalizeName(name).slice(0, B.ACTIVITY_NAME_MAX);
   const k = Math.round(num(kcal));
   if (!n) {
-    showSnackbar('Назови активность');
+    showSnackbar(tr('Назови активность'));
     return null;
   }
   if (!(k >= 0 && k <= B.ACTIVITY_KCAL_MAX) || !String(kcal).trim()) {
-    showSnackbar(`Калории в день — от 0 до ${B.ACTIVITY_KCAL_MAX}`);
+    showSnackbar(tr('Калории в день — от 0 до {ACTIVITY_KCAL_MAX}', { ACTIVITY_KCAL_MAX: B.ACTIVITY_KCAL_MAX }));
     return null;
   }
   if (list.length >= B.CUSTOM_ACTIVITY_MAX) {
-    showSnackbar(`Своих активностей — не больше ${B.CUSTOM_ACTIVITY_MAX}`);
+    showSnackbar(tr('Своих активностей — не больше {CUSTOM_ACTIVITY_MAX}', { CUSTOM_ACTIVITY_MAX: B.CUSTOM_ACTIVITY_MAX }));
     return null;
   }
   const a = { id: 'c:' + uuidv7(Date.now()), name: n, hint: F.normalizeName(hint).slice(0, 80), kcal: k };
@@ -173,7 +174,7 @@ export async function removeActivity(id) {
   if (s.activity === id) changes.activity = 'light';
   const c = change('settings', F.FEAST_SETTINGS_ID, (x) => touch(x, changes, ctx()));
   if (await commit([c])) {
-    offerUndo(`Активность «${a.name}» удалена`, [c]);
+    offerUndo(tr('Активность «{name}» удалена', { name: a.name }), [c]);
     return true;
   }
   return false;
@@ -183,11 +184,11 @@ export async function removeActivity(id) {
 export async function setKcalGoal(kcal) {
   const r = kcalGoalChanges(D().settings, kcal);
   if (!r.ok) {
-    showSnackbar(`${r.error}. Поправь БЖУ: Настройки → Цели и лимиты.`);
+    showSnackbar(tr('{error}. Поправь БЖУ: Настройки → Цели и лимиты.', { error: r.error }));
     return false;
   }
   const ok = await updateFeastSettings(r.changes);
-  if (ok) showSnackbar(`Лимит — ${r.changes.kcalGoal} ккал`);
+  if (ok) showSnackbar(tr('Лимит — {kcalGoal} ккал', { kcalGoal: r.changes.kcalGoal }));
   return ok;
 }
 
@@ -212,22 +213,22 @@ export async function attachBarcode(foodId, raw) {
   if (!code) return false;
   const other = F.findByBarcode(D(), code);
   if (other?.id === foodId) {
-    showSnackbar('Этот штрихкод уже привязан');
+    showSnackbar(tr('Этот штрихкод уже привязан'));
     return false;
   }
   const changes = [];
   if (other) {
     const ok = await confirm({
-      title: 'Штрихкод уже занят',
-      text: `Код ${code} привязан к «${other.name}». Перенести его сюда?`,
-      confirmLabel: 'Перенести',
+      title: tr('Штрихкод уже занят'),
+      text: tr('Код {code} привязан к «{name}». Перенести его сюда?', { code, name: other.name }),
+      confirmLabel: tr('Перенести'),
     });
     if (!ok) return false;
     changes.push(change('foods', other.id, (f) => F.setBarcode(f, code, false, ctx())));
   }
   changes.push(change('foods', foodId, (f) => F.setBarcode(f, code, true, ctx())));
   if (await commit(changes)) {
-    offerUndo(`Штрихкод ${code} привязан`, changes);
+    offerUndo(tr('Штрихкод {code} привязан', { code }), changes);
     return true;
   }
   return false;
@@ -235,7 +236,7 @@ export async function attachBarcode(foodId, raw) {
 
 export async function detachBarcode(foodId, code) {
   const c = change('foods', foodId, (f) => F.setBarcode(f, code, false, ctx()));
-  if (await commit([c])) offerUndo(`Штрихкод ${code} отвязан`, [c]);
+  if (await commit([c])) offerUndo(tr('Штрихкод {code} отвязан', { code }), [c]);
 }
 
 export async function toggleFavorite(id) {
@@ -250,7 +251,7 @@ export async function deleteFoods(ids) {
   const c0 = ctx();
   const changes = list.map((f) => ({ coll: 'foods', prev: f, next: tombstone(f, c0) }));
   if (await commit(changes)) {
-    offerUndo(list.length === 1 ? `Продукт «${list[0].name}» удалён` : `Удалено ${countLabel(list.length, ['продукт', 'продукта', 'продуктов'])}`, changes);
+    offerUndo(list.length === 1 ? tr('Продукт «{p0}» удалён', { p0: list[0].name }) : tr('Удалено {p0}', { p0: countLabel(list.length, ['продукт', 'продукта', 'продуктов']) }), changes);
     return { total: ids.length, succeeded: list.length, failed: [] };
   }
   return null;
@@ -260,7 +261,10 @@ export async function deleteFoods(ids) {
 export async function duplicateFood(id) {
   const f = D().foods.get(id);
   if (!f) return null;
-  return createFood({ name: f.name + ' (копия)', brand: f.brand, unit: f.unit, servingName: f.servingName, servingSize: f.servingSize, nutrients: f.nutrients });
+  const copy = await createFood({ name: f.name + tr(' (копия)'), brand: f.brand, unit: f.unit, servingName: f.servingName, servingSize: f.servingSize,
+    nutrients: f.nutrients, kind: f.kind || 'food', dose: f.dose, note: f.note });
+  if (copy && f.meds?.length) await updateFood(copy.id, { meds: f.meds });
+  return copy;
 }
 
 // ---------- Дневник ----------
@@ -275,7 +279,10 @@ function itemSpecs(items) {
   for (const it of items || []) {
     if (it.foodId) {
       const food = D().foods.get(it.foodId);
-      if (food && !food.deletedAt) out.push({ food, amount: it.amount, note: it.note, rewards: boosted(F.rewardsOf(food, s)) });
+      if (!food || food.deletedAt) continue;
+      // лекарство (0.12.5) — без наград
+      if (F.isMed(food)) out.push({ med: food, amount: it.amount, note: it.note });
+      else out.push({ food, amount: it.amount, note: it.note, rewards: boosted(F.rewardsOf(food, s)) });
     } else if (it.quick) {
       const n = it.quick.nutrients || {};
       if (num(n.kcal) || num(n.protein) || num(n.fat) || num(n.carbs)) out.push({ quick: it.quick, amount: it.amount, note: it.note, rewards: boosted(F.rewardDefaults(s)) });
@@ -298,19 +305,30 @@ export function feastEarnings() {
 }
 
 const productsLabel = (n) => countLabel(n, ['продукт', 'продукта', 'продуктов']);
+/** «Торт», «2 продукта», «Торт + 💊 Инсулин», «3 продукта + 💊 2 лекарства» — для уведомлений. */
+function specsLabel(specs) {
+  const foods = specs.filter((s) => !s.med);
+  const meds = specs.filter((s) => s.med);
+  const name = (s) => s.food?.name || s.quick?.name || s.med?.name || tr('продукт');
+  const f = foods.length === 1 ? name(foods[0]) : foods.length ? productsLabel(foods.length) : '';
+  const m = meds.length === 1 ? '💊 ' + name(meds[0]) : meds.length ? '💊 ' + countLabel(meds.length, ['лекарство', 'лекарства', 'лекарств']) : '';
+  return [f, m].filter(Boolean).join(' + ');
+}
 
 /**
  * Новая запись дневника: рацион, время (по умолчанию — сейчас), заметка, продукты.
  * Для краткости — один продукт: { date, meal, foodId, amount }. Возвращает запись или null.
  */
-export async function addEntry({ date, meal, time = store.now.time, note = '', items = null, foodId = null, amount = null }) {
+export async function addEntry({ date, meal, time = store.now.time, note = '', notes = null, items = null, foodId = null, amount = null }) {
   const specs = itemSpecs(items || [{ foodId, amount }]);
   if (!specs.length) return null;
-  const e = F.newEntry({ date, meal, time, note, items: specs }, ctx());
+  const e = F.newEntry({ date, meal, time, note, notes, items: specs }, ctx());
   const changes = [{ coll: 'entries', prev: undefined, next: e }];
   if (await commit(changes)) {
     const rw = rewardText(F.entryRewards(e));
-    offerUndo(`${specs.length === 1 ? F.entryTitle(e) : 'Записано: ' + productsLabel(specs.length)} · ${fmt(entryKcal(e), 'kcal')} ккал${rw ? ' · ' + rw : ''}`, changes);
+    const onlyMeds = !F.hasFood(e);
+    offerUndo(onlyMeds ? tr('💊 Записано: {p0}', { p0: F.entryTitle(e) })
+      : tr('{p0} · {p1} ккал{p2}', { p0: specs.length === 1 ? F.entryTitle(e) : tr('Записано: ') + specsLabel(specs), p1: fmt(entryKcal(e), 'kcal'), p2: rw ? ' · ' + rw : '' }), changes);
     return e;
   }
   return null;
@@ -336,7 +354,7 @@ export async function addToEntry(id, items) {
   if (!specs.length) return false;
   const c = changeEntry(id, (e, c0) => F.addItems(e, specs, c0));
   if (await commit([c])) {
-    offerUndo(`Добавлено в запись: ${specs.length === 1 ? specs[0].food?.name || specs[0].quick?.name || 'продукт' : productsLabel(specs.length)}`, [c]);
+    offerUndo(tr('Добавлено в запись: {p0}', { p0: specsLabel(specs) }), [c]);
     return true;
   }
   return false;
@@ -346,9 +364,19 @@ export async function addToEntry(id, items) {
  * Сохранить запись из листа: { time, note, meal, date, amounts: { itemId: количество }, removed: [itemId] }.
  * Убрали все продукты — запись удаляется (с «Отменить»).
  */
-export async function saveEntry(id, { amounts = {}, notes = {}, removed = [], ...fields }) {
+/**
+ * entryNotes (0.12.5) — заметки записи: { edits: { id: текст } (пусто — убрать), added: [текст] }.
+ */
+export async function saveEntry(id, { amounts = {}, notes = {}, removed = [], entryNotes = null, ...fields }) {
   const c = changeEntry(id, (e, c0) => {
     let next = F.editEntry(e, fields, c0);
+    if (entryNotes) {
+      const cur = new Map(F.entryNoteList(next).map((n) => [n.id, n.text]));
+      for (const [nid, text] of Object.entries(entryNotes.edits || {})) {
+        if ((cur.get(nid) ?? '') !== String(text || '')) next = F.editEntryNote(next, nid, text, c0);
+      }
+      for (const text of entryNotes.added || []) next = F.addEntryNote(next, text, c0);
+    }
     for (const [itemId, a] of Object.entries(amounts)) {
       const it = (next.items || []).find((x) => x.id === itemId);
       if (it && !it.deletedAt && num(a) && num(a) !== it.amount) next = F.setItemAmount(next, itemId, a, c0);
@@ -361,7 +389,7 @@ export async function saveEntry(id, { amounts = {}, notes = {}, removed = [], ..
     return next;
   });
   if (!c) return false;
-  if (!F.entryItems(c.next).length) return deleteEntries([id], 'Запись удалена: в ней не осталось продуктов');
+  if (!F.entryItems(c.next).length) return deleteEntries([id], tr('Запись удалена: в ней не осталось продуктов'));
   return commit([c]);
 }
 
@@ -380,7 +408,7 @@ export async function deleteEntries(ids, text = null) {
   const changes = ids.map((id) => D().entries.get(id)).filter((e) => e && !e.deletedAt)
     .map((e) => ({ coll: 'entries', prev: e, next: tombstone(e, c0) }));
   if (await commit(changes)) {
-    offerUndo(text || (changes.length === 1 ? 'Запись удалена' : `Удалено записей: ${changes.length}`), changes);
+    offerUndo(text || (changes.length === 1 ? tr('Запись удалена') : tr('Удалено записей: {length}', { length: changes.length })), changes);
     return true;
   }
   return false;
@@ -415,9 +443,9 @@ export async function copyEntries(fromDate, toDate, meal = null) {
     }
     // снимки продуктов копируются как есть — значения не пересчитываются по нынешней карточке
     const items = F.entryItems(e).map((it) => ({ snapshot: it }));
-    changes.push({ coll: 'entries', prev: undefined, next: F.newEntry({ date: toDate, meal: m, time: e.time, note: e.note, items }, c0) });
+    changes.push({ coll: 'entries', prev: undefined, next: F.newEntry({ date: toDate, meal: m, time: e.time, notes: F.entryNoteList(e).map((n) => n.text), items }, c0) });
   }
-  if (await commit(changes)) offerUndo(`Скопировано: ${countLabel(src.length, ['запись', 'записи', 'записей'])}`, changes);
+  if (await commit(changes)) offerUndo(tr('Скопировано: {p0}', { p0: countLabel(src.length, ['запись', 'записи', 'записей']) }), changes);
   return src.length;
 }
 
@@ -436,7 +464,7 @@ export async function createMeal({ name, icon, time = null, date = null, onlyDay
   const m = F.newMeal({ name, icon, time, order: F.orderAfter(list, after), date: onlyDay ? date : null }, ctx());
   const changes = [{ coll: 'meals', prev: undefined, next: m }];
   if (await commit(changes)) {
-    offerUndo(`Рацион «${m.name}» ${m.date ? 'добавлен на этот день' : 'добавлен'}`, changes);
+    offerUndo(tr('Рацион «{name}» {p1}', { name: m.name, p1: m.date ? tr('добавлен на этот день') : tr('добавлен') }), changes);
     return m;
   }
   return null;
@@ -459,7 +487,7 @@ export async function moveMeal(id, dir, date = null) {
 /** Скрыть общий рацион с новых дней (записи в нём остаются и видны в своих днях) или вернуть. */
 export async function setMealHidden(id, hidden) {
   const c = change('meals', id, (m) => F.editMeal(m, { archived: hidden }, ctx()));
-  if (await commit([c])) offerUndo(hidden ? 'Рацион скрыт: в новых днях его нет, старые записи на месте' : 'Рацион снова показывается', [c]);
+  if (await commit([c])) offerUndo(hidden ? tr('Рацион скрыт: в новых днях его нет, старые записи на месте') : tr('Рацион снова показывается'), [c]);
 }
 
 /** Удалить рацион (основные — только скрыть). Записи в нём и заметки к нему удаляются вместе с ним — с вопросом. */
@@ -469,9 +497,9 @@ export async function deleteMeal(id) {
   const entries = [...D().entries.values()].filter((e) => !e.deletedAt && e.meal === id);
   if (entries.length) {
     const ok = await confirm({
-      title: `Удалить рацион «${m.name}»?`,
-      text: `В нём ${countLabel(entries.length, ['запись', 'записи', 'записей'])} — они удалятся вместе с ним. Можно будет отменить.`,
-      confirmLabel: 'Удалить',
+      title: tr('Удалить рацион «{name}»?', { name: m.name }),
+      text: tr('В нём {p0} — они удалятся вместе с ним. Можно будет отменить.', { p0: countLabel(entries.length, ['запись', 'записи', 'записей']) }),
+      confirmLabel: tr('Удалить'),
       danger: true,
     });
     if (!ok) return false;
@@ -481,7 +509,7 @@ export async function deleteMeal(id) {
   for (const e of entries) changes.push({ coll: 'entries', prev: e, next: tombstone(e, c0) });
   for (const n of D().mealNotes.values()) if (!n.deletedAt && n.meal === id) changes.push({ coll: 'mealNotes', prev: n, next: tombstone(n, c0) });
   if (await commit(changes)) {
-    offerUndo(`Рацион «${m.name}» удалён`, changes);
+    offerUndo(tr('Рацион «{name}» удалён', { name: m.name }), changes);
     return true;
   }
   return false;
@@ -517,7 +545,7 @@ export async function deleteBodyLog(id) {
   const b = D().body.get(id);
   if (!b || b.deletedAt) return;
   const changes = [{ coll: 'body', prev: b, next: tombstone(b, ctx()) }];
-  if (await commit(changes)) offerUndo('Замер удалён', changes);
+  if (await commit(changes)) offerUndo(tr('Замер удалён'), changes);
 }
 
 // ---------- Лимит записей ----------
@@ -530,15 +558,15 @@ export async function purgeOldEntries({ interactive = false, today = store.now.t
   if (!D().settings) return 0;
   const plan = F.purgePlan(D(), today);
   if (!plan.entries.length) {
-    if (interactive) showSnackbar('Удалять нечего: записей меньше лимита');
+    if (interactive) showSnackbar(tr('Удалять нечего: записей меньше лимита'));
     return 0;
   }
   if (interactive) {
     const ok = await confirm({
-      title: 'Удалить старые записи?',
-      text: `${countLabel(plan.entries.length, ['запись', 'записи', 'записей'])} за ${countLabel(plan.dates.length, ['день', 'дня', 'дней'])} `
-        + `(с ${plan.dates[0]} по ${plan.dates.at(-1)}) удалятся. Итоги этих дней останутся в аналитике.`,
-      confirmLabel: 'Удалить',
+      title: tr('Удалить старые записи?'),
+      text: tr('{p0} за {p1} ', { p0: countLabel(plan.entries.length, ['запись', 'записи', 'записей']), p1: countLabel(plan.dates.length, ['день', 'дня', 'дней']) })
+        + tr('(с {p0} по {p1}) удалятся. Итоги этих дней останутся в аналитике.', { p0: plan.dates[0], p1: plan.dates.at(-1) }),
+      confirmLabel: tr('Удалить'),
       danger: true,
     });
     if (!ok) return 0;
@@ -556,7 +584,7 @@ export async function purgeOldEntries({ interactive = false, today = store.now.t
     for (const e of list) changes.push({ coll: 'entries', prev: e, next: tombstone(e, c0) });
   }
   if (!(await commit(changes))) return 0;
-  if (interactive) showSnackbar(`Удалено ${countLabel(plan.entries.length, ['запись', 'записи', 'записей'])}, итоги дней сохранены`);
+  if (interactive) showSnackbar(tr('Удалено {p0}, итоги дней сохранены', { p0: countLabel(plan.entries.length, ['запись', 'записи', 'записей']) }));
   return plan.entries.length;
 }
 

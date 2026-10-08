@@ -13,7 +13,7 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import {
   KINDS, PLACEHOLDER, RANGES, RANGE_LABEL, HAS_HINT, REPEAT_HINT, fieldChips, rangeFrom, makeContext, search, facets, histogram,
-  eventTime, listNames, priorityName, statusOf, STATUS_LABEL, deviceName,
+  eventTime, listNames, priorityName, statusOf, STATUS_LABEL, deviceName, fieldLabel,
 } from '../../core/explore.js';
 import { withTerm, andQuery } from '../../core/query.js';
 import { formatMoment, localDateOf, humanDate } from '../../core/dates.js';
@@ -22,12 +22,13 @@ import { liveNotes, liveAttachments, focusTotal } from '../../core/model.js';
 import { countLabel, plural } from '../../core/plural.js';
 import { openMenu } from './Popup.js';
 import { shortcutText } from '../keys.js';
+import { tr, locale } from '../../core/i18n.js';
 
 const PAGE = 50;
 /** Сколько строк можно выбрать за раз (BULK_MAX license-store). */
 export const BULK_MAX = 500;
 
-const SYNTAX = '· * — подстановка · пробел или AND — оба условия · OR или | — любое · NOT или - — исключить · ( ) — группировка · "фраза"';
+const SYNTAX = tr('· * — подстановка · пробел или AND — оба условия · OR или | — любое · NOT или - — исключить · ( ) — группировка · "фраза"');
 
 /** Выбранные строки. Смена страницы или фильтра выбор не сбрасывает — как в SIEM. */
 export function useSelection() {
@@ -78,7 +79,7 @@ function BulkBar({ selection, children }) {
 function Histogram({ hist, title }) {
   const max = Math.max(1, ...hist.buckets.map((b) => b.count));
   const total = hist.buckets.reduce((s, b) => s + b.count, 0);
-  const label = (ms) => new Date(ms).toLocaleString('ru-RU', hist.interval.includes('час') || hist.interval.includes('минут')
+  const label = (ms) => new Date(ms).toLocaleString(locale(), hist.ms < 86400000
     ? { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' } : { day: 'numeric', month: 'short', year: 'numeric' });
   return html`
     <div class="ex-card ex-hist">
@@ -100,7 +101,7 @@ function Facets({ list, onFilter }) {
         const max = Math.max(1, ...f.values.map((v) => v.count));
         return html`
           <div class="ex-card" key=${f.field}>
-            <p class="ex-facet-title">Топ: ${f.field}</p>
+            <p class="ex-facet-title">Топ: ${fieldLabel(f.field)}</p>
             ${!f.values.length ? html`<p class="ex-empty small">—</p>` : null}
             <ul class="ex-facet-list">
               ${f.values.map((v) => html`
@@ -135,17 +136,17 @@ function Details({ ctx, t, kind, onFilter, actions }) {
   const focus = focusTotal(t);
   const parent = S.parentOf(ctx.data, t);
   const rows = [
-    ['Создана', formatMoment(t.createdAt, tz)],
-    ['Изменена', `${formatMoment(t.updatedAt, tz)} · ${deviceName(ctx.data, t.updatedBy)}`],
-    t.completedAt && ['Выполнена', formatMoment(t.completedAt, tz)],
-    t.trashedAt && ['В корзине с', formatMoment(t.trashedAt, tz)],
-    t.scheduledDate && ['План', humanDate(t.scheduledDate, ctx.today) + (t.scheduledTime ? ', ' + t.scheduledTime : '')],
-    t.deadlineDate && ['Срок', humanDate(t.deadlineDate, ctx.today) + (t.deadlineTime ? ', ' + t.deadlineTime : '')],
-    t.repeat && ['Повтор', describeRule(t.repeat)],
-    parent && ['Внутри задачи', parent.title],
-    kids && ['Подзадачи', String(kids)],
-    files && ['Вложения', String(files)],
-    focus.count && ['Фокус', `${focus.minutes} мин · ${countLabel(focus.count, ['сессия', 'сессии', 'сессий'])}`],
+    [tr('Создана'), formatMoment(t.createdAt, tz)],
+    [tr('Изменена'), `${formatMoment(t.updatedAt, tz)} · ${deviceName(ctx.data, t.updatedBy)}`],
+    t.completedAt && [tr('Выполнена'), formatMoment(t.completedAt, tz)],
+    t.trashedAt && [tr('В корзине с'), formatMoment(t.trashedAt, tz)],
+    t.scheduledDate && [tr('План'), humanDate(t.scheduledDate, ctx.today) + (t.scheduledTime ? ', ' + t.scheduledTime : '')],
+    t.deadlineDate && [tr('Срок'), humanDate(t.deadlineDate, ctx.today) + (t.deadlineTime ? ', ' + t.deadlineTime : '')],
+    t.repeat && [tr('Повтор'), describeRule(t.repeat)],
+    parent && [tr('Внутри задачи'), parent.title],
+    kids && [tr('Подзадачи'), String(kids)],
+    files && [tr('Вложения'), String(files)],
+    focus.count && [tr('Фокус'), tr('{minutes} мин · {p1}', { minutes: focus.minutes, p1: countLabel(focus.count, ['сессия', 'сессии', 'сессий']) })],
   ].filter(Boolean);
   return html`
     <div class="ex-details-body">
@@ -154,7 +155,7 @@ function Details({ ctx, t, kind, onFilter, actions }) {
       <div class="ex-details-actions">
         <button type="button" class="btn small" onClick=${() => openTask(t.id)}><${Icon} name="chevron" size=${16}/> Открыть карточку</button>
         ${actions}
-        <button type="button" class="btn small ghost" onClick=${() => onFilter('дата', localDateOf(eventTime(t, kind), tz))}>
+        <button type="button" class="btn small ghost" onClick=${() => onFilter(tr('дата'), localDateOf(eventTime(t, kind), tz))}>
           <${Icon} name="calendar" size=${16}/> Этот день</button>
       </div>
     </div>`;
@@ -199,7 +200,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
     setFrom(rangeFrom(nextRange));
     setSkip(0);
   }
-  const addTerm = (field, value, negate = false) => apply(withTerm(q, field, value, negate));
+  const addTerm = (field, value, negate = false) => apply(withTerm(q, fieldLabel(field), value, negate));
   const resetAll = () => {
     setColumns({});
     setColumnDraft({});
@@ -209,20 +210,20 @@ export function TaskExplorer({ kind, initialQ = '' }) {
   // ---- действия ----
   async function bulk(action, arg = null, ids = selection.ids) {
     if (!ids.length) return;
-    if (action === 'trash' && !(await confirm({ title: 'Убрать в корзину?', text: `Затронет ${countLabel(ids.length, ['задачу', 'задачи', 'задач'])} (вместе с подзадачами). Восстановить можно из корзины.`, confirmLabel: 'В корзину' }))) return;
-    if (action === 'purge' && !(await confirm({ title: 'Удалить навсегда?', text: `Затронет ${countLabel(ids.length, ['задачу', 'задачи', 'задач'])} вместе с подзадачами. Это нельзя отменить.`, confirmLabel: 'Удалить навсегда', danger: true }))) return;
+    if (action === 'trash' && !(await confirm({ title: tr('Убрать в корзину?'), text: tr('Затронет {p0} (вместе с подзадачами). Восстановить можно из корзины.', { p0: countLabel(ids.length, ['задачу', 'задачи', 'задач']) }), confirmLabel: tr('В корзину') }))) return;
+    if (action === 'purge' && !(await confirm({ title: tr('Удалить навсегда?'), text: tr('Затронет {p0} вместе с подзадачами. Это нельзя отменить.', { p0: countLabel(ids.length, ['задачу', 'задачи', 'задач']) }), confirmLabel: tr('Удалить навсегда'), danger: true }))) return;
     const r = await A.bulkTasks(action, ids, arg);
     if (r && ids === selection.ids) selection.clear();
   }
   const listMenu = (e, ids = selection.ids) => openMenu({
-    anchor: e.currentTarget, side: 'bottom', align: 'start', title: 'Перенести в список', viaKeyboard: e.detail === 0,
+    anchor: e.currentTarget, side: 'bottom', align: 'start', title: tr('Перенести в список'), viaKeyboard: e.detail === 0,
     items: [
-      { label: 'Входящие', icon: 'inbox', onSelect: () => bulk('move', null, ids) },
+      { label: tr('Входящие'), icon: 'inbox', onSelect: () => bulk('move', null, ids) },
       ...S.sortedLists(store.data).map((l) => ({ label: l.name, emoji: l.emoji, color: l.color, onSelect: () => bulk('move', l.id, ids) })),
     ],
   });
   const prioMenu = (e, ids = selection.ids) => openMenu({
-    anchor: e.currentTarget, side: 'bottom', align: 'start', title: 'Приоритет', viaKeyboard: e.detail === 0,
+    anchor: e.currentTarget, side: 'bottom', align: 'start', title: tr('Приоритет'), viaKeyboard: e.detail === 0,
     items: S.sortedPriorities(store.data).map((p) => ({ label: p.name, color: p.color, onSelect: () => bulk('priority', p.id, ids) })),
   });
 
@@ -233,15 +234,15 @@ export function TaskExplorer({ kind, initialQ = '' }) {
     const b = (label, icon, onClick, cls = '') => html`<button type="button" class=${'btn small ' + cls} disabled=${readOnly} onClick=${onClick}>
       <${Icon} name=${icon} size=${16}/> ${label}</button>`;
     if (kind === 'trash' || st === 'trash') {
-      return html`${b('Восстановить', 'restore', () => bulk('restore', null, ids), t ? '' : 'primary')}
-        ${b('Удалить навсегда', 'trash', () => bulk('purge', null, ids), 'danger-outline')}`;
+      return html`${b(tr('Восстановить'), 'restore', () => bulk('restore', null, ids), t ? '' : 'primary')}
+        ${b(tr('Удалить навсегда'), 'trash', () => bulk('purge', null, ids), 'danger-outline')}`;
     }
     return html`
-      ${kind === 'all' && (!t || st === 'active') ? b('Выполнить', 'check', () => bulk('complete', null, ids), t ? '' : 'primary') : null}
-      ${kind === 'done' || (kind === 'all' && (!t || st === 'done')) ? b('Вернуть в работу', 'restore', () => bulk('reopen', null, ids), kind === 'done' && !t ? 'primary' : '') : null}
-      ${b('Список…', 'lists', (e) => listMenu(e, ids || selection.ids))}
-      ${b('Приоритет…', 'flag', (e) => prioMenu(e, ids || selection.ids))}
-      ${b('В корзину', 'trash', () => bulk('trash', null, ids), 'danger-outline')}`;
+      ${kind === 'all' && (!t || st === 'active') ? b(tr('Выполнить'), 'check', () => bulk('complete', null, ids), t ? '' : 'primary') : null}
+      ${kind === 'done' || (kind === 'all' && (!t || st === 'done')) ? b(tr('Вернуть в работу'), 'restore', () => bulk('reopen', null, ids), kind === 'done' && !t ? 'primary' : '') : null}
+      ${b(tr('Список…'), 'lists', (e) => listMenu(e, ids || selection.ids))}
+      ${b(tr('Приоритет…'), 'flag', (e) => prioMenu(e, ids || selection.ids))}
+      ${b(tr('В корзину'), 'trash', () => bulk('trash', null, ids), 'danger-outline')}`;
   };
 
   const toggleOpen = (id) => setOpen((prev) => {
@@ -252,7 +253,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
   });
 
   const colFilters = K.columns;
-  const extraCol = kind === 'all' ? 'Статус' : kind === 'trash' ? 'Осталось' : null;
+  const extraCol = kind === 'all' ? tr('Статус') : kind === 'trash' ? tr('Осталось') : null;
   const span = 6 + (extraCol ? 1 : 0);
   const retention = store.data.settings.trashRetentionDays || 30;
   const leftDays = (t) => Math.max(0, retention - Math.floor((Date.now() - Date.parse(t.trashedAt)) / 86400000));
@@ -266,7 +267,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
           <div class="search-field ex-search">
             <${Icon} name="search" size=${16}/>
             <input value=${draft} data-search-input placeholder=${PLACEHOLDER[kind]} spellcheck="false" autocomplete="off"
-              aria-label="Строка поиска" title=${shortcutText('search') ? 'Поиск: ' + shortcutText('search') : undefined}
+              aria-label="Строка поиска" title=${shortcutText('search') ? tr('Поиск: ') + shortcutText('search') : undefined}
               onInput=${(e) => setDraft(e.target.value)}/>
           </div>
           <select class="ex-range" value=${range} aria-label="Период" onChange=${(e) => apply(draft, e.target.value)}>
@@ -279,7 +280,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
           <span>Поля:</span>
           ${fieldChips(kind).map((f) => html`<button type="button" class="ex-field" key=${f}
             title=${f === 'есть' ? HAS_HINT : f === 'повтор' ? REPEAT_HINT : undefined}
-            onClick=${() => setDraft((d) => `${d.trim()} ${f}:`.trim())}>${f}:</button>`)}
+            onClick=${() => setDraft((d) => `${d.trim()} ${fieldLabel(f)}:`.trim())}>${fieldLabel(f)}:</button>`)}
           <span class="ex-syntax">${SYNTAX}</span>
         </div>
       </form>
@@ -288,7 +289,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
 
       <div class="ex-grid">
         <div class="ex-main">
-          <${Histogram} hist=${res.hist} title=${K.histogram + ' во времени'}/>
+          <${Histogram} hist=${res.hist} title=${K.histogram + tr(' во времени')}/>
 
           <${BulkBar} selection=${selection}>${actionButtons()}<//>
 
@@ -308,7 +309,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
                   <th></th><th></th><th class="ex-col-time"></th>
                   ${colFilters.map((f) => html`
                     <th key=${f} class=${f === 'список' ? 'ex-col-list' : f === 'приоритет' ? 'ex-col-prio' : ''}>
-                      <input class="ex-col-input" value=${columnDraft[f] ?? ''} placeholder=${f + '…'} aria-label=${'Фильтр: ' + f}
+                      <input class="ex-col-input" value=${columnDraft[f] ?? ''} placeholder=${f + '…'} aria-label=${tr('Фильтр: ') + f}
                         onInput=${(e) => setColumnDraft({ ...columnDraft, [f]: e.target.value })}
                         onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); setColumns({ ...columnDraft }); setSkip(0); } }}
                         onBlur=${() => { setColumns({ ...columnDraft }); }}/>

@@ -2,7 +2,7 @@
 // и поиск пути, расстановка и рост земли, жители, гость у экрана, отрисовка.
 
 import { test, assert } from './runner.js';
-import { World, residentsOf } from '../src/village/world.js';
+import { World, residentsOf, SHELTER } from '../src/village/world.js';
 import { buildMap, findPath, walkable, canPlace, nearestPlace, suggestPlace, buildable, landSize, TILE, T } from '../src/village/map.js';
 import { VillageRenderer, drawVisitor } from '../src/village/draw.js';
 import { VILLAGE_ITEMS, VILLAGE_STYLES, BASE_VILLAGE, nightness } from '../src/core/village.js';
@@ -307,20 +307,32 @@ test('0.9: в экран стучат только хранители с дел�
   for (let i = 0; i < 40; i++) w.step(0.05, { phase: 0.5, night: 0 });
   assert.equal(ren.z, 0);
   assert.ok(walkable(w.map, ...tileOf(ren.x, ren.y)), 'приземлился на проходимое');
-  // дом: ночью все уходят, свет горит, потом гаснет; нажали — выбежали
+  // ночь (0.12.5): люди спят в ближайшем здании до утра, свет горит, потом гаснет; нажали — выбежали
   const home = w.houses()[0];
   assert.ok(w.residentsOf(home).length >= 3, 'у каждого свой дом');
-  let wasLit = false;
+  const probe = w.actors.find((a) => KINDS_HUMAN.has(a.kind));
+  const near = w.buildings.find((b) => SHELTER.has(b.type) && b.key !== probe.homeKey) || home;
+  const keepHome = probe.homeKey;
+  probe.homeKey = null;
+  Object.assign(probe, { x: near.door.x + 4, y: near.door.y + 6 });
+  assert.equal(w.shelterFor(probe), near, 'ночлег — в ближайшем здании');
+  probe.homeKey = keepHome;
+  const lit = new Set();
   for (let i = 0; i < 1500; i++) {
     w.step(0.1, { phase: 0.02, night: 1 });
-    if (w.buildingLit(home)) wasLit = true;
+    for (const b of w.buildings) if (w.buildingLit(b) && w.actors.some((a) => a.task?.b === b && a.hidden)) lit.add(b);
   }
-  const people = w.residentsOf(home).filter((a) => KINDS_HUMAN.has(a.kind));
-  assert.ok(people.every((a) => a.hidden), 'все люди дома');
-  assert.ok(wasLit, 'пока укладывались — свет горел');
-  assert.ok(!w.buildingLit(home), 'все легли — свет погас');
-  assert.ok(w.disturb(home) >= people.length, 'потревожили — выбежали');
-  assert.ok(people.every((a) => !a.hidden));
+  const people = w.actors.filter((a) => KINDS_HUMAN.has(a.kind));
+  assert.ok(people.every((a) => a.hidden && a.task?.type === 'inside' && a.task.sleep), 'все люди спят под крышей');
+  const bed = people[0].task.b;
+  assert.ok(lit.has(bed), 'пока укладывались — свет горел');
+  assert.ok(!w.buildingLit(bed), 'все легли — свет погас');
+  assert.ok(w.particles.some((p) => p.kind === 'zzz'), 'над крышей — «z z z»');
+  const inBed = w.sleepersIn(bed);
+  assert.ok(w.disturb(bed) >= inBed.length, 'потревожили — выбежали');
+  assert.ok(inBed.every((a) => !a.hidden));
+  for (let i = 0; i < 200; i++) w.step(0.1, { phase: 0.3, night: 0.2 });
+  assert.ok(people.every((a) => !(a.task?.type === 'inside' && a.task.sleep)), 'утром проснулись сами');
   // днём — дела у объектов: котик, огород, колодец, пруд, лес
   const seen = new Set();
   for (let i = 0; i < 8000 && seen.size < 4; i++) {
@@ -339,9 +351,9 @@ test('0.9: в экран стучат только хранители с дел�
   assert.ok(w.particles.some((p) => p.kind === 'drop'));
 });
 
-test('0.9: звери и портреты 96 × 96 рисуются во всех позах и головных уборах', async () => {
+test('0.9: звери и портреты (128 × 128 с 0.12.5) рисуются во всех позах и головных уборах', async () => {
   const { critterSprite } = await import('../src/village/critters.js');
-  const { drawPortrait96, N } = await import('../src/village/portrait96.js');
+  const { drawPortrait128, N } = await import('../src/village/portrait128.js');
   const { LOOKS } = await import('../src/village/chibi.js');
   const painted = (cv) => {
     const px = cv.getContext('2d').getImageData(0, 0, cv.width, cv.height).data;
@@ -367,8 +379,26 @@ test('0.9: звери и портреты 96 × 96 рисуются во все�
     for (const e of ['neutral', 'smile', 'grin', 'surprised', 'sad', 'blush', 'closed']) {
       const c = cv.getContext('2d');
       c.clearRect(0, 0, N, N);
-      drawPortrait96(c, look, e);
-      assert.ok(painted(cv) > 3000, `портрет ${hat} ${e}`);
+      drawPortrait128(c, look, e);
+      assert.ok(painted(cv) > 6000, `портрет ${hat} ${e}`);
     }
   });
+});
+test('0.12.5: ночью — в ближайшее здание (не обязательно свой дом), до утра; утром выходят', () => {
+  const w = new World({ rand: seeded(5) });
+  w.configure({ owned: OWNED, objects: ALL, mood: 70 });
+  for (let i = 0; i < 20; i++) w.step(0.05, { phase: 0.5, night: 0 });
+  const tavern = w.building('tavern');
+  const a = w.actors.find((x) => KINDS_HUMAN.has(x.kind));
+  a.homeKey = w.houses().find((h) => Math.hypot(h.door.x - tavern.door.x, h.door.y - tavern.door.y) > 100)?.key || a.homeKey;
+  Object.assign(a, { x: tavern.door.x, y: tavern.door.y + 8 });
+  assert.equal(w.shelterFor(a), tavern);
+  for (let i = 0; i < 1500; i++) w.step(0.1, { phase: 0.02, night: 1 });
+  const humans = w.actors.filter((x) => KINDS_HUMAN.has(x.kind) || x.kind === 'knight' || x.kind === 'witch');
+  assert.ok(humans.every((x) => x.hidden && x.task?.sleep), 'спят все, и рыцарь с ведьмой');
+  assert.ok(humans.every((x) => SHELTER.has(x.task.b.type)));
+  for (let i = 0; i < 300; i++) w.step(0.1, { phase: 0.02, night: 0.9 });
+  assert.ok(humans.every((x) => x.hidden), 'ночь ещё — спят');
+  for (let i = 0; i < 200; i++) w.step(0.1, { phase: 0.3, night: 0.1 });
+  assert.ok(humans.every((x) => !(x.task?.type === 'inside' && x.task.sleep)), 'утро — вышли');
 });

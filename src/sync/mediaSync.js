@@ -10,6 +10,7 @@ import { gcPlan, pendingUploads, formatBytes } from '../core/media.js';
 import { getBlob, putBlob, hasBlob, unpinBlob, removeBlob, blobUrl, cachedUrl } from '../media/cache.js';
 import { sha256Hex } from '../media/process.js';
 import { MEDIA } from '../config.js';
+import { tr } from '../core/i18n.js';
 
 // ---------- Состояние скачивания для интерфейса ----------
 
@@ -114,7 +115,7 @@ export async function uploadPending(drive, layout, report = () => {}) {
   const updates = [];
   for (let i = 0; i < list.length; i++) {
     const m = list[i];
-    report(`Медиа ${i + 1}/${list.length} · ${formatBytes(m.size)}`);
+    report(tr('Медиа {p0}/{length} · {p2}', { p0: i + 1, length: list.length, p2: formatBytes(m.size) }));
     const existing = await drive.findMediaBySha(layout.mediaFolderId, m.id);
     let fileId = existing?.id || null;
     if (fileId) out.reused++;

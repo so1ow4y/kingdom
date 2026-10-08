@@ -2,12 +2,14 @@
 // топ значений, массовые действия. Чистые функции.
 
 import { parseQuery, evaluate, textMatch, textContains } from './query.js';
-import { foodBarcodes, foodUsage } from './feast.js';
+import { foodBarcodes, foodUsage, isMed } from './feast.js';
 import { nv, NUTRIENTS, NUTRIENT } from './nutrition.js';
 import { localDateOf } from './dates.js';
+import { LANG, tr } from './i18n.js';
 
 export const FOOD_FIELDS = {
   'название': ['name', 'title'],
+  'тип': ['type', 'kind', 'вид'],
   'бренд': ['brand'],
   'штрихкод': ['barcode', 'code', 'ean'],
   'ккал': ['kcal', 'калории'],
@@ -17,9 +19,19 @@ export const FOOD_FIELDS = {
   'создан': ['created', 'дата', 'date'],
   'записей': ['uses', 'съеден'],
   'есть': ['has'],
+  'доза': ['dose'],
 };
 
-export const FOOD_PLACEHOLDER = 'ккал:<150 белки:>10 есть:штрихкод творог';
+// 0.12.5: тип записи каталога — продукт или лекарство
+const KIND_WORDS = {
+  med: ['лекарство', 'лекарства', 'лекарств', 'med', 'meds', 'medicine', 'таблетки', 'препарат'],
+  food: ['продукт', 'продукты', 'еда', 'food', 'product', 'products'],
+};
+export const kindWord = (f) => (isMed(f) ? tr('лекарство') : tr('продукт'));
+/** Поле запроса для показа: по-английски — английский синоним (запрос понимает оба). */
+export const foodFieldLabel = (f) => (LANG === 'en' ? (FOOD_FIELDS[f] || []).find((x) => /^[a-z]+$/.test(x)) || f : f);
+
+export const FOOD_PLACEHOLDER = LANG === 'en' ? 'kcal:<150 protein:>10 has:barcode yogurt' : 'ккал:<150 белки:>10 есть:штрихкод творог';
 
 const HAS = {
   barcode: ['barcode', 'штрихкод', 'код'],
@@ -69,9 +81,16 @@ export function matchFood(ctx, f, { field, value }) {
   switch (field) {
     case null: return textContains(f.name, value) || textContains(f.brand, value) || foodBarcodes(f).some((c) => c.startsWith(value));
     case 'название': return textContains(f.name, value);
+    case 'тип': {
+      const v = value.toLowerCase();
+      if (KIND_WORDS.med.includes(v)) return isMed(f);
+      if (KIND_WORDS.food.includes(v)) return !isMed(f);
+      return false;
+    }
+    case 'доза': return isMed(f) && numMatch(f.dose || 1, value);
     case 'бренд': return textMatch(f.brand || '', value) || textContains(f.brand || '', value);
     case 'штрихкод': return foodBarcodes(f).some((c) => (value.includes('*') ? textMatch(c, value) : c.startsWith(value)));
-    case 'ккал': return numMatch(nv(f.nutrients, 'kcal'), value);
+    case 'ккал': return !isMed(f) && numMatch(nv(f.nutrients, 'kcal'), value);
     case 'белки': return numMatch(nv(f.nutrients, 'protein'), value);
     case 'жиры': return numMatch(nv(f.nutrients, 'fat'), value);
     case 'углеводы': return numMatch(nv(f.nutrients, 'carbs'), value);
@@ -96,10 +115,10 @@ export function matchFood(ctx, f, { field, value }) {
 }
 
 export const KCAL_BANDS = [
-  { label: 'до 100 ккал', max: 100 },
-  { label: '100–250 ккал', max: 250 },
-  { label: '250–400 ккал', max: 400 },
-  { label: 'больше 400 ккал', max: Infinity },
+  { label: tr('до 100 ккал'), max: 100 },
+  { label: tr('100–250 ккал'), max: 250 },
+  { label: tr('250–400 ккал'), max: 400 },
+  { label: tr('больше 400 ккал'), max: Infinity },
 ];
 const bandOf = (k) => KCAL_BANDS.find((b) => k < b.max).label;
 
@@ -132,23 +151,25 @@ export function foodFacets(ctx, rows, limit = 8) {
     return [...m].map(([value, n]) => ({ value, count: n })).sort((a, b) => b.count - a.count || (a.value < b.value ? -1 : 1)).slice(0, limit);
   };
   return [
-    { field: 'бренд', values: count((f) => f.brand || 'без бренда') },
-    { field: 'ккал', label: 'калорийность', values: count((f) => bandOf(nv(f.nutrients, 'kcal'))) },
-    { field: 'есть', label: 'штрихкод', values: count((f) => (foodBarcodes(f).length ? 'штрихкод' : 'без штрихкода')) },
+    { field: 'тип', values: count(kindWord) },
+    { field: 'бренд', values: count((f) => f.brand || tr('без бренда')) },
+    { field: 'ккал', label: tr('калорийность'), values: count((f) => (isMed(f) ? [] : bandOf(nv(f.nutrients, 'kcal')))) },
+    { field: 'есть', label: tr('штрихкод'), values: count((f) => (foodBarcodes(f).length ? tr('штрихкод') : tr('без штрихкода'))) },
     { field: 'создан', values: count((f) => localDateOf(f.createdAt, ctx.tz).slice(0, 7)) },
   ];
 }
 
 /** Условие для клика по значению топа (не все значения — прямо «поле:значение»). */
 export function facetTerm(field, value) {
-  if (field === 'бренд') return value === 'без бренда' ? ['есть', 'бренд', true] : ['бренд', value, false];
+  const en = LANG === 'en';
+  if (field === 'бренд') return value === tr('без бренда') ? ['есть', en ? 'brand' : 'бренд', true] : ['бренд', value, false];
   if (field === 'ккал') {
     const b = KCAL_BANDS.findIndex((x) => x.label === value);
     const lo = b > 0 ? KCAL_BANDS[b - 1].max : 0;
     const hi = KCAL_BANDS[b].max;
     return ['ккал', hi === Infinity ? '>=' + lo : `${lo}..${hi - 0.001}`, false];
   }
-  if (field === 'есть') return value === 'без штрихкода' ? ['есть', 'штрихкод', true] : ['есть', 'штрихкод', false];
+  if (field === 'есть') return value === tr('без штрихкода') ? ['есть', en ? 'barcode' : 'штрихкод', true] : ['есть', en ? 'barcode' : 'штрихкод', false];
   return [field, value, false];
 }
 

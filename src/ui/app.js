@@ -45,37 +45,39 @@ import {
 } from '../store/appState.js';
 import { updateSettings, toggleComplete, trashTask, getTask } from '../store/actions.js';
 import * as S from '../core/selectors.js';
+import * as F from '../core/feast.js';
 import { planningDate } from '../core/planning.js';
 import { humanDate, addDays, deviceTimeZone } from '../core/dates.js';
 import { applyUpdate } from '../pwa/swClient.js';
+import { tr } from '../core/i18n.js';
 
 function titleFor(route) {
   switch (route.name) {
     case 'today': return humanDate(planningDate(route.query.date, store.now.today), store.now.today);
-    case 'inbox': return 'Входящие';
-    case 'lists': return 'Списки';
+    case 'inbox': return tr('Входящие');
+    case 'lists': return tr('Списки');
     case 'list': {
       const l = S.liveList(store.data, route.param);
-      return l ? `${l.emoji ? l.emoji + ' ' : ''}${l.name}` : 'Список';
+      return l ? `${l.emoji ? l.emoji + ' ' : ''}${l.name}` : tr('Список');
     }
-    case 'archive': return 'Выполненные';
-    case 'trash': return 'Корзина';
-    case 'tasks': return 'Поиск задач';
-    case 'settings': return 'Настройки';
-    case 'more': return 'Ещё';
-    case 'journal': return 'Журнал';
-    case 'analytics': return 'Аналитика';
-    case 'shop': return 'Магазин';
-    case 'village': return 'Деревня';
-    case 'diary': return 'Дневник · ' + humanDate(planningDate(route.query.date, store.now.today), store.now.today).toLowerCase();
-    case 'foods': return 'Продукты';
-    case 'nutrition': return 'Аналитика';
-    case 'body': return 'Обо мне';
-    case 'food': return 'Продукт';
-    case 'meals': return 'Рационы';
+    case 'archive': return tr('Выполненные');
+    case 'trash': return tr('Корзина');
+    case 'tasks': return tr('Поиск задач');
+    case 'settings': return tr('Настройки');
+    case 'more': return tr('Ещё');
+    case 'journal': return tr('Журнал');
+    case 'analytics': return tr('Аналитика');
+    case 'shop': return tr('Магазин');
+    case 'village': return tr('Деревня');
+    case 'diary': return tr('Дневник · ') + humanDate(planningDate(route.query.date, store.now.today), store.now.today).toLowerCase();
+    case 'foods': return tr('Продукты и лекарства');
+    case 'nutrition': return route.param === 'meds' ? tr('Аналитика · лекарства') : route.param === 'body' ? tr('Аналитика · тело') : tr('Аналитика · питание');
+    case 'body': return tr('Обо мне');
+    case 'food': return F.isMed(store.feast.foods.get(route.param)) ? tr('Лекарство') : tr('Продукт');
+    case 'meals': return tr('Рационы');
     case 'meal': {
       const m = store.feast.meals.get(route.param);
-      return m && !m.deletedAt ? `${m.icon} ${m.name}` : 'Рацион';
+      return m && !m.deletedAt ? `${m.icon} ${m.name}` : tr('Рацион');
     }
     default: return SUITE_NAME;
   }
@@ -99,7 +101,7 @@ function Screen({ route }) {
     case 'diary': return html`<${DiaryScreen} query=${route.query}/>`;
     case 'foods': return html`<${FoodsScreen} query=${route.query}/>`;
     case 'food': return html`<${FoodCard} key=${route.param} id=${route.param} onClose=${closeTask}/>`;
-    case 'nutrition': return html`<${NutritionScreen}/>`;
+    case 'nutrition': return html`<${NutritionScreen} tab=${route.param}/>`;
     case 'body': return html`<${BodyScreen}/>`;
     case 'meals': return html`<${MealsScreen}/>`;
     case 'meal': return html`<${MealScreen} key=${route.param} mealId=${route.param} query=${route.query}/>`;
@@ -136,11 +138,11 @@ function Banners() {
     ${u ? html`
       <${Banner} tone="info" onClose=${() => setUi({ update: null })} actions=${html`
         <button class="btn small primary" onClick=${applyUpdate}>Обновить</button>`}>
-        Доступно обновление${u.version ? ` до версии ${u.version}` : ''}
+        Доступно обновление${u.version ? tr(' до версии {version}', { version: u.version }) : ''}
       <//>` : null}
     ${store.sync.clockSkewMin ? html`
       <${Banner} tone="warn" onClose=${() => setSync({ clockSkewMin: 0 })}>
-        Часы устройства ${store.sync.clockSkewMin > 0 ? 'спешат' : 'отстают'} на ${Math.abs(store.sync.clockSkewMin)} мин.
+        Часы устройства ${store.sync.clockSkewMin > 0 ? tr('спешат') : tr('отстают')} на ${Math.abs(store.sync.clockSkewMin)} мин.
         Исправь время — иначе правки могут сливаться неправильно.
       <//>` : null}
     ${store.sync.extraRoots?.length ? html`
@@ -256,7 +258,7 @@ export function App() {
   useEffect(() => {
     const section = sectionOf(base.name);
     const name = APPS[app]?.name || SUITE_NAME;
-    document.title = route.name === 'task' ? `Задача · ${name}` : route.name === 'food' && !panel ? `Продукт · ${name}`
+    document.title = route.name === 'task' ? tr('Задача · {name}', { name }) : route.name === 'food' && !panel ? tr('Продукт · {name}', { name })
       : `${titleFor(base)}${section ? ' · ' + section.title : ''} · ${name}`;
   });
 

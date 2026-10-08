@@ -1,6 +1,7 @@
 // fetch к Google API: токен, повторы, разбор ошибок в коды docs/TZ.md §14.
 
 import { SyncError } from '../core/errors.js';
+import { tr } from '../core/i18n.js';
 
 export { SyncError };
 
@@ -38,19 +39,19 @@ export async function gfetch(url, opts = {}) {
   let serverTries = 0;
   for (;;) {
     if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-      throw new SyncError('E-OFFLINE', 'Нет сети');
+      throw new SyncError('E-OFFLINE', tr('Нет сети'));
     }
     const h = { ...headers };
     if (auth) {
       const token = getToken();
-      if (!token) throw new SyncError('E-AUTH-EXPIRED', 'Нужен вход в Google');
+      if (!token) throw new SyncError('E-AUTH-EXPIRED', tr('Нужен вход в Google'));
       h.Authorization = 'Bearer ' + token;
     }
     let res;
     try {
       res = await fetch(url, { method, headers: h, body });
     } catch (e) {
-      throw new SyncError('E-OFFLINE', 'Нет сети', { cause: e });
+      throw new SyncError('E-OFFLINE', tr('Нет сети'), { cause: e });
     }
     if (res.ok) {
       if (as === 'response') return res;
@@ -60,7 +61,7 @@ export async function gfetch(url, opts = {}) {
       return res.json();
     }
     const { reason, message } = await parseError(res);
-    if (res.status === 401) throw new SyncError('E-AUTH-EXPIRED', 'Сессия Google истекла', { status: 401 });
+    if (res.status === 401) throw new SyncError('E-AUTH-EXPIRED', tr('Сессия Google истекла'), { status: 401 });
     if (res.status === 403 && reason === 'storageQuotaExceeded') {
       throw new SyncError('E-QUOTA-DRIVE', message, { status: 403, reason });
     }

@@ -12,6 +12,7 @@ import { plural } from '../../core/plural.js';
 import { doneCount } from '../../core/retention.js';
 import { INBOX_NAME } from '../../core/explore.js';
 import { TaskExplorer } from '../components/Explorer.js';
+import { tr } from '../../core/i18n.js';
 
 /** Шапка экрана: описание и действия справа (AdminPageHeader license-store). */
 function PageHeader({ children, actions = null }) {
@@ -24,10 +25,10 @@ function PageHeader({ children, actions = null }) {
 /** Условие «список:…» для перехода из списка («Все выполненные — в архиве»). */
 function listTerm(listId) {
   if (!listId) return '';
-  if (listId === 'inbox') return `список:${INBOX_NAME.toLowerCase()}`;
+  if (listId === 'inbox') return tr('список:{p0}', { p0: INBOX_NAME.toLowerCase() });
   const l = S.liveList(store.data, listId);
   if (!l) return '';
-  return /[\s()|"]/.test(l.name) ? `список:"${l.name.replace(/"/g, '')}"` : `список:${l.name}`;
+  return /[\s()|"]/.test(l.name) ? tr('список:"{p0}"', { p0: l.name.replace(/"/g, '') }) : tr('список:{name}', { name: l.name });
 }
 
 export function ArchiveScreen({ query = {} }) {
@@ -35,7 +36,7 @@ export function ArchiveScreen({ query = {} }) {
   return html`
     <div class="screen">
       <${PageHeader}>
-        Выполненные задачи. Хранится: ${doneCount(store.data)}${limit == null ? ' · без лимита' : ` из ${limit}`} — старые сверх лимита
+        Выполненные задачи. Хранится: ${doneCount(store.data)}${limit == null ? tr(' · без лимита') : tr(' из {limit}', { limit })} — старые сверх лимита
         удаляются, статистика остаётся. <${Link} to="/settings?section=data">Настроить<//>
       <//>
       <${TaskExplorer} kind="done" initialQ=${listTerm(query.list)}/>

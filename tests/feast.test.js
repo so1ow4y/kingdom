@@ -386,3 +386,21 @@ test('Диск 0.12: старые папки находятся где угод�
   const fresh = await ensureKingdom(drive, kingdomId);
   assert.ok(fresh !== kingdomId, 'Kingdom в корзине — создаётся новая');
 });
+
+test('Продукты и лекарства (0.12.5): поле «тип:», топ по типу, калорийность без лекарств, доза', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  put(d, 'foods', F.newFood({ name: 'Творог', nutrients: { kcal: 120 } }, c));
+  put(d, 'foods', F.newFood({ name: 'Инсулин', kind: 'med', unit: 'iu', dose: 4 }, c));
+  put(d, 'foods', F.newFood({ name: 'Витамин D', kind: 'med', unit: 'cap', dose: 1 }, c));
+  const ctx = makeFoodContext(d, 'Europe/Moscow');
+  const names = (q) => searchFoods(ctx, q, 'name').rows.map((f) => f.name);
+  assert.deepEqual(names('тип:лекарство'), ['Витамин D', 'Инсулин']);
+  assert.deepEqual(names('type:food'), ['Творог']);
+  assert.deepEqual(names('-тип:продукт доза:>2'), ['Инсулин']);
+  assert.deepEqual(names('ккал:<200'), ['Творог'], 'у лекарства калорий нет — по ккал не находится');
+  const facets = foodFacets(ctx, searchFoods(ctx, '').rows);
+  assert.deepEqual(facets[0].values, [{ value: 'лекарство', count: 2 }, { value: 'продукт', count: 1 }]);
+  assert.equal(facets.find((f) => f.field === 'ккал').values.reduce((s, v) => s + v.count, 0), 1);
+  assert.deepEqual(facetTerm('тип', 'лекарство'), ['тип', 'лекарство', false]);
+});

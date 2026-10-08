@@ -17,6 +17,7 @@ import * as F from '../../core/feast.js';
 import * as B from '../../core/body.js';
 import { addDays, longDate } from '../../core/dates.js';
 import { SCHEMES, getAppPrefs } from '../prefs.js';
+import { tr } from '../../core/i18n.js';
 
 export { bodyState };
 
@@ -82,13 +83,13 @@ export function CompositionCard({ st }) {
     <h2>Состав тела</h2>
     <div class="stat-tiles">
       <div class="stat-tile"><span>ИМТ</span><b>${f1(bmi)}</b><small class=${'tone-' + (cls?.tone || 'ok')}>${cls?.label || ''}</small></div>
-      <div class="stat-tile"><span>Процент жира</span><b>${est ? f1(est.pct) + ' %' : '—'}</b><small>${est ? B.BF_METHOD[est.method] : 'нужны пол и возраст'}</small></div>
+      <div class="stat-tile"><span>Процент жира</span><b>${est ? f1(est.pct) + ' %' : '—'}</b><small>${est ? B.BF_METHOD[est.method] : tr('нужны пол и возраст')}</small></div>
       ${comp ? html`<div class="stat-tile"><span>Жир / остальное</span><b>${f1(comp.fatKg)} / ${f1(comp.leanKg)} кг</b><small>при весе ${f1(p.weightKg)} кг</small></div>` : null}
     </div>
     ${est ? html`<${BodyFatScale} sex=${sex} pct=${est.pct}/>` : null}
     ${est ? html`<div class="figures">
-      <${BodyFigure} sex=${sex} bf=${est.pct} heightCm=${p.heightCm} accent=${figureColor()} label=${`Сейчас · ${f1(est.pct)} %`}/>
-      ${target != null ? html`<${BodyFigure} sex=${sex} bf=${target} heightCm=${p.heightCm} accent=${figureColor()} label=${`При ${f1(s.targetWeightKg)} кг · ≈${f1(target)} %`}/>` : null}
+      <${BodyFigure} sex=${sex} bf=${est.pct} heightCm=${p.heightCm} accent=${figureColor()} label=${tr('Сейчас · {p0} %', { p0: f1(est.pct) })}/>
+      ${target != null ? html`<${BodyFigure} sex=${sex} bf=${target} heightCm=${p.heightCm} accent=${figureColor()} label=${tr('При {p0} кг · ≈{p1} %', { p0: f1(s.targetWeightKg), p1: f1(target) })}/>` : null}
     </div>` : null}
     <p class="muted small">Это оценка для ориентира, а не диагноз. Точнее всего — по обхватам талии и шеи (у женщин и бёдер) или по замеру на весах с анализатором.</p>
   </section>`;
@@ -111,12 +112,12 @@ function MeasureCard({ st, ro }) {
       ${female || cur?.hipCm ? html`<${NumField} big label="Бёдра" unit="см" value=${cur?.hipCm} disabled=${ro} onCommit=${save('hipCm')}/>` : null}
       <${NumField} big label="Жир (замер)" unit="%" value=${cur?.bodyFatPct} disabled=${ro} onCommit=${save('bodyFatPct')}/>
     </div>
-    <p class="muted small">Сохраняется сразу. Талию меряют на уровне пупка, шею — под кадыком${female ? ', бёдра — по самой широкой части' : ''}. «Жир (замер)» — если есть весы с анализатором.</p>
+    <p class="muted small">Сохраняется сразу. Талию меряют на уровне пупка, шею — под кадыком${female ? tr(', бёдра — по самой широкой части') : ''}. «Жир (замер)» — если есть весы с анализатором.</p>
   </section>`;
 }
 
 
-const PERIODS = [['30', '30 дней'], ['90', '3 месяца'], ['365', 'Год'], ['all', 'Всё время']];
+const PERIODS = [['30', tr('30 дней')], ['90', tr('3 месяца')], ['365', tr('Год')], ['all', tr('Всё время')]];
 
 export function WeightCard({ st }) {
   const today = store.now.today;
@@ -134,16 +135,16 @@ export function WeightCard({ st }) {
     <div class="chip-row wrap">${PERIODS.map(([k, l]) => html`<button type="button" key=${k} class=${'chip' + (period === k ? ' selected' : '')} onClick=${() => setPeriod(k)}>${l}</button>`)}</div>
     ${pts.length ? html`<div class="stat-tiles">
       <div class="stat-tile"><span>Сейчас</span><b>${f1(pts.at(-1).kg)} кг</b><small>${longDate(pts.at(-1).date, today)}</small></div>
-      <div class="stat-tile"><span>За период</span><b>${pts.length > 1 ? (pts.at(-1).kg - pts[0].kg >= 0 ? '+' : '−') + f1(Math.abs(pts.at(-1).kg - pts[0].kg)) + ' кг' : '—'}</b><small>с ${f1(pts[0].kg)} кг</small></div>
-      <div class="stat-tile"><span>Темп</span><b>${rate != null ? (rate >= 0 ? '+' : '−') + f1(Math.abs(rate)) + ' кг' : '—'}</b><small>в неделю, за 4 недели</small></div>
+      <div class="stat-tile"><span>За период</span><b>${pts.length > 1 ? (pts.at(-1).kg - pts[0].kg >= 0 ? '+' : '−') + f1(Math.abs(pts.at(-1).kg - pts[0].kg)) + tr(' кг') : '—'}</b><small>с ${f1(pts[0].kg)} кг</small></div>
+      <div class="stat-tile"><span>Темп</span><b>${rate != null ? (rate >= 0 ? '+' : '−') + f1(Math.abs(rate)) + tr(' кг') : '—'}</b><small>в неделю, за 4 недели</small></div>
       ${target ? html`<div class="stat-tile"><span>До цели</span><b>${f1(Math.abs(pts.at(-1).kg - target))} кг</b><small>цель ${f1(target)} кг</small></div>` : null}
     </div>` : null}
     <${LineChart} label="Вес по дням" unit="кг" from=${from} to=${today}
       lines=${[
-        { key: 'w', label: 'Взвешивания', color: 'var(--series-1)', points: pts.map((p) => ({ date: p.date, y: p.kg })), line: pts.length > 1 && avg.length < 2 },
-        ...(avg.length > 1 ? [{ key: 'a', label: 'Среднее за 7 дней', color: 'var(--series-2)', points: avg.map((p) => ({ date: p.date, y: Math.round(p.kg * 10) / 10 })), dots: false }] : []),
+        { key: 'w', label: tr('Взвешивания'), color: 'var(--series-1)', points: pts.map((p) => ({ date: p.date, y: p.kg })), line: pts.length > 1 && avg.length < 2 },
+        ...(avg.length > 1 ? [{ key: 'a', label: tr('Среднее за 7 дней'), color: 'var(--series-2)', points: avg.map((p) => ({ date: p.date, y: Math.round(p.kg * 10) / 10 })), dots: false }] : []),
       ]}
-      refs=${target ? [{ y: target, label: `цель ${f1(target)} кг` }] : []}/>
+      refs=${target ? [{ y: target, label: tr('цель {p0} кг', { p0: f1(target) }) }] : []}/>
   </section>`;
 }
 
@@ -160,7 +161,7 @@ function HistoryCard({ st, ro }) {
         <td class="num">${l.neckCm ? f1(l.neckCm) : '—'}</td><td class="num">${l.hipCm ? f1(l.hipCm) : '—'}</td>
         <td class="num">${l.bodyFatPct ? f1(l.bodyFatPct) + ' %' : '—'}</td>
         <td><button type="button" class="icon-btn small danger" disabled=${ro} aria-label="Удалить замер" title="Удалить замер"
-          onClick=${async () => { if (await confirm({ title: 'Удалить замер?', text: longDate(l.date) + ' ' + l.date.slice(0, 4), confirmLabel: 'Удалить', danger: true })) FA.deleteBodyLog(l.id); }}>
+          onClick=${async () => { if (await confirm({ title: tr('Удалить замер?'), text: longDate(l.date) + ' ' + l.date.slice(0, 4), confirmLabel: tr('Удалить'), danger: true })) FA.deleteBodyLog(l.id); }}>
           <${Icon} name="trash" size=${16}/></button></td>
       </tr>`)}</tbody>
     </table></div>

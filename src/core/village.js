@@ -14,6 +14,7 @@ import { localDateOf, addDays } from './dates.js';
 import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 import { extraEarnings } from './earnings.js';
+import { tr } from './i18n.js';
 
 // ---------- Каталог ----------
 
@@ -25,58 +26,58 @@ import { extraEarnings } from './earnings.js';
  */
 export const VILLAGE_ITEMS = [
   // Постройки
-  { id: 'v:house', kind: 'building', place: 'house', repeatable: true, name: 'Домик', emoji: '🏠', coins: 120, step: 40, desc: 'Крыша для жителей, ночью в окнах свет. Можно ставить сколько угодно — деревня сама расширится.' },
-  { id: 'v:manor', kind: 'building', place: 'manor', repeatable: true, name: 'Дом с мансардой', emoji: '🏘️', gems: 6, step: 2, desc: 'Большой двухэтажный дом со слуховыми окнами и флюгером.' },
-  { id: 'v:house:2', kind: 'building', place: 'house', legacy: true, name: 'Второй домик', emoji: '🏠', coins: 120 },
-  { id: 'v:house:3', kind: 'building', place: 'house', legacy: true, name: 'Третий домик', emoji: '🏡', coins: 220 },
-  { id: 'v:house:4', kind: 'building', place: 'manor', legacy: true, name: 'Дом с мансардой', emoji: '🏘️', gems: 6 },
-  { id: 'v:mine-gold:1', kind: 'building', place: 'goldmine', type: 'goldmine', n: 1, name: 'Золотая шахта', emoji: '⛏️', coins: 300, desc: '+10 % монет за каждую выполненную задачу.' },
-  { id: 'v:mine-gold:2', kind: 'building', place: 'goldmine', type: 'goldmine', n: 2, upgrade: true, name: 'Золотая шахта · ур. 2', emoji: '⛏️', coins: 650, requires: 'v:mine-gold:1', desc: '+20 % монет за задачи.' },
-  { id: 'v:mine-gold:3', kind: 'building', place: 'goldmine', type: 'goldmine', n: 3, upgrade: true, name: 'Золотая шахта · ур. 3', emoji: '⛏️', gems: 15, requires: 'v:mine-gold:2', desc: '+30 % монет за задачи.' },
-  { id: 'v:mine-gem:1', kind: 'building', place: 'gemmine', type: 'gemmine', n: 1, name: 'Изумрудная шахта', emoji: '💎', coins: 400, desc: '+1 💎 за каждую выполненную важную задачу (приоритет «Высокий» и выше), за критичную — вдвое.' },
-  { id: 'v:mine-gem:2', kind: 'building', place: 'gemmine', type: 'gemmine', n: 2, upgrade: true, name: 'Изумрудная шахта · ур. 2', emoji: '💎', gems: 10, requires: 'v:mine-gem:1', desc: '+2 💎 за важную задачу и бонус к фокус-сессиям.' },
-  { id: 'v:mine-gem:3', kind: 'building', place: 'gemmine', type: 'gemmine', n: 3, upgrade: true, name: 'Изумрудная шахта · ур. 3', emoji: '💎', gems: 25, requires: 'v:mine-gem:2', desc: '+3 💎 за важную задачу.' },
-  { id: 'v:forge', kind: 'building', place: 'forge', name: 'Мастерская', emoji: '🔨', coins: 180, desc: 'Во время фокус-сессии строитель работает здесь.' },
-  { id: 'v:windmill', kind: 'building', place: 'windmill', name: 'Мельница', emoji: '🌾', coins: 220, desc: 'Крутится, когда жители довольны.' },
-  { id: 'v:tavern', kind: 'building', place: 'tavern', name: 'Таверна', emoji: '🍺', coins: 350, desc: 'Вечером жители собираются здесь поболтать.' },
-  { id: 'v:tower', kind: 'building', place: 'tower', name: 'Сторожевая башня', emoji: '🚩', gems: 12, desc: 'Флаг цвета твоей иконки приложения.' },
-  { id: 'v:castle', kind: 'building', place: 'castle', name: 'Чёрный замок', emoji: '🏰', coins: 2500, big: true,
-    desc: 'Тёмная крепость с багровыми знамёнами и огнём в бойницах. +5 % монет и наград за еду за каждый уровень, жители спокойнее.' },
-  { id: 'v:fountain', kind: 'building', place: 'fountain', name: 'Фонтан', emoji: '⛲', gems: 5, desc: 'Сначала встаёт посреди площади, но его можно переставить.' },
-  { id: 'v:field', kind: 'building', place: 'field', repeatable: true, name: 'Огород', emoji: '🥕', coins: 60, step: 20, desc: 'Грядки за заборчиком. Урожай зависит от стиля деревни.' },
+  { id: 'v:house', kind: 'building', place: 'house', repeatable: true, name: tr('Домик'), emoji: '🏠', coins: 120, step: 40, desc: tr('Крыша для жителей, ночью в окнах свет. Можно ставить сколько угодно — деревня сама расширится.') },
+  { id: 'v:manor', kind: 'building', place: 'manor', repeatable: true, name: tr('Дом с мансардой'), emoji: '🏘️', gems: 6, step: 2, desc: tr('Большой двухэтажный дом со слуховыми окнами и флюгером.') },
+  { id: 'v:house:2', kind: 'building', place: 'house', legacy: true, name: tr('Второй домик'), emoji: '🏠', coins: 120 },
+  { id: 'v:house:3', kind: 'building', place: 'house', legacy: true, name: tr('Третий домик'), emoji: '🏡', coins: 220 },
+  { id: 'v:house:4', kind: 'building', place: 'manor', legacy: true, name: tr('Дом с мансардой'), emoji: '🏘️', gems: 6 },
+  { id: 'v:mine-gold:1', kind: 'building', place: 'goldmine', type: 'goldmine', n: 1, name: tr('Золотая шахта'), emoji: '⛏️', coins: 300, desc: tr('+10 % монет за каждую выполненную задачу.') },
+  { id: 'v:mine-gold:2', kind: 'building', place: 'goldmine', type: 'goldmine', n: 2, upgrade: true, name: tr('Золотая шахта · ур. 2'), emoji: '⛏️', coins: 650, requires: 'v:mine-gold:1', desc: tr('+20 % монет за задачи.') },
+  { id: 'v:mine-gold:3', kind: 'building', place: 'goldmine', type: 'goldmine', n: 3, upgrade: true, name: tr('Золотая шахта · ур. 3'), emoji: '⛏️', gems: 15, requires: 'v:mine-gold:2', desc: tr('+30 % монет за задачи.') },
+  { id: 'v:mine-gem:1', kind: 'building', place: 'gemmine', type: 'gemmine', n: 1, name: tr('Изумрудная шахта'), emoji: '💎', coins: 400, desc: tr('+1 💎 за каждую выполненную важную задачу (приоритет «Высокий» и выше), за критичную — вдвое.') },
+  { id: 'v:mine-gem:2', kind: 'building', place: 'gemmine', type: 'gemmine', n: 2, upgrade: true, name: tr('Изумрудная шахта · ур. 2'), emoji: '💎', gems: 10, requires: 'v:mine-gem:1', desc: tr('+2 💎 за важную задачу и бонус к фокус-сессиям.') },
+  { id: 'v:mine-gem:3', kind: 'building', place: 'gemmine', type: 'gemmine', n: 3, upgrade: true, name: tr('Изумрудная шахта · ур. 3'), emoji: '💎', gems: 25, requires: 'v:mine-gem:2', desc: tr('+3 💎 за важную задачу.') },
+  { id: 'v:forge', kind: 'building', place: 'forge', name: tr('Мастерская'), emoji: '🔨', coins: 180, desc: tr('Во время фокус-сессии строитель работает здесь.') },
+  { id: 'v:windmill', kind: 'building', place: 'windmill', name: tr('Мельница'), emoji: '🌾', coins: 220, desc: tr('Крутится, когда жители довольны.') },
+  { id: 'v:tavern', kind: 'building', place: 'tavern', name: tr('Таверна'), emoji: '🍺', coins: 350, desc: tr('Вечером жители собираются здесь поболтать.') },
+  { id: 'v:tower', kind: 'building', place: 'tower', name: tr('Сторожевая башня'), emoji: '🚩', gems: 12, desc: tr('Флаг цвета твоей иконки приложения.') },
+  { id: 'v:castle', kind: 'building', place: 'castle', name: tr('Чёрный замок'), emoji: '🏰', coins: 2500, big: true,
+    desc: tr('Тёмная крепость с багровыми знамёнами и огнём в бойницах. +5 % монет и наград за еду за каждый уровень, жители спокойнее.') },
+  { id: 'v:fountain', kind: 'building', place: 'fountain', name: tr('Фонтан'), emoji: '⛲', gems: 5, desc: tr('Сначала встаёт посреди площади, но его можно переставить.') },
+  { id: 'v:field', kind: 'building', place: 'field', repeatable: true, name: tr('Огород'), emoji: '🥕', coins: 60, step: 20, desc: tr('Грядки за заборчиком. Урожай зависит от стиля деревни.') },
   // Свет и небо
-  { id: 'v:lantern', kind: 'light', place: 'lantern', repeatable: true, name: 'Фонарь', emoji: '🏮', coins: 40, step: 5, desc: 'Горит ночью. Нажми на него в деревне — погаснет или зажжётся.' },
-  { id: 'v:lantern:1', kind: 'light', place: 'lantern', legacy: true, name: 'Фонарь', emoji: '🏮', coins: 40 },
-  { id: 'v:lantern:2', kind: 'light', place: 'lantern', legacy: true, name: 'Второй фонарь', emoji: '🏮', coins: 40 },
-  { id: 'v:lantern:3', kind: 'light', place: 'lantern', legacy: true, name: 'Третий фонарь', emoji: '🏮', coins: 50 },
-  { id: 'v:lantern:4', kind: 'light', place: 'lantern', legacy: true, name: 'Четвёртый фонарь', emoji: '🏮', coins: 60 },
-  { id: 'v:daynight', kind: 'sky', type: 'daynight', name: 'Смена дня и ночи', emoji: '🌗', gems: 3, desc: 'Смена каждые 5 минут или по настоящим часам (настраивается).' },
-  { id: 'v:fireflies', kind: 'sky', type: 'fireflies', name: 'Светлячки', emoji: '✨', coins: 70, desc: 'Летают над травой в сумерках.' },
-  { id: 'v:aurora', kind: 'sky', type: 'aurora', name: 'Северное сияние', emoji: '🌌', gems: 20, desc: 'Ночью по деревне переливаются отсветы.' },
+  { id: 'v:lantern', kind: 'light', place: 'lantern', repeatable: true, name: tr('Фонарь'), emoji: '🏮', coins: 40, step: 5, desc: tr('Горит ночью. Нажми на него в деревне — погаснет или зажжётся.') },
+  { id: 'v:lantern:1', kind: 'light', place: 'lantern', legacy: true, name: tr('Фонарь'), emoji: '🏮', coins: 40 },
+  { id: 'v:lantern:2', kind: 'light', place: 'lantern', legacy: true, name: tr('Второй фонарь'), emoji: '🏮', coins: 40 },
+  { id: 'v:lantern:3', kind: 'light', place: 'lantern', legacy: true, name: tr('Третий фонарь'), emoji: '🏮', coins: 50 },
+  { id: 'v:lantern:4', kind: 'light', place: 'lantern', legacy: true, name: tr('Четвёртый фонарь'), emoji: '🏮', coins: 60 },
+  { id: 'v:daynight', kind: 'sky', type: 'daynight', name: tr('Смена дня и ночи'), emoji: '🌗', gems: 3, desc: tr('Смена каждые 5 минут или по настоящим часам (настраивается).') },
+  { id: 'v:fireflies', kind: 'sky', type: 'fireflies', name: tr('Светлячки'), emoji: '✨', coins: 70, desc: tr('Летают над травой в сумерках.') },
+  { id: 'v:aurora', kind: 'sky', type: 'aurora', name: tr('Северное сияние'), emoji: '🌌', gems: 20, desc: tr('Ночью по деревне переливаются отсветы.') },
   // Декор
-  { id: 'v:flowers', kind: 'decor', type: 'flowers', name: 'Цветы по всей деревне', emoji: '🌼', coins: 30, desc: 'Цветы в траве и ящики с цветами на окнах.' },
-  { id: 'v:flowerbed', kind: 'decor', place: 'flowerbed', repeatable: true, name: 'Клумба', emoji: '🌷', coins: 25, step: 0, desc: 'Деревянная клумба с цветами.' },
-  { id: 'v:tree', kind: 'decor', place: 'tree', repeatable: true, name: 'Дерево', emoji: '🌳', coins: 20, step: 0, desc: 'Посади где хочешь.' },
-  { id: 'v:bench', kind: 'decor', place: 'bench', repeatable: true, name: 'Скамейка', emoji: '🪑', coins: 30, step: 0, desc: 'Жители на ней сидят.' },
-  { id: 'v:pumpkin', kind: 'decor', place: 'pumpkin', repeatable: true, name: 'Тыквы со свечами', emoji: '🎃', coins: 35, step: 0, desc: 'Ночью светятся.' },
-  { id: 'v:bonfire', kind: 'decor', place: 'bonfire', name: 'Костёр', emoji: '🔥', coins: 90, desc: 'Жители греются у огня вечером и ночью.' },
-  { id: 'v:benches', kind: 'decor', place: 'bench', legacy: true, name: 'Скамейки', emoji: '🪑', coins: 45 },
-  { id: 'v:pumpkins', kind: 'decor', place: 'pumpkin', legacy: true, name: 'Тыквы со свечами', emoji: '🎃', coins: 60 },
+  { id: 'v:flowers', kind: 'decor', type: 'flowers', name: tr('Цветы по всей деревне'), emoji: '🌼', coins: 30, desc: tr('Цветы в траве и ящики с цветами на окнах.') },
+  { id: 'v:flowerbed', kind: 'decor', place: 'flowerbed', repeatable: true, name: tr('Клумба'), emoji: '🌷', coins: 25, step: 0, desc: tr('Деревянная клумба с цветами.') },
+  { id: 'v:tree', kind: 'decor', place: 'tree', repeatable: true, name: tr('Дерево'), emoji: '🌳', coins: 20, step: 0, desc: tr('Посади где хочешь.') },
+  { id: 'v:bench', kind: 'decor', place: 'bench', repeatable: true, name: tr('Скамейка'), emoji: '🪑', coins: 30, step: 0, desc: tr('Жители на ней сидят.') },
+  { id: 'v:pumpkin', kind: 'decor', place: 'pumpkin', repeatable: true, name: tr('Тыквы со свечами'), emoji: '🎃', coins: 35, step: 0, desc: tr('Ночью светятся.') },
+  { id: 'v:bonfire', kind: 'decor', place: 'bonfire', name: tr('Костёр'), emoji: '🔥', coins: 90, desc: tr('Жители греются у огня вечером и ночью.') },
+  { id: 'v:benches', kind: 'decor', place: 'bench', legacy: true, name: tr('Скамейки'), emoji: '🪑', coins: 45 },
+  { id: 'v:pumpkins', kind: 'decor', place: 'pumpkin', legacy: true, name: tr('Тыквы со свечами'), emoji: '🎃', coins: 60 },
   // Жители (pet:* — питомцы из 0.6, переезжают в деревню)
-  { id: 'pet:cat', kind: 'char', char: 'cat', name: 'Кот Баюн', emoji: '🐈', coins: 60, desc: 'Гуляет по траве, гоняет светлячков, ночью спит у фонаря.' },
-  { id: 'pet:kitten', kind: 'char', char: 'kitten', name: 'Котёнок Пиксель', emoji: '🐱', coins: 140, desc: 'Носится, прыгает и пристаёт к другим жителям.' },
-  { id: 'pet:fox', kind: 'char', char: 'fox', name: 'Лисичка Искра', emoji: '🦊', coins: 160, desc: 'Бегает по холмам и роет норки.' },
-  { id: 'pet:spider', kind: 'char', char: 'spider', name: 'Паучок Ниточка', emoji: '🕷️', coins: 90, desc: 'Спускается на паутинке с деревьев.' },
-  { id: 'pet:neko', kind: 'char', char: 'neko', name: 'Нэко', emoji: '🐾', coins: 280, desc: 'Кошкодевочка, хранительница планов. Машет тебе из леса.' },
-  { id: 'v:char:shroom', kind: 'char', char: 'shroom', name: 'Грибочек Пуф', emoji: '🍄', coins: 70, desc: 'Прыгает пружинкой, прячется в траве.' },
-  { id: 'v:char:slime', kind: 'char', char: 'slime', name: 'Слизнюк Желейка', emoji: '🟢', coins: 90, desc: 'Плюхается и растекается от радости.' },
-  { id: 'v:char:miner', kind: 'char', char: 'miner', name: 'Шахтёр Гоша', emoji: '⛏️', coins: 150, desc: 'Ходит в шахты и выносит добычу.' },
-  { id: 'v:char:builder', kind: 'char', char: 'builder', name: 'Строитель Мира', emoji: '👷', coins: 150, desc: 'Строит в мастерской, пока ты в фокус-сессии.' },
-  { id: 'v:char:archer', kind: 'char', char: 'archer', name: 'Лучница Ветка', emoji: '🏹', gems: 8, desc: 'Тренируется, стреляет по мишени и охраняет лес.' },
-  { id: 'v:char:witch', kind: 'char', char: 'witch', name: 'Ведьма Полынь', emoji: '🧙‍♀️', gems: 10, desc: 'Ночью летает на метле.' },
-  { id: 'v:char:knight', kind: 'char', char: 'knight', name: 'Рыцарь Тяж', emoji: '🛡️', gems: 12, big: true, desc: 'Большой и добрый. Патрулирует деревню.' },
-  { id: 'v:char:ghost', kind: 'char', char: 'ghost', name: 'Призрак Шу', emoji: '👻', gems: 6, desc: 'Появляется только ночью, парит над крышами.' },
-  { id: 'v:char:dragon', kind: 'char', char: 'dragon', name: 'Дракончик Уголёк', emoji: '🐉', gems: 30, big: true, desc: 'Гордость деревни. Взлетает, когда ты закрываешь важные задачи.' },
+  { id: 'pet:cat', kind: 'char', char: 'cat', name: tr('Кот Баюн'), emoji: '🐈', coins: 60, desc: tr('Гуляет по траве, гоняет светлячков, ночью спит у фонаря.') },
+  { id: 'pet:kitten', kind: 'char', char: 'kitten', name: tr('Котёнок Пиксель'), emoji: '🐱', coins: 140, desc: tr('Носится, прыгает и пристаёт к другим жителям.') },
+  { id: 'pet:fox', kind: 'char', char: 'fox', name: tr('Лисичка Искра'), emoji: '🦊', coins: 160, desc: tr('Бегает по холмам и роет норки.') },
+  { id: 'pet:spider', kind: 'char', char: 'spider', name: tr('Паучок Ниточка'), emoji: '🕷️', coins: 90, desc: tr('Спускается на паутинке с деревьев.') },
+  { id: 'pet:neko', kind: 'char', char: 'neko', name: tr('Нэко'), emoji: '🐾', coins: 280, desc: tr('Кошкодевочка, хранительница планов. Машет тебе из леса.') },
+  { id: 'v:char:shroom', kind: 'char', char: 'shroom', name: tr('Грибочек Пуф'), emoji: '🍄', coins: 70, desc: tr('Прыгает пружинкой, прячется в траве.') },
+  { id: 'v:char:slime', kind: 'char', char: 'slime', name: tr('Слизнюк Желейка'), emoji: '🟢', coins: 90, desc: tr('Плюхается и растекается от радости.') },
+  { id: 'v:char:miner', kind: 'char', char: 'miner', name: tr('Шахтёр Гоша'), emoji: '⛏️', coins: 150, desc: tr('Ходит в шахты и выносит добычу.') },
+  { id: 'v:char:builder', kind: 'char', char: 'builder', name: tr('Строитель Мира'), emoji: '👷', coins: 150, desc: tr('Строит в мастерской, пока ты в фокус-сессии.') },
+  { id: 'v:char:archer', kind: 'char', char: 'archer', name: tr('Лучница Ветка'), emoji: '🏹', gems: 8, desc: tr('Тренируется, стреляет по мишени и охраняет лес.') },
+  { id: 'v:char:witch', kind: 'char', char: 'witch', name: tr('Ведьма Полынь'), emoji: '🧙‍♀️', gems: 10, desc: tr('Ночью летает на метле.') },
+  { id: 'v:char:knight', kind: 'char', char: 'knight', name: tr('Рыцарь Тяж'), emoji: '🛡️', gems: 12, big: true, desc: tr('Большой и добрый. Патрулирует деревню.') },
+  { id: 'v:char:ghost', kind: 'char', char: 'ghost', name: tr('Призрак Шу'), emoji: '👻', gems: 6, desc: tr('Появляется только ночью, парит над крышами.') },
+  { id: 'v:char:dragon', kind: 'char', char: 'dragon', name: tr('Дракончик Уголёк'), emoji: '🐉', gems: 30, big: true, desc: tr('Гордость деревни. Взлетает, когда ты закрываешь важные задачи.') },
 ];
 
 export const villageItem = (id) => VILLAGE_ITEMS.find((x) => x.id === id) || null;
@@ -125,14 +126,14 @@ export function bonusOf(place, level) {
 export function bonusText(place, level) {
   const u = UPGRADES[place];
   if (!u) return '';
-  if (u.bonus === 'gems') return `+${level} 💎 за важную задачу${level >= 2 ? ', +1 💎 за фокус' : ''}`;
+  if (u.bonus === 'gems') return tr('+{level} 💎 за важную задачу{p1}', { level, p1: level >= 2 ? tr(', +1 💎 за фокус') : '' });
   const b = bonusOf(place, level);
   const parts = [];
-  if (b.coins) parts.push(`+${b.coins} % монет за задачи`);
-  if (b.food) parts.push(`+${b.food} % наград за еду`);
-  if (b.mood) parts.push(`настроение +${b.mood}`);
-  if (b.focus) parts.push(`+${b.focus} 💎 за фокус`);
-  return parts.join(', ') || 'бонус — со 2-го уровня';
+  if (b.coins) parts.push(tr('+{coins} % монет за задачи', { coins: b.coins }));
+  if (b.food) parts.push(tr('+{food} % наград за еду', { food: b.food }));
+  if (b.mood) parts.push(tr('настроение +{mood}', { mood: b.mood }));
+  if (b.focus) parts.push(tr('+{focus} 💎 за фокус', { focus: b.focus }));
+  return parts.join(', ') || tr('бонус — со 2-го уровня');
 }
 
 /** Что есть в деревне с самого начала (покупать не нужно). */
@@ -219,9 +220,9 @@ export function nextUpgrade(obj) {
 /** Можно ли улучшить: { ok, reason }. */
 export function canUpgrade(data, obj, coinBalance) {
   const nu = nextUpgrade(obj);
-  if (!nu) return { ok: false, reason: obj && isUpgradable(obj.place) ? 'Максимальный уровень' : 'Не улучшается' };
-  if (nu.price.gems && gemBalance(data) < nu.price.gems) return { ok: false, reason: `Не хватает ${nu.price.gems - gemBalance(data)} 💎` };
-  if (nu.price.coins && coinBalance < nu.price.coins) return { ok: false, reason: `Не хватает ${nu.price.coins - coinBalance} 🪙` };
+  if (!nu) return { ok: false, reason: obj && isUpgradable(obj.place) ? tr('Максимальный уровень') : tr('Не улучшается') };
+  if (nu.price.gems && gemBalance(data) < nu.price.gems) return { ok: false, reason: tr('Не хватает {p0} 💎', { p0: nu.price.gems - gemBalance(data) }) };
+  if (nu.price.coins && coinBalance < nu.price.coins) return { ok: false, reason: tr('Не хватает {p0} 🪙', { p0: nu.price.coins - coinBalance }) };
   return { ok: true, reason: '' };
 }
 
@@ -335,14 +336,14 @@ export function gemsEarned(data) {
 
 /** Можно ли купить: { ok, reason } (цена, требования, уже куплено). coinBalance — из core/game.js balance(). */
 export function canBuy(data, item, coinBalance) {
-  if (!item) return { ok: false, reason: 'Нет такого предмета' };
-  if (item.legacy) return { ok: false, reason: 'Больше не продаётся' };
+  if (!item) return { ok: false, reason: tr('Нет такого предмета') };
+  if (item.legacy) return { ok: false, reason: tr('Больше не продаётся') };
   const owned = ownedVillage(data);
-  if (!item.repeatable && owned.has(item.id)) return { ok: false, reason: 'Уже есть' };
-  if (item.requires && !owned.has(item.requires)) return { ok: false, reason: `Сначала: ${villageItem(item.requires)?.name}` };
+  if (!item.repeatable && owned.has(item.id)) return { ok: false, reason: tr('Уже есть') };
+  if (item.requires && !owned.has(item.requires)) return { ok: false, reason: tr('Сначала: {p0}', { p0: villageItem(item.requires)?.name }) };
   const p = priceOf(data, item);
-  if (p.gems && gemBalance(data) < p.gems) return { ok: false, reason: `Не хватает ${p.gems - gemBalance(data)} 💎` };
-  if (p.coins && coinBalance < p.coins) return { ok: false, reason: `Не хватает ${p.coins - coinBalance} 🪙` };
+  if (p.gems && gemBalance(data) < p.gems) return { ok: false, reason: tr('Не хватает {p0} 💎', { p0: p.gems - gemBalance(data) }) };
+  if (p.coins && coinBalance < p.coins) return { ok: false, reason: tr('Не хватает {p0} 🪙', { p0: p.coins - coinBalance }) };
   return { ok: true, reason: '' };
 }
 
@@ -352,7 +353,7 @@ export function canBuy(data, item, coinBalance) {
  */
 export function sellPlan(data, key) {
   const obj = villageObjects(data).find((o) => o.key === key);
-  if (!obj) return { events: [], coins: 0, gems: 0, error: 'Этого уже нет в деревне' };
+  if (!obj) return { events: [], coins: 0, gems: 0, error: tr('Этого уже нет в деревне') };
   let coins = 0;
   let gems = 0;
   for (const id of obj.events) {
@@ -362,7 +363,7 @@ export function sellPlan(data, key) {
   }
   const test = { ...data, coinEvents: new Map(data.coinEvents) };
   for (const id of obj.events) test.coinEvents.set(id, { ...data.coinEvents.get(id), active: false });
-  const error = gemBalance(test) < 0 ? 'Нельзя продать: изумруды из этой шахты уже потрачены' : null;
+  const error = gemBalance(test) < 0 ? tr('Нельзя продать: изумруды из этой шахты уже потрачены') : null;
   return { events: obj.events, coins, gems, error, obj };
 }
 
@@ -385,7 +386,7 @@ export function focusMinutes(data, tz, day) {
 // ---------- Настроение жителей ----------
 
 const MOODS = [
-  [85, 'Ликуют', '🤩'], [65, 'Довольны', '😊'], [45, 'Спокойны', '🙂'], [25, 'Грустят', '😕'], [0, 'Унывают', '😢'],
+  [85, tr('Ликуют'), '🤩'], [65, tr('Довольны'), '😊'], [45, tr('Спокойны'), '🙂'], [25, tr('Грустят'), '😕'], [0, tr('Унывают'), '😢'],
 ];
 
 /**
@@ -423,23 +424,23 @@ export function happiness(data, tz, today) {
 // Палитры (0.7.1): тёмная насыщенная зелень, оранжевые черепичные крыши, голубая вода — в духе пиксельных RPG.
 export const VILLAGE_STYLES = {
   indigo: {
-    name: 'Классическая деревня', roof: '#cf6432', wall: '#efdfbd', wood: '#6b4a2b', grass: '#3b7436', grass2: '#2e6130', hill: '#447e3c',
+    name: tr('Классическая деревня'), roof: '#cf6432', wall: '#efdfbd', wood: '#6b4a2b', grass: '#3b7436', grass2: '#2e6130', hill: '#447e3c',
     far: '#6c8fb8', accent: '#3949ab', path: '#a9865a', stone: '#8c8a84', water: '#3a7db5', cliff: '#7b6a58',
   },
   lavender: {
-    name: 'Готическая деревня', roof: '#4b3768', wall: '#9c93ad', wood: '#3a2a3f', grass: '#35473a', grass2: '#2a3a30', hill: '#3c5040',
+    name: tr('Готическая деревня'), roof: '#4b3768', wall: '#9c93ad', wood: '#3a2a3f', grass: '#35473a', grass2: '#2a3a30', hill: '#3c5040',
     far: '#5c4b7a', accent: '#9a6cf0', path: '#6e6676', stone: '#625e6e', water: '#3b4f78', cliff: '#5a5266', gothic: true,
   },
   lime: {
-    name: 'Сказочный луг', roof: '#e07a3b', wall: '#fff2cf', wood: '#8a5a2b', grass: '#45863a', grass2: '#36702f', hill: '#57984a',
+    name: tr('Сказочный луг'), roof: '#e07a3b', wall: '#fff2cf', wood: '#8a5a2b', grass: '#45863a', grass2: '#36702f', hill: '#57984a',
     far: '#86b8d8', accent: '#5b8c00', path: '#b8925e', stone: '#9a978e', water: '#3f8fc8', cliff: '#86735c', meadow: true,
   },
   ocean: {
-    name: 'Приморская деревня', roof: '#2f7d9c', wall: '#f1ead8', wood: '#6b4e33', grass: '#3d7752', grass2: '#2f6346', hill: '#4a8a60',
+    name: tr('Приморская деревня'), roof: '#2f7d9c', wall: '#f1ead8', wood: '#6b4e33', grass: '#3d7752', grass2: '#2f6346', hill: '#4a8a60',
     far: '#5aa0c0', accent: '#00796b', path: '#c2a678', stone: '#9a9a94', water: '#2f86b8', cliff: '#7d7468', sand: '#d8c48e', sea: true,
   },
   sunset: {
-    name: 'Осенняя деревня', roof: '#9c3b23', wall: '#f0d2a8', wood: '#6e3f22', grass: '#66702f', grass2: '#535c28', hill: '#7a7a3a',
+    name: tr('Осенняя деревня'), roof: '#9c3b23', wall: '#f0d2a8', wood: '#6e3f22', grass: '#66702f', grass2: '#535c28', hill: '#7a7a3a',
     far: '#c97a5c', accent: '#d84315', path: '#a8865a', stone: '#958a7c', water: '#3a73a0', cliff: '#82705a', autumn: true,
   },
 };

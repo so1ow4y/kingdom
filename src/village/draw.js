@@ -1278,6 +1278,15 @@ function drawParticles(c, world) {
       case 'arrow': R(c, x - 2, y, 4, 1, '#7a5230'); P(c, x + (p.c > 0 ? 2 : -2), y, '#d0d0d0'); break;
       case 'fw': P(c, x, y, FW[Math.floor(p.c * FW.length)]); break;
       case 'leaf': R(c, x, y, 2, 1, p.c > 0.5 ? '#5aa04a' : '#3f8a3a'); break;
+      case 'zzz': { // 0.12.5: спящие — буква «z», растёт по мере подъёма
+        c.globalAlpha = a * 0.85;
+        const s = p.life > 1.7 ? 3 : 4;
+        const col = p.c > 0.5 ? '#dfe6ff' : '#bfc9ff';
+        R(c, x, y, s, 1, col);
+        for (let i = 1; i < s - 1; i++) P(c, x + s - 1 - i, y + i, col);
+        R(c, x, y + s - 1, s, 1, col);
+        break;
+      }
       case 'fish': R(c, x - 1, y, 3, 1, '#7ab8e8'); P(c, x + (p.c > 0.5 ? 2 : -2), y, '#5a90c8'); P(c, x, y - 1, '#c8e8ff'); break;
       default: P(c, x, y, '#fff');
     }

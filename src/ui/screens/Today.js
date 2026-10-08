@@ -17,6 +17,7 @@ import { planningDate } from '../../core/planning.js';
 import { navigate } from '../router.js';
 import { DayContext } from '../dayContext.js';
 import { DayStrip } from '../components/DayStrip.js';
+import { tr } from '../../core/i18n.js';
 
 export function TodayScreen({ query = {} }) {
   const today = planningDate(query.date, store.now.today);
@@ -36,7 +37,7 @@ export function TodayScreen({ query = {} }) {
     manual: !autoReason,
     orderField: key === 'focus' ? 'focusOrder' : 'order',
     accepts: (t) => f.home.get(t.id) === key,
-    rejectReason: key === 'focus' ? 'В «Главное» — звёздочкой ★' : 'Задача из другого блока — сюда её можно только вложить',
+    rejectReason: key === 'focus' ? tr('В «Главное» — звёздочкой ★') : tr('Задача из другого блока — сюда её можно только вложить'),
     autoReason,
   });
   const tree = (key, autoReason, props = {}) => html`<${TaskTree} zone=${key} roots=${f.roots[key]} index=${f.index}
@@ -77,24 +78,24 @@ export function TodayScreen({ query = {} }) {
       ${f.roots.overdue.length ? html`
         <${Section} title="Просрочено" count=${f.roots.overdue.length} tone="danger"
           actions=${readOnly ? null : html`<button class="btn small ghost" onClick=${() => A.moveOverdueToToday(v.overdue.map((t) => t.id))}>Всё на сегодня</button>`}>
-          ${tree('overdue', 'Порядок здесь по дате — можно вложить или вынести')}
+          ${tree('overdue', tr('Порядок здесь по дате — можно вложить или вынести'))}
         <//>` : null}
 
       ${f.roots.today.length ? html`
-        <${Section} title=${current ? 'На сегодня' : 'На этот день'} count=${f.roots.today.length}>
-          ${tree('today', 'Порядок здесь по времени и приоритету — можно вложить или вынести')}
+        <${Section} title=${current ? tr('На сегодня') : tr('На этот день')} count=${f.roots.today.length}>
+          ${tree('today', tr('Порядок здесь по времени и приоритету — можно вложить или вынести'))}
         <//>` : null}
 
       ${f.roots.soon.length ? html`
         <${Section} title="Скоро дедлайн" count=${f.roots.soon.length} collapsible defaultOpen=${false} storageKey="today.soon">
-          ${tree('soon', 'Порядок здесь по дедлайну — можно вложить или вынести')}
+          ${tree('soon', tr('Порядок здесь по дедлайну — можно вложить или вынести'))}
         <//>` : null}
 
       ${f.roots.chores.length ? html`
         <${Section} key=${'chores-' + (mainUndone ? 1 : 0)} className="chores"
-          title=${`${choresList?.emoji ? choresList.emoji + ' ' : ''}Быт`} count=${f.roots.chores.length}
+          title=${tr('{p0}Быт', { p0: choresList?.emoji ? choresList.emoji + ' ' : '' })} count=${f.roots.chores.length}
           collapsible defaultOpen=${!mainUndone}>
-          ${tree('chores', 'Порядок здесь по времени — можно вложить или вынести', { showList: false })}
+          ${tree('chores', tr('Порядок здесь по времени — можно вложить или вынести'), { showList: false })}
         <//>` : null}
 
       ${everythingEmpty ? html`
@@ -106,7 +107,7 @@ export function TodayScreen({ query = {} }) {
 
       ${f.roots.doneToday.length ? html`
         <${Section} title="Выполнено в этот день" count=${f.roots.doneToday.length} collapsible defaultOpen=${false} storageKey=${'today.done.' + today}>
-          ${tree('doneToday', 'Порядок здесь по времени выполнения')}
+          ${tree('doneToday', tr('Порядок здесь по времени выполнения'))}
         <//>` : null}
     <//><//>`;
 }

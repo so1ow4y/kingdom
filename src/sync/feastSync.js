@@ -13,6 +13,7 @@ import { mergeRemote, writeDbChecked, pushedKeys, baseFrom } from './protocol.js
 import { makeBackup, rotateBackups } from './backups.js';
 import { FEAST_COLLECTIONS } from '../core/feast.js';
 import { TOMBSTONE_TTL_DAYS } from '../config.js';
+import { tr } from '../core/i18n.js';
 
 const SPACE = SPACES.feast;
 
@@ -122,7 +123,7 @@ async function purgeOldTombstones() {
 /** Ошибки Feast, которые не должны ронять общую операцию. true — обработано. */
 export function feastSoftError(e) {
   if (e?.code === 'E-READONLY') {
-    setUi({ feastReadOnly: `База Crimson Harvest на Диске записана более новой версией приложения (формат v${e.remoteVersion}, у тебя v${FEAST_SCHEMA_VERSION}). Обнови приложение — до этого правки в Crimson Harvest недоступны.` });
+    setUi({ feastReadOnly: tr('База Crimson Harvest на Диске записана более новой версией приложения (формат v{remoteVersion}, у тебя v{FEAST_SCHEMA_VERSION}). Обнови приложение — до этого правки в Crimson Harvest недоступны.', { remoteVersion: e.remoteVersion, FEAST_SCHEMA_VERSION }) });
     return true;
   }
   return false;
@@ -136,12 +137,12 @@ export async function feastPush(drive, step) {
   if (r.created) return { created: true, pushed: before };
   let expected = store.sync.feastRevisionId;
   if (r.dbMeta.headRevisionId !== expected) {
-    step('Crimson Harvest: слияние с Диском');
+    step(tr('Crimson Harvest: слияние с Диском'));
     await mergeIntoLocal(await parseFeastBytes(await drive.download(r.layout.dbId)), r.dbMeta.headRevisionId);
     expected = r.dbMeta.headRevisionId;
   }
   if (!store.ui.feastDirty) return { pushed: 0 };
-  step('Crimson Harvest: бэкап');
+  step(tr('Crimson Harvest: бэкап'));
   await makeBackup(drive, r.layout, 'push', store.deviceId, new Date(), SPACE.key);
   try {
     await rotateBackups(drive, r.layout);
@@ -149,7 +150,7 @@ export async function feastPush(drive, step) {
     console.warn('Crimson Harvest: ротация бэкапов не удалась — повторится при следующем пуше', e);
   }
   await purgeOldTombstones();
-  step('Crimson Harvest: запись базы');
+  step(tr('Crimson Harvest: запись базы'));
   const pushedAt = new Date().toISOString();
   const { meta, snapshot } = await writeDbChecked({
     drive,
@@ -161,9 +162,9 @@ export async function feastPush(drive, step) {
       return { bytes, snapshot: data };
     },
     onForeign: async (bytes) => {
-      step('Crimson Harvest: слияние с параллельной записью');
+      step(tr('Crimson Harvest: слияние с параллельной записью'));
       await mergeIntoLocal(await parseFeastBytes(bytes), null);
-      step('Crimson Harvest: запись базы');
+      step(tr('Crimson Harvest: запись базы'));
     },
   });
   try {
@@ -186,7 +187,7 @@ export async function feastPull(drive, step) {
   const r = await ensure(drive);
   if (r.created) return { created: true, changes: 0 };
   if (r.dbMeta.headRevisionId === store.sync.feastRevisionId) return { changes: 0 };
-  step('Crimson Harvest: загрузка базы');
+  step(tr('Crimson Harvest: загрузка базы'));
   const res = await mergeIntoLocal(await parseFeastBytes(await drive.download(r.layout.dbId)), r.dbMeta.headRevisionId);
   if (store.ui.feastReadOnly && !store.ui.feastReadOnly.startsWith('Не открылась')) setUi({ feastReadOnly: null });
   return { changes: res.changes.length };

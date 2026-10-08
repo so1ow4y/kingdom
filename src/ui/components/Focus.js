@@ -14,6 +14,7 @@ import { FOCUS_PRESETS, gemsForFocus, levelAt } from '../../core/village.js';
 import { getPrefs } from '../prefs.js';
 import { readLocal, writeLocal } from '../hooks.js';
 import { notifyPlain } from '../notifier.js';
+import { tr } from '../../core/i18n.js';
 
 const mmss = (ms) => {
   const s = Math.ceil(ms / 1000);
@@ -23,9 +24,9 @@ const mmss = (ms) => {
 /** 25 → «25 мин», 85 → «1 ч 25 мин», 120 → «2 ч». */
 export function formatMinutes(m) {
   m = Math.round(m);
-  if (m < 60) return `${m} мин`;
+  if (m < 60) return tr('{m} мин', { m });
   const h = Math.floor(m / 60);
-  return m % 60 ? `${h} ч ${m % 60} мин` : `${h} ч`;
+  return m % 60 ? tr('{h} ч {p1} мин', { h, p1: m % 60 }) : tr('{h} ч', { h });
 }
 
 /** Задачи для выбора фокуса: «главное» на сегодня, на сегодня и просроченные, потом остальные (свежие сверху). */
@@ -61,7 +62,7 @@ export function FocusStartSheet({ taskId = null }) {
   };
   const hint = (t) => {
     const parts = [];
-    if (t.focusDate === today) parts.push('★ главное');
+    if (t.focusDate === today) parts.push(tr('★ главное'));
     if (t.scheduledDate) parts.push(humanDate(t.scheduledDate, today));
     const fm = focusTotal(t).minutes;
     if (fm) parts.push('◎ ' + formatMinutes(fm));
@@ -84,7 +85,7 @@ export function FocusStartSheet({ taskId = null }) {
           <div class="focus-pick">
             ${shown.length ? shown.map((t) => html`<button class="focus-pick-item" key=${t.id} onClick=${() => setWhat({ kind: 'task', id: t.id })}>
               <span class="fpi-title">${t.title}</span>${hint(t) ? html`<small>${hint(t)}</small>` : null}</button>`)
-              : html`<p class="muted small">${needle ? 'Ничего не нашлось.' : 'Активных задач нет — выбери «Свой фокус».'}</p>`}
+              : html`<p class="muted small">${needle ? tr('Ничего не нашлось.') : tr('Активных задач нет — выбери «Свой фокус».')}</p>`}
           </div>` : html`
           <label class="field"><span>Название (необязательно)</span>
             <input value=${label} maxLength="80" placeholder="Например: чтение, английский, уборка" onInput=${(e) => setLabel(e.target.value)}/></label>`}`}
@@ -97,8 +98,8 @@ export function FocusStartSheet({ taskId = null }) {
       <label class="field focus-own"><span>Своё время, мин</span>
         <input type="number" min="1" max="240" value=${own} onInput=${(e) => setOwn(e.target.value)} placeholder="Например, 35"/></label>
       <button class="btn primary focus-go" disabled=${!ready} onClick=${start}>
-        ${ready ? `Начать · ${formatMinutes(m)}${game && gemsForFocus(m, gemLevel) ? ` · +${gemsForFocus(m, gemLevel)} 💎` : ''}` : 'Выбери задачу или свой фокус'}</button>
-      <p class="muted small">Время по задаче сохраняется в ней самой. Пока идёт фокус, строитель трудится в мастерской деревни; от 15 минут — изумруды${getPrefs().focusStrict ? '. Строгий режим: уйдёшь из приложения дольше чем на 15 секунд — фокус прервётся' : ''}.</p>
+        ${ready ? tr('Начать · {p0}{p1}', { p0: formatMinutes(m), p1: game && gemsForFocus(m, gemLevel) ? ` · +${gemsForFocus(m, gemLevel)} 💎` : '' }) : tr('Выбери задачу или свой фокус')}</button>
+      <p class="muted small">Время по задаче сохраняется в ней самой. Пока идёт фокус, строитель трудится в мастерской деревни; от 15 минут — изумруды${getPrefs().focusStrict ? tr('. Строгий режим: уйдёшь из приложения дольше чем на 15 секунд — фокус прервётся') : ''}.</p>
     <//>`;
 }
 
@@ -111,8 +112,8 @@ export function FocusSection({ task, locked = false }) {
   const running = f && f.taskId === task.id;
   return html`
     <div class="focus-summary">
-      <span class="fs-total">${total.count ? html`◎ <b>${formatMinutes(total.minutes)}</b> · ${total.count} ${total.count === 1 ? 'сессия' : total.count < 5 ? 'сессии' : 'сессий'}` : html`<span class="muted">Ещё не было фокуса</span>`}</span>
-      ${running ? html`<span class="fs-running">${f.pausedAt ? 'на паузе' : 'идёт'} · осталось ${mmss(focusLeft(f))}</span>`
+      <span class="fs-total">${total.count ? html`◎ <b>${formatMinutes(total.minutes)}</b> · ${total.count} ${total.count === 1 ? tr('сессия') : total.count < 5 ? tr('сессии') : tr('сессий')}` : html`<span class="muted">Ещё не было фокуса</span>`}</span>
+      ${running ? html`<span class="fs-running">${f.pausedAt ? tr('на паузе') : tr('идёт')} · осталось ${mmss(focusLeft(f))}</span>`
         : html`<button class="btn small" disabled=${locked} onClick=${() => openSheet('focus', { taskId: task.id })}><${Icon} name="focus" size=${16}/> Взяться</button>`}
     </div>
     ${recent.length ? html`<ul class="focus-history">${recent.map((s) => html`<li key=${s.id}><span>${formatMoment(s.startedAt, tz)}</span><b>${formatMinutes(s.minutes)}</b></li>`)}</ul>` : null}`;
@@ -128,7 +129,7 @@ export function FocusBar({ sticky = true }) {
       const cur = getFocus();
       if (!cur) return;
       if (!cur.pausedAt && focusLeft(cur) <= 0) {
-        if (document.hidden) notifyPlain('⏳ Фокус завершён', `«${cur.title}» · ${cur.minutes} мин. Загляни в деревню!`, 'lt-focus');
+        if (document.hidden) notifyPlain(tr('⏳ Фокус завершён'), tr('«{title}» · {minutes} мин. Загляни в деревню!', { title: cur.title, minutes: cur.minutes }), 'lt-focus');
         A.finishFocus();
       } else setTick((x) => x + 1);
     }, 1000);
@@ -139,7 +140,7 @@ export function FocusBar({ sticky = true }) {
       if (document.hidden) setFocus({ ...cur, hiddenAt: Date.now() });
       else if (cur.hiddenAt) {
         const away = Date.now() - cur.hiddenAt;
-        if (getPrefs().focusStrict && away > 15000 && focusLeft(cur) > 0) A.cancelFocus('Строгий фокус: ты отвлёкся — сессия прервана');
+        if (getPrefs().focusStrict && away > 15000 && focusLeft(cur) > 0) A.cancelFocus(tr('Строгий фокус: ты отвлёкся — сессия прервана'));
         else setFocus({ ...cur, hiddenAt: null });
       }
     };
@@ -157,7 +158,7 @@ export function FocusBar({ sticky = true }) {
   const progress = 1 - left / total;
   const paused = !!f.pausedAt;
   const stop = async () => {
-    const ok = await confirm({ title: 'Прервать фокус?', text: 'Время не засчитается, жители немного расстроятся.', confirmLabel: 'Прервать', danger: true });
+    const ok = await confirm({ title: tr('Прервать фокус?'), text: tr('Время не засчитается, жители немного расстроятся.'), confirmLabel: tr('Прервать'), danger: true });
     if (ok) A.cancelFocus();
   };
   return html`
@@ -168,7 +169,7 @@ export function FocusBar({ sticky = true }) {
         <small title=${f.title}>${f.taskId ? html`<a href=${'#/task/' + f.taskId}>${f.title}</a>` : f.title}</small>
       </div>
       <button class="icon-btn small" onClick=${() => (paused ? A.resumeFocus() : A.pauseFocus())}
-        aria-label=${paused ? 'Продолжить фокус' : 'Пауза'} title=${paused ? 'Продолжить' : 'Пауза'}><${Icon} name=${paused ? 'play' : 'pause'} size=${18}/></button>
+        aria-label=${paused ? tr('Продолжить фокус') : tr('Пауза')} title=${paused ? tr('Продолжить') : tr('Пауза')}><${Icon} name=${paused ? 'play' : 'pause'} size=${18}/></button>
       <button class="btn small" onClick=${() => A.finishFocus({ early: true })} title="Засчитать прошедшие минуты">Готово</button>
       <button class="icon-btn small" onClick=${stop} aria-label="Прервать фокус" title="Прервать"><${Icon} name="close" size=${18}/></button>
     </div>`;

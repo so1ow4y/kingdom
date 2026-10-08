@@ -16,6 +16,7 @@ import { humanDate, formatMoment } from '../../core/dates.js';
 import * as RP from '../../core/repeat.js';
 import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { LIMITS, TIMINGS } from '../../config.js';
+import { tr } from '../../core/i18n.js';
 
 function autosize(el) {
   if (!el) return;
@@ -103,13 +104,13 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
     if (!normalizeTitle(title)) {
       setTitle(t.title);
       pending.current = null;
-      showSnackbar('Название не может быть пустым');
+      showSnackbar(tr('Название не может быть пустым'));
     } else flush();
   };
 
   const listLabel = lists.length
     ? (lists.length > 2 ? `${lists[0].name}, ${lists[1].name} +${lists.length - 2}` : lists.map((l) => (l.emoji ? l.emoji + ' ' : '') + l.name).join(', '))
-    : S.hasMissingList(store.data, t) ? 'Список удалён' : 'Входящие';
+    : S.hasMissingList(store.data, t) ? tr('Список удалён') : tr('Входящие');
 
   return html`
     <div class="screen task-screen">
@@ -130,7 +131,7 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
 
       <div class="task-title-row">
         <button class=${'check big' + (done ? ' checked' : '')} disabled=${locked}
-          onClick=${() => A.toggleComplete(taskId)} aria-label=${done ? 'Вернуть в работу' : 'Выполнить'}>
+          onClick=${() => A.toggleComplete(taskId)} aria-label=${done ? tr('Вернуть в работу') : tr('Выполнить')}>
           ${done ? html`<${Icon} name="check" size=${18}/>` : null}
         </button>
         <textarea ref=${titleEl} class=${'title-input' + (done ? ' done' : '')} rows="1" value=${title}
@@ -146,20 +147,20 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
         ${t.repeat ? null : html`
           <${Chip} icon=${html`<${Icon} name="calendar" size=${16}/>`} active=${!!t.scheduledDate}
             tone=${!done && t.scheduledDate && t.scheduledDate < today ? 'late' : ''}
-            label=${t.scheduledDate ? humanDate(t.scheduledDate, today) + (t.scheduledTime ? ' ' + t.scheduledTime : '') : 'Когда'}
+            label=${t.scheduledDate ? humanDate(t.scheduledDate, today) + (t.scheduledTime ? ' ' + t.scheduledTime : '') : tr('Когда')}
             onClick=${() => openSheet('when', { taskId, mode: 'scheduled' })} disabled=${locked}/>
           <${Chip} icon=${html`<${Icon} name="flag" size=${16}/>`} active=${!!t.deadlineDate}
-            label=${t.deadlineDate ? 'Дедлайн ' + humanDate(t.deadlineDate, today) + (t.deadlineTime ? ' ' + t.deadlineTime : '') : 'Дедлайн'}
+            label=${t.deadlineDate ? tr('Дедлайн ') + humanDate(t.deadlineDate, today) + (t.deadlineTime ? ' ' + t.deadlineTime : '') : tr('Дедлайн')}
             onClick=${() => openSheet('when', { taskId, mode: 'deadline' })} disabled=${locked}/>`}
         <${Chip} icon=${html`<${Icon} name="repeat" size=${16}/>`} active=${!!t.repeat}
           tone=${t.repeat && !done && S.isOverdue(t, today, store.now.time) ? 'late' : ''}
-          label=${t.repeat ? `${RP.describeRule(t.repeat)}${t.status === 'done' ? '' : ' · ' + (humanDate(RP.dueDate(t, today, tz) || today, today).toLowerCase())}${t.scheduledTime ? ' ' + t.scheduledTime : ''}` : 'Повтор'}
+          label=${t.repeat ? `${RP.describeRule(t.repeat)}${t.status === 'done' ? '' : ' · ' + (humanDate(RP.dueDate(t, today, tz) || today, today).toLowerCase())}${t.scheduledTime ? ' ' + t.scheduledTime : ''}` : tr('Повтор')}
           onClick=${() => openSheet('repeat', { taskId })} disabled=${locked}/>
         <${Chip} icon=${html`<i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i>`}
-          active=${prio && prio.id !== PRIORITY_NONE_ID} label=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : 'Приоритет'}
+          active=${prio && prio.id !== PRIORITY_NONE_ID} label=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : tr('Приоритет')}
           onClick=${(e) => openSheet('priority', { taskId, anchor: anchorOf(e) })} disabled=${locked}/>
         ${!done && (!parent || focusedToday) ? html`<${Chip} icon=${html`<${Icon} name="star" filled=${focusedToday} size=${16}/>`} active=${focusedToday}
-          tone=${focusedToday ? 'star-on' : ''} label=${focusedToday ? 'Главное' : 'В главное'}
+          tone=${focusedToday ? 'star-on' : ''} label=${focusedToday ? tr('Главное') : tr('В главное')}
           onClick=${() => A.toggleFocus(taskId)} disabled=${locked}/>` : null}
       </div>
       ${t.deadlineDate && t.scheduledDate && t.deadlineDate < t.scheduledDate
@@ -187,8 +188,8 @@ export function TaskScreen({ taskId, panel = false, onClose }) {
       </section>
 
       <p class="task-footer muted">
-        ${`Создана ${formatMoment(t.createdAt, tz)}${t.createdVia === 'bot' ? ' ботом' : ''} · `
-          + `Изменена ${formatMoment(t.updatedAt, tz)}${device(t.updatedBy) ? ` на «${device(t.updatedBy)}»` : ''}`}
+        ${tr('Создана {p0}{p1} · ', { p0: formatMoment(t.createdAt, tz), p1: t.createdVia === 'bot' ? tr(' ботом') : '' })
+          + tr('Изменена {p0}{p1}', { p0: formatMoment(t.updatedAt, tz), p1: device(t.updatedBy) ? tr(' на «{p0}»', { p0: device(t.updatedBy) }) : '' })}
       </p>
     </div>`;
 }

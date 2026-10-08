@@ -13,8 +13,9 @@ import { readLocal, writeLocal } from '../hooks.js';
 import { VillageShopPanel } from './Village.js';
 import { DecorationSettings } from '../components/Decorations.js';
 import { gemBalance } from '../../core/village.js';
+import { tr } from '../../core/i18n.js';
 
-const TABS = [['rewards', 'Награды'], ['village', '🏡 Деревня'], ['cosmetics', 'Цвета'], ['achievements', 'Достижения'], ['history', 'История']];
+const TABS = [['rewards', tr('Награды')], ['village', tr('🏡 Деревня')], ['cosmetics', tr('Цвета')], ['achievements', tr('Достижения')], ['history', tr('История')]];
 const EMOJI = ['🎁', '🍕', '📺', '🎮', '☕', '🍰', '🛌', '🎬', '📚', '🛍', '🏖', '🎧'];
 
 export function GameHeader({ st }) {
@@ -27,7 +28,7 @@ export function GameHeader({ st }) {
         <div class="gh-row"><b>Уровень ${lv.level}</b><small>${lv.xp} / ${lv.to} опыта</small></div>
         <div class="progress"><i style=${{ width: Math.round(lv.progress * 100) + '%' }}></i></div>
       </div>
-      <div class="gh-streak" title=${'Лучшая серия: ' + countLabel(st.bestStreak, ['день', 'дня', 'дней'])}>
+      <div class="gh-streak" title=${tr('Лучшая серия: ') + countLabel(st.bestStreak, ['день', 'дня', 'дней'])}>
         🔥 <b>${st.currentStreak}</b><small>${countLabel(st.currentStreak, ['день', 'дня', 'дней']).replace(/^\d+\s/, '')} подряд</small>
       </div>
     </div>`;
@@ -60,7 +61,7 @@ function RewardForm({ reward = null, onDone }) {
         <span>Многоразовая <small class="muted">(одноразовую можно купить только один раз)</small></span></label>
       <div class="form-actions">
         <button type="button" class="btn" onClick=${onDone}>Отмена</button>
-        <button type="submit" class="btn primary" disabled=${!name.trim()}>${reward ? 'Сохранить' : 'Добавить награду'}</button>
+        <button type="submit" class="btn primary" disabled=${!name.trim()}>${reward ? tr('Сохранить') : tr('Добавить награду')}</button>
       </div>
     </form>`;
 }
@@ -81,21 +82,21 @@ function Rewards({ bal }) {
         <span class="reward-emoji">${r.emoji || '🎁'}</span>
         <div class="reward-main">
           <div class="reward-name">${r.name}</div>
-          <small class="muted">${r.repeatable ? 'многоразовая' : 'одноразовая'}${bought ? ` · куплено ${bought}` : ''}</small>
+          <small class="muted">${r.repeatable ? tr('многоразовая') : tr('одноразовая')}${bought ? tr(' · куплено {bought}', { bought }) : ''}</small>
         </div>
         ${r.archived ? html`<button class="btn small" onClick=${() => A.updateReward(r.id, { archived: false })} disabled=${readOnly}>Вернуть</button>` : html`
           <button class="icon-btn small" title="Изменить" aria-label="Изменить" onClick=${() => setEditing(r.id)} disabled=${readOnly}><${Icon} name="edit" size=${16}/></button>
-          <button class="icon-btn small" title=${bought ? 'В архив' : 'Удалить'} aria-label="Удалить" onClick=${() => A.deleteReward(r.id)} disabled=${readOnly}><${Icon} name=${bought ? 'archive' : 'trash'} size=${16}/></button>
+          <button class="icon-btn small" title=${bought ? tr('В архив') : tr('Удалить')} aria-label="Удалить" onClick=${() => A.deleteReward(r.id)} disabled=${readOnly}><${Icon} name=${bought ? 'archive' : 'trash'} size=${16}/></button>
           <button class=${'btn small ' + (soldOut ? '' : 'primary')} disabled=${soldOut || r.price > bal || readOnly} onClick=${() => A.buyReward(r.id)}
-            title=${soldOut ? 'Уже куплена' : r.price > bal ? `Не хватает ${r.price - bal} 🪙` : 'Купить'}>
-            ${soldOut ? 'Куплено' : html`${r.price} 🪙`}</button>`}
+            title=${soldOut ? tr('Уже куплена') : r.price > bal ? tr('Не хватает {p0} 🪙', { p0: r.price - bal }) : tr('Купить')}>
+            ${soldOut ? tr('Куплено') : html`${r.price} 🪙`}</button>`}
       </div>`;
   };
   return html`
     <div class="reward-ideas card-block"><b>Маленькие квесты — приятные награды</b>
       <p class="muted small">Добавь идею в свои награды и измени цену под себя.</p>
       <div class="chip-row wrap">${[
-        ['☕', 'Кофе и 20 минут без дел', 30], ['🎮', 'Час любимой игры', 80], ['🎬', 'Вечер кино', 120], ['🧭', 'Маленькое приключение в выходной', 250],
+        ['☕', tr('Кофе и 20 минут без дел'), 30], ['🎮', tr('Час любимой игры'), 80], ['🎬', tr('Вечер кино'), 120], ['🧭', tr('Маленькое приключение в выходной'), 250],
       ].map(([emoji, name, price]) => html`<button class="chip" disabled=${readOnly || all.some(r => r.name === name)}
         onClick=${() => A.createReward({ emoji, name, price, repeatable: true })}>${emoji} ${name} · ${price} 🪙</button>`)}</div>
     </div>
@@ -105,7 +106,7 @@ function Rewards({ bal }) {
     ${editing === 'new' ? html`<${RewardForm} onDone=${() => setEditing(null)}/>`
       : html`<button class="btn" onClick=${() => setEditing('new')} disabled=${readOnly}><${Icon} name="plus" size=${16}/> Новая награда</button>`}
     ${archived.length ? html`
-      <button class="link-btn" onClick=${() => setShowArchived(!showArchived)}>${showArchived ? 'Скрыть архив' : `Архив наград (${archived.length})`}</button>
+      <button class="link-btn" onClick=${() => setShowArchived(!showArchived)}>${showArchived ? tr('Скрыть архив') : tr('Архив наград ({length})', { length: archived.length })}</button>
       ${showArchived ? html`<div class="reward-list">${archived.map(row)}</div>` : null}` : null}`;
 }
 
@@ -116,7 +117,7 @@ function Cosmetics({ bal }) {
   const apply = (c) => setPrefs({ [c.kind]: applied(c) ? (c.kind === 'scheme' ? 'indigo' : null) : c.value });
   const legacy = G.COSMETICS.filter((c) => c.legacy && G.ownsItem(store.data, c.id));
   const hint = {
-    lime: 'Деревня станет сказочным лугом', lavender: 'Деревня станет готической', ocean: 'Деревня переедет к морю с маяком', sunset: 'В деревню придёт осень',
+    lime: tr('Деревня станет сказочным лугом'), lavender: tr('Деревня станет готической'), ocean: tr('Деревня переедет к морю с маяком'), sunset: tr('В деревню придёт осень'),
   };
   return html`
     <p class="muted small">Цветовая схема меняет и стиль деревни, а цвет квадрата с буквой — флаги на башне, флюгер и паруса мельницы. Включается на каждом устройстве отдельно.</p>
@@ -128,10 +129,10 @@ function Cosmetics({ bal }) {
           <div class=${'cosmetic' + (applied(c) ? ' selected' : '')} key=${c.id}>
             <span class="cosmetic-swatch" style=${{ background: swatch }}>${c.kind === 'letter' ? 'L' : ''}</span>
             <div class="cosmetic-name">${c.name}</div>
-            <p class="cosmetic-description muted small">${c.description || hint[c.value] || 'Флаги и акценты деревни этого цвета'}</p>
-            ${owned ? html`<button class="btn small" onClick=${() => apply(c)}>${applied(c) ? 'Снять' : 'Включить'}</button>`
+            <p class="cosmetic-description muted small">${c.description || hint[c.value] || tr('Флаги и акценты деревни этого цвета')}</p>
+            ${owned ? html`<button class="btn small" onClick=${() => apply(c)}>${applied(c) ? tr('Снять') : tr('Включить')}</button>`
               : html`<button class="btn small primary" disabled=${c.price > bal || readOnly} onClick=${() => A.buyCosmetic(c.id)}
-                  title=${c.price > bal ? `Не хватает ${c.price - bal} 🪙` : 'Купить'}>${c.price} 🪙</button>`}
+                  title=${c.price > bal ? tr('Не хватает {p0} 🪙', { p0: c.price - bal }) : tr('Купить')}>${c.price} 🪙</button>`}
           </div>`;
       })}
     </div>
@@ -155,11 +156,11 @@ function Achievements({ st }) {
     <p class="muted small">У каждого списка — четыре ранга. Достижения отражают текущую статистику; шуточные неудачи не отнимают монеты и исчезают после исправления ситуации.</p>
     <div class="achievements">
       ${visible.map((a) => html`<div class=${'badge' + (a.unlocked ? ' on' : '') + (a.negative ? ' negative' : '')} key=${a.id}>
-        <small class="badge-group">${a.groupName || (a.negative ? 'Неудача' : 'Общее')}</small>
+        <small class="badge-group">${a.groupName || (a.negative ? tr('Неудача') : tr('Общее'))}</small>
         <span class="badge-emoji">${a.emoji}</span><span class="badge-name">${a.name}</span>
         <small>${a.description || a.name}</small>
         ${a.target ? html`<progress value=${a.progress} max=${a.target}></progress><small>${a.progress} / ${a.target}</small>` : null}
-        <small>${a.unlocked ? '✓ Получено' : 'Ещё не получено'}</small></div>`)}
+        <small>${a.unlocked ? tr('✓ Получено') : tr('Ещё не получено')}</small></div>`)}
     </div>
     ${!visible.length ? html`<p class="empty">В этой подборке пока нет достижений.</p>` : null}
     <p class="muted small">Получено ${st.achievements.filter((a) => a.unlocked).length} из ${st.achievements.length}. Выполнено задач за всё время: ${st.done}, лучшая серия: ${countLabel(st.bestStreak, ['день', 'дня', 'дней'])}.</p>`;
@@ -171,9 +172,9 @@ function History() {
   const events = [...store.data.coinEvents.values()].filter((e) => !e.deletedAt && e.at && (all || e.type === 'purchase'))
     .sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 200);
   const label = (e) => {
-    if (e.type === 'purchase') return e.active ? 'Покупка' : 'Возврат покупки';
-    if (e.type === 'focus') return `Фокус-сессия · ${e.minutes | 0} мин`;
-    return e.active ? 'За задачу' : 'Отметка снята — монеты возвращены';
+    if (e.type === 'purchase') return e.active ? tr('Покупка') : tr('Возврат покупки');
+    if (e.type === 'focus') return tr('Фокус-сессия · {p0} мин', { p0: e.minutes | 0 });
+    return e.active ? tr('За задачу') : tr('Отметка снята — монеты возвращены');
   };
   return html`
     <div class="chip-row">
@@ -186,7 +187,7 @@ function History() {
         <b class=${e.amount < 0 || e.gems < 0 ? 'neg' : 'pos'}>${e.gems ? `${e.gems > 0 ? '+' : ''}${e.gems} 💎` : `${e.amount > 0 ? '+' : ''}${e.amount}`}</b>
         ${e.type === 'purchase' && e.active ? html`<button class="btn small ghost" onClick=${() => A.refundPurchase(e.id)} disabled=${!!store.ui.readOnly}>Вернуть</button>` : null}
       </div>`)}
-    </div>` : html`<p class="muted">${all ? 'Событий пока нет — выполни задачу.' : 'Покупок пока не было.'}</p>`}`;
+    </div>` : html`<p class="muted">${all ? tr('Событий пока нет — выполни задачу.') : tr('Покупок пока не было.')}</p>`}`;
 }
 
 export function ShopScreen() {

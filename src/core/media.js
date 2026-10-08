@@ -1,6 +1,7 @@
 // Медиа (обновление 0.5; docs/TZ.md §10, DATA_FORMAT §5.5, §13): типы файлов, ссылки, сборка мусора. Чистые функции.
 
 import { liveAttachments } from './model.js';
+import { tr } from './i18n.js';
 
 const EXT_BY_MIME = {
   'image/webp': 'webp', 'image/jpeg': 'jpg', 'image/png': 'png', 'image/gif': 'gif', 'image/heic': 'heic', 'image/heif': 'heif',
@@ -29,8 +30,8 @@ export function extOf(mime, name = '') {
 /** «1,2 МБ», «340 КБ», «12 Б». */
 export function formatBytes(n) {
   if (!Number.isFinite(n) || n < 0) return '—';
-  if (n < 1024) return `${n} Б`;
-  const units = ['КБ', 'МБ', 'ГБ', 'ТБ'];
+  if (n < 1024) return tr('{n} Б', { n });
+  const units = [tr('КБ'), tr('МБ'), tr('ГБ'), tr('ТБ')];
   let v = n / 1024;
   let i = 0;
   while (v >= 1024 && i < units.length - 1) {

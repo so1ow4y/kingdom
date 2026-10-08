@@ -9,6 +9,7 @@
 
 import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
+import { tr } from './i18n.js';
 
 export const MAX_LEVEL = 100;
 
@@ -94,16 +95,16 @@ export function stageOf(prestige, level) {
 }
 
 export const STAGES = [
-  { f: 'Ученица', m: 'Ученик' },
-  { f: 'Подмастерье', m: 'Подмастерье' },
-  { f: 'Знаток', m: 'Знаток' },
-  { f: 'Мастер', m: 'Мастер' },
-  { f: 'Магистр', m: 'Магистр' },
+  { f: tr('Ученица'), m: tr('Ученик') },
+  { f: tr('Подмастерье'), m: tr('Подмастерье') },
+  { f: tr('Знаток'), m: tr('Знаток') },
+  { f: tr('Мастер'), m: tr('Мастер') },
+  { f: tr('Магистр'), m: tr('Магистр') },
 ];
 
 /** Симпатия по числу выполненных задач списка: 0…5 сердечек. */
 const AFFINITY = [0, 3, 10, 30, 70, 150];
-export const AFFINITY_NAMES = ['Незнакомы', 'Знакомы', 'Приятели', 'Друзья', 'Близкие друзья', 'Лучшие друзья'];
+export const AFFINITY_NAMES = [tr('Незнакомы'), tr('Знакомы'), tr('Приятели'), tr('Друзья'), tr('Близкие друзья'), tr('Лучшие друзья')];
 export function affinityOf(done) {
   let tier = 0;
   while (tier < AFFINITY.length - 1 && done >= AFFINITY[tier + 1]) tier++;

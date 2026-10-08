@@ -1,9 +1,9 @@
 // Портреты для диалогов деревни (обновление 0.8, люди перерисованы в 0.9): эмоции neutral, smile, grin, surprised,
-// sad, blush, closed (^^). Люди — village/portrait96.js (96 × 96), звери — мордочки 64 × 64 здесь.
+// sad, blush, closed (^^). Люди — village/portrait128.js (128 × 128, с 0.12.5), звери — мордочки 64 × 64 здесь.
 // Рисуется в холст один раз и кэшируется; обводка — по силуэту.
 
 import { tint, shade, LOOKS } from './chibi.js';
-import { drawPortrait96, N as N96 } from './portrait96.js';
+import { drawPortrait128, N as NP } from './portrait128.js';
 
 export const PW = 64;
 const OUTLINE = '#1e1626';
@@ -132,11 +132,11 @@ export function portrait(who, expr = 'neutral') {
   if (cv) return cv;
   if (cache.size > 120) cache.clear();
   if (look) {
-    // 0.9: люди — новый портрет 96 × 96 (village/portrait96.js), обводка уже внутри
+    // 0.12.5: люди — портрет 128 × 128 вполоборота (village/portrait128.js), обводка уже внутри
     cv = document.createElement('canvas');
-    cv.width = N96;
-    cv.height = N96;
-    drawPortrait96(cv.getContext('2d'), look, expr);
+    cv.width = NP;
+    cv.height = NP;
+    drawPortrait128(cv.getContext('2d'), look, expr);
     cache.set(key, cv);
     return cv;
   }

@@ -13,6 +13,7 @@ import { store, setUi, showSnackbar, notify } from '../store/appState.js';
 import * as R from '../core/reminders.js';
 import * as A from '../store/actions.js';
 import { navigate } from './router.js';
+import { tr } from '../core/i18n.js';
 
 const KEY = 'lifetasks.notify';
 const TICK_MS = 15000;
@@ -109,7 +110,7 @@ async function show(item) {
     data: { taskId: item.taskId, key: item.key },
     icon: 'icons/icon-192.png',
     badge: 'icons/icon-192.png',
-    actions: [{ action: 'done', title: 'Готово' }, { action: 'snooze', title: 'Отложить на 10 мин' }],
+    actions: [{ action: 'done', title: tr('Готово') }, { action: 'snooze', title: tr('Отложить на 10 мин') }],
   };
   try {
     const reg = await navigator.serviceWorker?.getRegistration?.();
@@ -184,7 +185,7 @@ async function guardedTick() {
 /** Кнопки уведомления и нажатие на него (сообщение от Service Worker или ?act= в адресе). */
 export async function handleAction({ action, taskId }) {
   const t = store.data.tasks.get(taskId);
-  if (!t || t.deletedAt) return showSnackbar('Задача не найдена');
+  if (!t || t.deletedAt) return showSnackbar(tr('Задача не найдена'));
   if (action === 'done') {
     if (t.status === 'active') await A.toggleComplete(taskId);
     return;
@@ -193,7 +194,7 @@ export async function handleAction({ action, taskId }) {
     st = load();
     st.snoozes = [...st.snoozes.filter((s) => s.taskId !== taskId), { key: `${taskId}|snooze|${Date.now()}`, taskId, title: t.title, at: Date.now() + SNOOZE_MS }];
     save();
-    showSnackbar('Напомню через 10 минут');
+    showSnackbar(tr('Напомню через 10 минут'));
     return;
   }
   navigate('/task/' + encodeURIComponent(taskId));
@@ -224,7 +225,7 @@ export function startNotifier() {
 
 /** Проверочное уведомление из настроек. */
 export async function testNotification() {
-  const opts = { body: 'Так будут выглядеть напоминания о задачах.', tag: 'lt-test', icon: 'icons/icon-192.png' };
+  const opts = { body: tr('Так будут выглядеть напоминания о задачах.'), tag: 'lt-test', icon: 'icons/icon-192.png' };
   try {
     const reg = await navigator.serviceWorker?.getRegistration?.();
     if (reg?.showNotification) return await reg.showNotification('🔔 Chronicle', opts);
@@ -234,6 +235,6 @@ export async function testNotification() {
   try {
     new Notification('🔔 Chronicle', opts);
   } catch (e) {
-    showSnackbar('Не получилось показать уведомление');
+    showSnackbar(tr('Не получилось показать уведомление'));
   }
 }

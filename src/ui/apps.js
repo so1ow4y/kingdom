@@ -9,17 +9,18 @@ import { applyTheme, getTheme } from './theme.js';
 import { readLocal, writeLocal } from './hooks.js';
 import { navigate } from './router.js';
 import { notify } from '../store/appState.js';
+import { tr } from '../core/i18n.js';
 
 export const SUITE_NAME = 'Kingdom';
 
 export const APPS = {
   chronicle: {
-    id: 'chronicle', name: 'Chronicle', letter: 'C', what: 'задачи', home: '/today',
+    id: 'chronicle', name: 'Chronicle', letter: 'C', what: tr('задачи'), home: '/today',
     // деревня и магазин — общие (0.12): монеты и 💎 копятся и за задачи, и за еду
     routes: ['today', 'inbox', 'lists', 'list', 'task', 'tasks', 'analytics', 'archive', 'trash', 'quick'],
   },
   feast: {
-    id: 'feast', name: 'Crimson Harvest', letter: 'CH', what: 'еда и калории', home: '/diary',
+    id: 'feast', name: 'Crimson Harvest', letter: 'CH', what: tr('еда и калории'), home: '/diary',
     routes: ['diary', 'meals', 'meal', 'foods', 'food', 'nutrition', 'body'],
   },
 };

@@ -7,6 +7,7 @@
 // (спрятан ли док, деревня, клавиши) — общее. getPrefs() отдаёт уже сведённый вид для открытого приложения.
 
 import { notify } from '../store/appState.js';
+import { tr } from '../core/i18n.js';
 
 const KEY = 'lifetasks.ui';
 export const DOCK_POSITIONS = ['left', 'bottom', 'right', 'top'];
@@ -110,12 +111,12 @@ export const dockPosition = (phone) => view.dock || (phone ? 'bottom' : 'left');
 
 /** Цветовые схемы: акцент для светлой и тёмной темы. indigo и crimson — бесплатно. */
 export const SCHEMES = {
-  indigo: { name: 'Индиго', light: '#3949ab', dark: '#8c9eff' },
-  crimson: { name: 'Багрянец', light: '#a3122a', dark: '#ef5b6b' },
+  indigo: { name: tr('Индиго'), light: '#3949ab', dark: '#8c9eff' },
+  crimson: { name: tr('Багрянец'), light: '#a3122a', dark: '#ef5b6b' },
   lime: { name: 'Lime', light: '#5b8c00', dark: '#c6f432' },
   lavender: { name: 'Lavender', light: '#7b4fd6', dark: '#c7a6ff' },
-  ocean: { name: 'Океан', light: '#00796b', dark: '#4dd0c4' },
-  sunset: { name: 'Закат', light: '#d84315', dark: '#ffab76' },
+  ocean: { name: tr('Океан'), light: '#00796b', dark: '#4dd0c4' },
+  sunset: { name: tr('Закат'), light: '#d84315', dark: '#ffab76' },
 };
 export const FREE_SCHEMES = ['indigo', 'crimson'];
 

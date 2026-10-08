@@ -4,16 +4,17 @@ import { store, ask, showSnackbar, setUi, totalDirty } from '../store/appState.j
 import * as A from '../store/actions.js';
 import { countLabel } from '../core/plural.js';
 import { logout } from '../google/auth.js';
+import { tr } from '../core/i18n.js';
 
 export async function confirmLogout() {
   const n = totalDirty();
-  const buttons = [{ label: 'Отмена', value: null }, { label: 'Выйти', value: 'logout', kind: 'primary' }];
-  if (!n) buttons.push({ label: 'Выйти и удалить данные с устройства', value: 'wipe', kind: 'danger' });
+  const buttons = [{ label: tr('Отмена'), value: null }, { label: tr('Выйти'), value: 'logout', kind: 'primary' }];
+  if (!n) buttons.push({ label: tr('Выйти и удалить данные с устройства'), value: 'wipe', kind: 'danger' });
   const v = await ask({
-    title: 'Выйти из Google?',
+    title: tr('Выйти из Google?'),
     text: n
-      ? `Локальные данные останутся на устройстве. Есть ${countLabel(n, ['непушнутое изменение', 'непушнутых изменения', 'непушнутых изменений'])} — удалить данные с устройства можно только после пуша.`
-      : 'Локальные данные останутся на устройстве, если не выбрать удаление. На Диске всё сохранится.',
+      ? tr('Локальные данные останутся на устройстве. Есть {p0} — удалить данные с устройства можно только после пуша.', { p0: countLabel(n, ['непушнутое изменение', 'непушнутых изменения', 'непушнутых изменений']) })
+      : tr('Локальные данные останутся на устройстве, если не выбрать удаление. На Диске всё сохранится.'),
     buttons,
   });
   if (!v) return;
@@ -21,6 +22,6 @@ export async function confirmLogout() {
   if (v === 'wipe') A.clearLocalData();
   else {
     setUi({});
-    showSnackbar('Выход выполнен');
+    showSnackbar(tr('Выход выполнен'));
   }
 }

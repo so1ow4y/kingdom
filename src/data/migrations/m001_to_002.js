@@ -14,6 +14,7 @@ import { uuidFromString } from '../../core/ids.js';
 import { DEFAULT_PRIORITIES, PRIORITY_NONE_ID, priorityIdFromLegacy } from '../../core/priorities.js';
 import { defaultPriorities, SETTINGS_V2_DEFAULTS, TASK_FIELDS } from '../../core/model.js';
 import { COIN_EVENT_FIELDS, awardId } from '../../core/game.js';
+import { tr } from '../../core/i18n.js';
 
 const stampMax = (ft) => Math.max(1, ...Object.values(ft || {}).filter(Number.isInteger));
 const coinsOf = (priorityId) => (DEFAULT_PRIORITIES.find((p) => p.id === priorityId) || DEFAULT_PRIORITIES[0]).coins;
@@ -123,7 +124,7 @@ export default {
   from: 1,
   to: 2,
   // Что не переносится как есть (проверяется тестом инвентаря): число приоритета заменено ссылкой на приоритет.
-  allowedLosses: [{ path: /^data\.tasks\[\]\.priority$/, why: 'priority (0…3) → priorityId базового приоритета' }],
+  allowedLosses: [{ path: /^data\.tasks\[\]\.priority$/, why: tr('priority (0…3) → priorityId базового приоритета') }],
 
   migrate(db) {
     const data = db.data || {};

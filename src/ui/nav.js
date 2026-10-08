@@ -8,11 +8,12 @@ import * as S from '../core/selectors.js';
 import { store } from '../store/appState.js';
 import { activeApp } from './prefs.js';
 import * as F from '../core/feast.js';
+import { tr } from '../core/i18n.js';
 
 /** Разделы из нескольких экранов: пункт дока-ветка и вкладки вверху экрана. */
 export const SECTIONS = {
-  progress: { title: 'Прогресс', icon: 'village', routes: ['village', 'analytics', 'shop'] },
-  archive: { title: 'Архив и корзина', icon: 'archive', routes: ['archive', 'trash'] },
+  progress: { title: tr('Прогресс'), icon: 'village', routes: ['village', 'analytics', 'shop'] },
+  archive: { title: tr('Архив и корзина'), icon: 'archive', routes: ['archive', 'trash'] },
 };
 
 export function sectionOf(routeName) {
@@ -34,16 +35,16 @@ export const isBranchActive = (route, branch) => branch.items.some((sub) => isTa
 /** «Прогресс»: деревня, аналитика задач, магазин. В Crimson Harvest (0.12) — деревня и магазин без аналитики задач. */
 function progressItems(data, app = activeApp()) {
   return [
-    data.settings.gameEnabled ? { title: 'Деревня', icon: 'village', to: '/village', match: ['village'], key: 'goVillage' } : null,
-    app === 'feast' ? null : { title: 'Аналитика', icon: 'chart', to: '/analytics', match: ['analytics'], key: 'goAnalytics' },
-    { title: 'Магазин', icon: 'shop', to: '/shop', match: ['shop'], key: 'goShop' },
+    data.settings.gameEnabled ? { title: tr('Деревня'), icon: 'village', to: '/village', match: ['village'], key: 'goVillage' } : null,
+    app === 'feast' ? null : { title: tr('Аналитика'), icon: 'chart', to: '/analytics', match: ['analytics'], key: 'goAnalytics' },
+    { title: tr('Магазин'), icon: 'shop', to: '/shop', match: ['shop'], key: 'goShop' },
   ].filter(Boolean);
 }
 
 function archiveItems(trash) {
   return [
-    { title: 'Выполненные', icon: 'check', to: '/archive', match: ['archive'], key: 'goArchive' },
-    { title: 'Корзина', icon: 'trash', to: '/trash', match: ['trash'], count: trash, key: 'goTrash' },
+    { title: tr('Выполненные'), icon: 'check', to: '/archive', match: ['archive'], key: 'goArchive' },
+    { title: tr('Корзина'), icon: 'trash', to: '/trash', match: ['trash'], count: trash, key: 'goTrash' },
   ];
 }
 
@@ -67,30 +68,38 @@ function flatten(item) {
 function feastMenu() {
   return [
     {
-      title: 'Питание',
+      title: tr('Питание'),
       items: [
-        { title: 'Дневник', icon: 'diary', to: '/diary', match: ['diary'], key: 'goDiary' },
+        { title: tr('Дневник'), icon: 'diary', to: '/diary', match: ['diary'], key: 'goDiary' },
         // рационы — как «Списки» у задач: у каждого своя страница (её можно открыть в новой вкладке)
         {
-          id: 'meals', title: 'Рационы', icon: 'lists',
+          id: 'meals', title: tr('Рационы'), icon: 'lists',
           items: [
-            { title: 'Все рационы', icon: 'lists', to: '/meals', match: ['meals'], key: 'goMeals' },
+            { title: tr('Все рационы'), icon: 'lists', to: '/meals', match: ['meals'], key: 'goMeals' },
             ...F.globalMeals(store.feast).filter((m) => !m.archived)
               .map((m) => ({ title: m.name, emoji: m.icon, to: '/meal/' + m.id, match: ['meal', m.id] })),
           ],
         },
-        { title: 'Продукты', icon: 'food', to: '/foods', match: ['foods'], key: 'goFoods' },
-        { title: 'Аналитика', icon: 'chart', to: '/nutrition', match: ['nutrition'], key: 'goNutrition' },
-        { title: 'Обо мне', icon: 'body', to: '/body', match: ['body'], key: 'goBody' },
+        { title: tr('Продукты и лекарства'), icon: 'food', to: '/foods', match: ['foods'], key: 'goFoods' },
+        // аналитика (0.12.5) — ветка, как «Рационы»: питание, лекарства, тело
+        {
+          id: 'nutrition', title: tr('Аналитика'), icon: 'chart',
+          items: [
+            { title: tr('Питание'), icon: 'chart', to: '/nutrition', match: ['nutrition', null], key: 'goNutrition' },
+            { title: tr('Лекарства'), icon: 'pill', to: '/nutrition/meds', match: ['nutrition', 'meds'] },
+            { title: tr('Тело'), icon: 'body', to: '/nutrition/body', match: ['nutrition', 'body'] },
+          ],
+        },
+        { title: tr('Обо мне'), icon: 'body', to: '/body', match: ['body'], key: 'goBody' },
       ],
     },
     {
-      title: 'Обзор',
-      items: [{ id: 'progress', title: 'Деревня', icon: SECTIONS.progress.icon, items: progressItems(store.data, 'feast') }],
+      title: tr('Обзор'),
+      items: [{ id: 'progress', title: tr('Деревня'), icon: SECTIONS.progress.icon, items: progressItems(store.data, 'feast') }],
     },
     {
-      title: 'Приложение',
-      items: [{ title: 'Настройки', icon: 'settings', to: '/settings', match: [['settings', 'journal']], key: 'goSettings' }],
+      title: tr('Приложение'),
+      items: [{ title: tr('Настройки'), icon: 'settings', to: '/settings', match: [['settings', 'journal']], key: 'goSettings' }],
     },
   ].map((g) => ({ ...g, items: g.items.map(flatten).filter(Boolean) })).filter((g) => g.items.length);
 }
@@ -103,30 +112,30 @@ export function buildMenu(counts, app = 'chronicle') {
   const trash = S.trashView(data).length;
   const groups = [
     {
-      title: 'Задачи',
+      title: tr('Задачи'),
       items: [
-        { title: 'Сегодня', icon: 'sun', to: '/today', match: ['today'], key: 'goToday' },
-        { title: 'Входящие', icon: 'inbox', to: '/inbox', match: ['inbox'], count: counts.get('inbox'), key: 'goInbox' },
+        { title: tr('Сегодня'), icon: 'sun', to: '/today', match: ['today'], key: 'goToday' },
+        { title: tr('Входящие'), icon: 'inbox', to: '/inbox', match: ['inbox'], count: counts.get('inbox'), key: 'goInbox' },
         {
-          id: 'lists', title: 'Списки', icon: 'lists',
+          id: 'lists', title: tr('Списки'), icon: 'lists',
           items: [
-            { title: 'Все списки', icon: 'lists', to: '/lists', match: ['lists'], key: 'goLists' },
+            { title: tr('Все списки'), icon: 'lists', to: '/lists', match: ['lists'], key: 'goLists' },
             ...lists.map((l) => ({ title: l.name, emoji: l.emoji, color: l.color, to: '/list/' + l.id, match: ['list', l.id], count: counts.get(l.id) })),
           ],
         },
-        { title: 'Поиск', icon: 'search', to: '/tasks', match: ['tasks'], key: 'goTasks' },
+        { title: tr('Поиск'), icon: 'search', to: '/tasks', match: ['tasks'], key: 'goTasks' },
       ],
     },
     {
-      title: 'Обзор',
+      title: tr('Обзор'),
       items: [
         { id: 'progress', title: SECTIONS.progress.title, icon: SECTIONS.progress.icon, items: progressItems(data) },
         { id: 'archive', title: SECTIONS.archive.title, icon: SECTIONS.archive.icon, count: trash, items: archiveItems(trash) },
       ],
     },
     {
-      title: 'Приложение',
-      items: [{ title: 'Настройки', icon: 'settings', to: '/settings', match: [['settings', 'journal']], key: 'goSettings' }],
+      title: tr('Приложение'),
+      items: [{ title: tr('Настройки'), icon: 'settings', to: '/settings', match: [['settings', 'journal']], key: 'goSettings' }],
     },
   ];
   return groups.map((g) => ({ ...g, items: g.items.map(flatten).filter(Boolean) })).filter((g) => g.items.length);

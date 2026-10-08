@@ -5,51 +5,52 @@
 // поэтому работают при любой раскладке: «N» — это та же кнопка, что «Т».
 
 import { getPrefs, setPrefs } from './prefs.js';
+import { tr } from '../core/i18n.js';
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
 /** Действия: id, группа, подпись, сочетание по умолчанию (null — не назначено). */
 export const SHORTCUTS = [
-  { id: 'newTask', group: 'Задачи', label: 'Новая задача', hint: 'В Crimson Harvest — записать еду', def: 'KeyN' },
-  { id: 'search', group: 'Задачи', label: 'Поиск задач', hint: 'На экранах с поиском — встать в строку поиска', def: 'Slash' },
-  { id: 'push', group: 'Задачи', label: 'Пуш — отправить на Google Диск', def: IS_MAC ? 'Meta+KeyS' : 'Ctrl+KeyS' },
-  { id: 'pull', group: 'Задачи', label: 'Обновить с Google Диска', def: null },
-  { id: 'prevDay', group: 'Задачи', label: 'Предыдущий день', hint: 'На экране «Сегодня»', def: 'ArrowLeft' },
-  { id: 'nextDay', group: 'Задачи', label: 'Следующий день', hint: 'На экране «Сегодня»', def: 'ArrowRight' },
+  { id: 'newTask', group: tr('Задачи'), label: tr('Новая задача'), hint: tr('В Crimson Harvest — записать еду'), def: 'KeyN' },
+  { id: 'search', group: tr('Задачи'), label: tr('Поиск задач'), hint: tr('На экранах с поиском — встать в строку поиска'), def: 'Slash' },
+  { id: 'push', group: tr('Задачи'), label: tr('Пуш — отправить на Google Диск'), def: IS_MAC ? 'Meta+KeyS' : 'Ctrl+KeyS' },
+  { id: 'pull', group: tr('Задачи'), label: tr('Обновить с Google Диска'), def: null },
+  { id: 'prevDay', group: tr('Задачи'), label: tr('Предыдущий день'), hint: tr('На экране «Сегодня»'), def: 'ArrowLeft' },
+  { id: 'nextDay', group: tr('Задачи'), label: tr('Следующий день'), hint: tr('На экране «Сегодня»'), def: 'ArrowRight' },
 
-  { id: 'taskDone', group: 'Открытая задача', label: 'Выполнить / вернуть', def: IS_MAC ? 'Meta+Enter' : 'Ctrl+Enter' },
-  { id: 'taskFocus', group: 'Открытая задача', label: 'Взяться за задачу (фокус)', def: 'KeyF' },
-  { id: 'taskTrash', group: 'Открытая задача', label: 'В корзину', def: 'Delete' },
+  { id: 'taskDone', group: tr('Открытая задача'), label: tr('Выполнить / вернуть'), def: IS_MAC ? 'Meta+Enter' : 'Ctrl+Enter' },
+  { id: 'taskFocus', group: tr('Открытая задача'), label: tr('Взяться за задачу (фокус)'), def: 'KeyF' },
+  { id: 'taskTrash', group: tr('Открытая задача'), label: tr('В корзину'), def: 'Delete' },
 
-  { id: 'goToday', group: 'Переходы', label: 'Сегодня', def: 'Digit1' },
-  { id: 'goInbox', group: 'Переходы', label: 'Входящие', def: 'Digit2' },
-  { id: 'goLists', group: 'Переходы', label: 'Списки', def: 'Digit3' },
-  { id: 'goTasks', group: 'Переходы', label: 'Поиск задач (экран)', def: 'Digit4' },
-  { id: 'goVillage', group: 'Переходы', label: 'Деревня', def: 'Digit5' },
-  { id: 'goAnalytics', group: 'Переходы', label: 'Аналитика', def: 'Digit6' },
-  { id: 'goShop', group: 'Переходы', label: 'Магазин', def: 'Digit7' },
-  { id: 'goArchive', group: 'Переходы', label: 'Выполненные', def: 'Digit8' },
-  { id: 'goTrash', group: 'Переходы', label: 'Корзина', def: 'Digit9' },
-  { id: 'goSettings', group: 'Переходы', label: 'Настройки', def: 'Digit0' },
+  { id: 'goToday', group: tr('Переходы'), label: tr('Сегодня'), def: 'Digit1' },
+  { id: 'goInbox', group: tr('Переходы'), label: tr('Входящие'), def: 'Digit2' },
+  { id: 'goLists', group: tr('Переходы'), label: tr('Списки'), def: 'Digit3' },
+  { id: 'goTasks', group: tr('Переходы'), label: tr('Поиск задач (экран)'), def: 'Digit4' },
+  { id: 'goVillage', group: tr('Переходы'), label: tr('Деревня'), def: 'Digit5' },
+  { id: 'goAnalytics', group: tr('Переходы'), label: tr('Аналитика'), def: 'Digit6' },
+  { id: 'goShop', group: tr('Переходы'), label: tr('Магазин'), def: 'Digit7' },
+  { id: 'goArchive', group: tr('Переходы'), label: tr('Выполненные'), def: 'Digit8' },
+  { id: 'goTrash', group: tr('Переходы'), label: tr('Корзина'), def: 'Digit9' },
+  { id: 'goSettings', group: tr('Переходы'), label: tr('Настройки'), def: 'Digit0' },
 
-  { id: 'goDiary', group: 'Crimson Harvest', label: 'Дневник питания', def: 'Shift+Digit1' },
-  { id: 'goFoods', group: 'Crimson Harvest', label: 'Продукты', def: 'Shift+Digit2' },
-  { id: 'goNutrition', group: 'Crimson Harvest', label: 'Аналитика питания', def: 'Shift+Digit3' },
-  { id: 'goBody', group: 'Crimson Harvest', label: 'Обо мне', def: 'Shift+Digit4' },
-  { id: 'goMeals', group: 'Crimson Harvest', label: 'Рационы', def: 'Shift+Digit5' },
-  { id: 'scanBarcode', group: 'Crimson Harvest', label: 'Сканировать штрихкод и записать', def: 'KeyB' },
+  { id: 'goDiary', group: 'Crimson Harvest', label: tr('Дневник питания'), def: 'Shift+Digit1' },
+  { id: 'goFoods', group: 'Crimson Harvest', label: tr('Продукты'), def: 'Shift+Digit2' },
+  { id: 'goNutrition', group: 'Crimson Harvest', label: tr('Аналитика питания'), def: 'Shift+Digit3' },
+  { id: 'goBody', group: 'Crimson Harvest', label: tr('Обо мне'), def: 'Shift+Digit4' },
+  { id: 'goMeals', group: 'Crimson Harvest', label: tr('Рационы'), def: 'Shift+Digit5' },
+  { id: 'scanBarcode', group: 'Crimson Harvest', label: tr('Сканировать штрихкод и записать'), def: 'KeyB' },
 
-  { id: 'switchApp', group: 'Панель и окна', label: 'Перейти в другое приложение', hint: 'Chronicle ⇄ Crimson Harvest', def: 'Backslash' },
-  { id: 'dockExpand', group: 'Панель и окна', label: 'Свернуть или развернуть панель', def: 'BracketLeft' },
-  { id: 'dockHide', group: 'Панель и окна', label: 'Спрятать или показать панель', def: 'BracketRight' },
-  { id: 'help', group: 'Панель и окна', label: 'Список горячих клавиш', def: 'Shift+Slash' },
+  { id: 'switchApp', group: tr('Панель и окна'), label: tr('Перейти в другое приложение'), hint: 'Chronicle ⇄ Crimson Harvest', def: 'Backslash' },
+  { id: 'dockExpand', group: tr('Панель и окна'), label: tr('Свернуть или развернуть панель'), def: 'BracketLeft' },
+  { id: 'dockHide', group: tr('Панель и окна'), label: tr('Спрятать или показать панель'), def: 'BracketRight' },
+  { id: 'help', group: tr('Панель и окна'), label: tr('Список горячих клавиш'), def: 'Shift+Slash' },
 ];
 
 export const SHORTCUT_GROUPS = [...new Set(SHORTCUTS.map((s) => s.group))];
 const BY_ID = new Map(SHORTCUTS.map((s) => [s.id, s]));
 
 /** Esc — не переназначается: закрывает верхнее окно, шторку дока, карточку задачи. */
-export const FIXED = [{ combo: 'Escape', label: 'Закрыть окно, шторку панели или карточку задачи' }];
+export const FIXED = [{ combo: 'Escape', label: tr('Закрыть окно, шторку панели или карточку задачи') }];
 
 /**
  * Сочетания, которые браузер или система не отдают странице (или без которых неудобно жить):
@@ -90,17 +91,17 @@ export function normalizeCombo(combo) {
 
 const CODE_LABEL = {
   Slash: '/', Backslash: '\\', BracketLeft: '[', BracketRight: ']', Comma: ',', Period: '.', Semicolon: ';', Quote: "'",
-  Backquote: '`', Minus: '−', Equal: '=', Space: 'Пробел', Enter: 'Enter', NumpadEnter: 'Enter', Escape: 'Esc',
+  Backquote: '`', Minus: '−', Equal: '=', Space: tr('Пробел'), Enter: 'Enter', NumpadEnter: 'Enter', Escape: 'Esc',
   Backspace: 'Backspace', Delete: 'Delete', Insert: 'Insert', Tab: 'Tab', Home: 'Home', End: 'End', PageUp: 'PageUp',
   PageDown: 'PageDown', ArrowLeft: '←', ArrowRight: '→', ArrowUp: '↑', ArrowDown: '↓', IntlBackslash: '\\',
   NumpadAdd: 'Num +', NumpadSubtract: 'Num −', NumpadMultiply: 'Num *', NumpadDivide: 'Num /', NumpadDecimal: 'Num .',
 };
 /** Та же кнопка в русской раскладке (ЙЦУКЕН) — подсказка рядом с латинской буквой. */
 const RU = {
-  KeyQ: 'Й', KeyW: 'Ц', KeyE: 'У', KeyR: 'К', KeyT: 'Е', KeyY: 'Н', KeyU: 'Г', KeyI: 'Ш', KeyO: 'Щ', KeyP: 'З',
-  BracketLeft: 'Х', BracketRight: 'Ъ', KeyA: 'Ф', KeyS: 'Ы', KeyD: 'В', KeyF: 'А', KeyG: 'П', KeyH: 'Р', KeyJ: 'О',
-  KeyK: 'Л', KeyL: 'Д', Semicolon: 'Ж', Quote: 'Э', KeyZ: 'Я', KeyX: 'Ч', KeyC: 'С', KeyV: 'М', KeyB: 'И', KeyN: 'Т',
-  KeyM: 'Ь', Comma: 'Б', Period: 'Ю', Backquote: 'Ё',
+  KeyQ: tr('Й'), KeyW: tr('Ц'), KeyE: tr('У'), KeyR: tr('К'), KeyT: tr('Е'), KeyY: tr('Н'), KeyU: tr('Г'), KeyI: tr('Ш'), KeyO: tr('Щ'), KeyP: tr('З'),
+  BracketLeft: tr('Х'), BracketRight: tr('Ъ'), KeyA: tr('Ф'), KeyS: tr('Ы'), KeyD: tr('В'), KeyF: tr('А'), KeyG: tr('П'), KeyH: tr('Р'), KeyJ: tr('О'),
+  KeyK: tr('Л'), KeyL: tr('Д'), Semicolon: tr('Ж'), Quote: tr('Э'), KeyZ: tr('Я'), KeyX: tr('Ч'), KeyC: tr('С'), KeyV: tr('М'), KeyB: tr('И'), KeyN: tr('Т'),
+  KeyM: tr('Ь'), Comma: tr('Б'), Period: tr('Ю'), Backquote: tr('Ё'),
 };
 const MOD_LABEL = IS_MAC ? { Ctrl: '⌃', Alt: '⌥', Shift: '⇧', Meta: '⌘' } : { Ctrl: 'Ctrl', Alt: 'Alt', Shift: 'Shift', Meta: 'Win' };
 

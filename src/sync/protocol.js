@@ -8,6 +8,7 @@ import { checkDb } from '../data/envelope.js';
 import { validateDb } from '../data/validate.js';
 import { gunzipJson } from '../data/serialize.js';
 import { migrateDb } from '../data/migrations/index.js';
+import { tr } from '../core/i18n.js';
 
 /** Байты db.json.gz → проверенная и (если нужно) мигрированная база. */
 export async function parseDbBytes(bytes, { fakeNewerSchema = false } = {}) {
@@ -80,7 +81,7 @@ export async function writeDbChecked({ drive, dbId, expectedPrevRev, makeBytes, 
     await onForeign(await drive.downloadRevision(dbId, prev), prev);
     expected = meta.headRevisionId;
   }
-  throw new SyncError('E-RACE', 'База на Диске одновременно меняется с другого устройства');
+  throw new SyncError('E-RACE', tr('База на Диске одновременно меняется с другого устройства'));
 }
 
 /** Ключи «непушнутых», которые совпали с записанным снимком (их можно снять). */

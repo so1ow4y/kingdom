@@ -13,6 +13,7 @@ import { PRIORITY_NONE_ID } from './priorities.js';
 import { countLabel } from './plural.js';
 import { coinMultiplierAt, focusFields, levelAt, villageBonuses } from './village.js';
 import { extraEarnings } from './earnings.js';
+import { tr } from './i18n.js';
 
 // gems и minutes — с 0.7 (деревня): изумруды у покупок и фокус-сессий, длительность фокуса. x, y — с 0.7.2: клетка
 // объекта деревни (перестановка — обычное изменение полей, сливается по времени поля). Старые версии их просто хранят.
@@ -124,21 +125,21 @@ export function ownsItem(data, itemId) {
  * кирка у шахты, паутинки на домах, звёздное небо. Питомцы pet:* переехали в каталог деревни (core/village.js).
  */
 export const COSMETICS = [
-  { id: 'scene:forest', kind: 'scene', value: 'forest', legacy: true, name: 'Пиксельный лес', emoji: '🌲', price: 180, description: 'Лес вокруг деревни.' },
-  { id: 'scene:web', kind: 'scene', value: 'web', legacy: true, name: 'Паучье королевство', emoji: '🕸️', price: 180, description: 'Паутинки под крышами домиков.' },
-  { id: 'scene:stars', kind: 'scene', value: 'stars', legacy: true, name: 'Звёздная обсерватория', emoji: '🌌', price: 240, description: 'Больше звёзд и падающие звёзды ночью.' },
-  { id: 'prop:pickaxe', kind: 'prop', value: 'pickaxe', legacy: true, name: 'Кирка исследователя', emoji: '⛏️', price: 45, description: 'Воткнута у золотой шахты.' },
-  { id: 'prop:lantern', kind: 'prop', value: 'lantern', legacy: true, name: 'Фонарь странника', emoji: '🏮', price: 75, description: 'Ещё один фонарь на улице деревни.' },
-  { id: 'prop:crystal', kind: 'prop', value: 'crystal', legacy: true, name: 'Кристалл маны', emoji: '💎', price: 120, description: 'Светится на поляне.' },
-  { id: 'prop:mushrooms', kind: 'prop', value: 'mushrooms', legacy: true, name: 'Грибная полянка', emoji: '🍄', price: 35, description: 'Грибы у тропинки.' },
-  { id: 'scheme:lime', kind: 'scheme', value: 'lime', name: 'Схема Lime', emoji: '🍋', price: 150 },
-  { id: 'scheme:lavender', kind: 'scheme', value: 'lavender', name: 'Схема Lavender', emoji: '💜', price: 150 },
-  { id: 'scheme:ocean', kind: 'scheme', value: 'ocean', name: 'Схема «Океан»', emoji: '🌊', price: 250 },
-  { id: 'scheme:sunset', kind: 'scheme', value: 'sunset', name: 'Схема «Закат»', emoji: '🌇', price: 250 },
-  { id: 'letter:gold', kind: 'letter', value: '#f2a900', name: 'Золотой квадрат', emoji: '🟨', price: 100 },
-  { id: 'letter:mint', kind: 'letter', value: '#26a69a', name: 'Мятный квадрат', emoji: '🟩', price: 100 },
-  { id: 'letter:coral', kind: 'letter', value: '#ff7043', name: 'Коралловый квадрат', emoji: '🟧', price: 100 },
-  { id: 'letter:graphite', kind: 'letter', value: '#455a64', name: 'Графитовый квадрат', emoji: '⬛', price: 100 },
+  { id: 'scene:forest', kind: 'scene', value: 'forest', legacy: true, name: tr('Пиксельный лес'), emoji: '🌲', price: 180, description: tr('Лес вокруг деревни.') },
+  { id: 'scene:web', kind: 'scene', value: 'web', legacy: true, name: tr('Паучье королевство'), emoji: '🕸️', price: 180, description: tr('Паутинки под крышами домиков.') },
+  { id: 'scene:stars', kind: 'scene', value: 'stars', legacy: true, name: tr('Звёздная обсерватория'), emoji: '🌌', price: 240, description: tr('Больше звёзд и падающие звёзды ночью.') },
+  { id: 'prop:pickaxe', kind: 'prop', value: 'pickaxe', legacy: true, name: tr('Кирка исследователя'), emoji: '⛏️', price: 45, description: tr('Воткнута у золотой шахты.') },
+  { id: 'prop:lantern', kind: 'prop', value: 'lantern', legacy: true, name: tr('Фонарь странника'), emoji: '🏮', price: 75, description: tr('Ещё один фонарь на улице деревни.') },
+  { id: 'prop:crystal', kind: 'prop', value: 'crystal', legacy: true, name: tr('Кристалл маны'), emoji: '💎', price: 120, description: tr('Светится на поляне.') },
+  { id: 'prop:mushrooms', kind: 'prop', value: 'mushrooms', legacy: true, name: tr('Грибная полянка'), emoji: '🍄', price: 35, description: tr('Грибы у тропинки.') },
+  { id: 'scheme:lime', kind: 'scheme', value: 'lime', name: tr('Схема Lime'), emoji: '🍋', price: 150 },
+  { id: 'scheme:lavender', kind: 'scheme', value: 'lavender', name: tr('Схема Lavender'), emoji: '💜', price: 150 },
+  { id: 'scheme:ocean', kind: 'scheme', value: 'ocean', name: tr('Схема «Океан»'), emoji: '🌊', price: 250 },
+  { id: 'scheme:sunset', kind: 'scheme', value: 'sunset', name: tr('Схема «Закат»'), emoji: '🌇', price: 250 },
+  { id: 'letter:gold', kind: 'letter', value: '#f2a900', name: tr('Золотой квадрат'), emoji: '🟨', price: 100 },
+  { id: 'letter:mint', kind: 'letter', value: '#26a69a', name: tr('Мятный квадрат'), emoji: '🟩', price: 100 },
+  { id: 'letter:coral', kind: 'letter', value: '#ff7043', name: tr('Коралловый квадрат'), emoji: '🟧', price: 100 },
+  { id: 'letter:graphite', kind: 'letter', value: '#455a64', name: tr('Графитовый квадрат'), emoji: '⬛', price: 100 },
 ];
 
 export const cosmeticAvailable = (data, id) => !data.settings.gameEnabled || ownsItem(data, id);
@@ -181,25 +182,25 @@ export function streaks(byDay, today) {
 // ---------- Достижения (вычисляются, не хранятся) ----------
 
 export const ACHIEVEMENTS = [
-  { id: 'combo5', emoji: '🎯', name: 'Комбо ×5', description: 'Выполнить 5 задач за один день', target: 5, metric: 'bestDay', test: s => s.bestDay >= 5 },
-  { id: 'raid', emoji: '🐉', name: 'Рейд на дракона', description: 'Выполнить 20 задач за один день', target: 20, metric: 'bestDay', test: s => s.bestDay >= 20 },
-  { id: 'explorer', emoji: '🧭', name: 'Исследователь', description: 'Выполнить задачи из 3 разных списков', target: 3, metric: 'listVariety', test: s => s.listVariety >= 3 },
-  { id: 'collector', emoji: '🎒', name: 'Коллекционер', description: 'Собрать 5 разных предметов оформления', target: 5, metric: 'collection', test: s => s.collection >= 5 },
-  { id: 'comeback', emoji: '🐦‍🔥', name: 'Возвращение героя', description: 'Выполнить задачу после перерыва в 7 дней', test: s => s.comeback },
-  { id: 'overdue', emoji: '🐌', name: 'Побочный квест: потом', negative: true, description: 'Есть хотя бы одна просроченная активная задача', test: s => s.overdue >= 1 },
-  { id: 'overdue5', emoji: '🧟', name: 'Армия незакрытых квестов', negative: true, description: 'Накопить 5 просроченных задач', target: 5, metric: 'overdue', test: s => s.overdue >= 5 },
-  { id: 'debt', emoji: '🪙', name: 'В долг у гоблина', negative: true, description: 'Баланс ниже нуля после отмены выполнения оплаченной задачи', test: s => s.balance < 0 },
-  { id: 'first', metric: 'done', target: 1, emoji: '🌱', name: 'Первая задача', test: (s) => s.done >= 1 },
-  { id: 'ten', metric: 'done', target: 10, emoji: '🔟', name: '10 задач', test: (s) => s.done >= 10 },
-  { id: 'hundred', metric: 'done', target: 100, emoji: '💯', name: '100 задач', test: (s) => s.done >= 100 },
-  { id: 'fivehundred', metric: 'done', target: 500, emoji: '🏆', name: '500 задач', test: (s) => s.done >= 500 },
-  { id: 'streak3', metric: 'bestStreak', target: 3, emoji: '🔥', name: 'Серия 3 дня', test: (s) => s.bestStreak >= 3 },
-  { id: 'streak7', metric: 'bestStreak', target: 7, emoji: '⚡', name: 'Серия 7 дней', test: (s) => s.bestStreak >= 7 },
-  { id: 'streak30', metric: 'bestStreak', target: 30, emoji: '🌟', name: 'Серия 30 дней', test: (s) => s.bestStreak >= 30 },
-  { id: 'level5', metric: 'level', target: 5, emoji: '🎖', name: 'Уровень 5', test: (s) => s.level >= 5 },
-  { id: 'level10', metric: 'level', target: 10, emoji: '👑', name: 'Уровень 10', test: (s) => s.level >= 10 },
-  { id: 'shopper', metric: 'purchases', target: 1, emoji: '🛍', name: 'Первая покупка', test: (s) => s.purchases >= 1 },
-  { id: 'rich', metric: 'xp', target: 1000, emoji: '💰', name: '1000 монет заработано', test: (s) => s.xp >= 1000 },
+  { id: 'combo5', emoji: '🎯', name: tr('Комбо ×5'), description: tr('Выполнить 5 задач за один день'), target: 5, metric: 'bestDay', test: s => s.bestDay >= 5 },
+  { id: 'raid', emoji: '🐉', name: tr('Рейд на дракона'), description: tr('Выполнить 20 задач за один день'), target: 20, metric: 'bestDay', test: s => s.bestDay >= 20 },
+  { id: 'explorer', emoji: '🧭', name: tr('Исследователь'), description: tr('Выполнить задачи из 3 разных списков'), target: 3, metric: 'listVariety', test: s => s.listVariety >= 3 },
+  { id: 'collector', emoji: '🎒', name: tr('Коллекционер'), description: tr('Собрать 5 разных предметов оформления'), target: 5, metric: 'collection', test: s => s.collection >= 5 },
+  { id: 'comeback', emoji: '🐦‍🔥', name: tr('Возвращение героя'), description: tr('Выполнить задачу после перерыва в 7 дней'), test: s => s.comeback },
+  { id: 'overdue', emoji: '🐌', name: tr('Побочный квест: потом'), negative: true, description: tr('Есть хотя бы одна просроченная активная задача'), test: s => s.overdue >= 1 },
+  { id: 'overdue5', emoji: '🧟', name: tr('Армия незакрытых квестов'), negative: true, description: tr('Накопить 5 просроченных задач'), target: 5, metric: 'overdue', test: s => s.overdue >= 5 },
+  { id: 'debt', emoji: '🪙', name: tr('В долг у гоблина'), negative: true, description: tr('Баланс ниже нуля после отмены выполнения оплаченной задачи'), test: s => s.balance < 0 },
+  { id: 'first', metric: 'done', target: 1, emoji: '🌱', name: tr('Первая задача'), test: (s) => s.done >= 1 },
+  { id: 'ten', metric: 'done', target: 10, emoji: '🔟', name: tr('10 задач'), test: (s) => s.done >= 10 },
+  { id: 'hundred', metric: 'done', target: 100, emoji: '💯', name: tr('100 задач'), test: (s) => s.done >= 100 },
+  { id: 'fivehundred', metric: 'done', target: 500, emoji: '🏆', name: tr('500 задач'), test: (s) => s.done >= 500 },
+  { id: 'streak3', metric: 'bestStreak', target: 3, emoji: '🔥', name: tr('Серия 3 дня'), test: (s) => s.bestStreak >= 3 },
+  { id: 'streak7', metric: 'bestStreak', target: 7, emoji: '⚡', name: tr('Серия 7 дней'), test: (s) => s.bestStreak >= 7 },
+  { id: 'streak30', metric: 'bestStreak', target: 30, emoji: '🌟', name: tr('Серия 30 дней'), test: (s) => s.bestStreak >= 30 },
+  { id: 'level5', metric: 'level', target: 5, emoji: '🎖', name: tr('Уровень 5'), test: (s) => s.level >= 5 },
+  { id: 'level10', metric: 'level', target: 10, emoji: '👑', name: tr('Уровень 10'), test: (s) => s.level >= 10 },
+  { id: 'shopper', metric: 'purchases', target: 1, emoji: '🛍', name: tr('Первая покупка'), test: (s) => s.purchases >= 1 },
+  { id: 'rich', metric: 'xp', target: 1000, emoji: '💰', name: tr('1000 монет заработано'), test: (s) => s.xp >= 1000 },
 ];
 
 export function gameStats(data, tz, today) {
@@ -223,10 +224,10 @@ export function gameStats(data, tz, today) {
   const achievements = ACHIEVEMENTS.map(a => ({ ...a, group: 'general', unlocked: a.test(stats),
     progress: a.metric ? Math.min(a.target, stats[a.metric]) : null }));
   const lists = [...data.lists.values()].filter(l => !l.deletedAt).sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  for (const list of lists) for (const [target, emoji, rank] of [[1, '🌱', 'Первый шаг'], [10, '⚔️', 'Искатель'], [50, '🛡️', 'Хранитель'], [100, '👑', 'Легенда']]) {
+  for (const list of lists) for (const [target, emoji, rank] of [[1, '🌱', tr('Первый шаг')], [10, '⚔️', tr('Искатель')], [50, '🛡️', tr('Хранитель')], [100, '👑', tr('Легенда')]]) {
     const count = listCounts.get(list.id) || 0;
     achievements.push({ id: `list:${list.id}:${target}`, group: list.id, groupName: list.name, emoji,
-      name: `${rank} · ${list.name}`, description: `Выполнить ${countLabel(target, ['задачу', 'задачи', 'задач'])} в списке «${list.name}»`,
+      name: `${rank} · ${list.name}`, description: tr('Выполнить {p0} в списке «{name}»', { p0: countLabel(target, ['задачу', 'задачи', 'задач']), name: list.name }),
       target, progress: Math.min(count, target), unlocked: count >= target });
   }
   return { ...stats, levelInfo: lv, achievements };

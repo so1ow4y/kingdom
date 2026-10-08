@@ -13,11 +13,12 @@ import { uuidv7 } from './ids.js';
 import { touch, touchNested, removeNested } from './model.js';
 import { keyBetween, byOrder } from './order.js';
 import {
-  cleanNutrients, num, entryNutrients, itemNutrients, sumNutrients, addNutrients, nv, MEALS, NUTRIENT_KEYS,
+  cleanNutrients, num, entryNutrients, itemNutrients, sumNutrients, addNutrients, nv, MEALS, NUTRIENT_KEYS, MED_UNIT,
 } from './nutrition.js';
 import { addDays, daysBetween } from './dates.js';
 import { normalizeBarcode } from './barcode.js';
 import { DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, FEAST_RETENTION } from '../config.js';
+import { tr } from './i18n.js';
 
 export const FEAST_SETTINGS_ID = '00000000-0000-7000-8000-00000000f001';
 export const FEAST_COLLECTIONS = ['settings', 'foods', 'entries', 'dayArchive', 'body', 'meals', 'mealNotes'];
@@ -29,23 +30,35 @@ export const FEAST_SETTINGS_FIELDS = ['kcalGoal', 'proteinGoal', 'fatGoal', 'car
   'macroMode', 'proteinPct', 'fatPct', 'carbsPct', 'activities',
   'sex', 'birthDate', 'heightCm', 'activity', 'goal', 'targetWeightKg', 'deletedAt'];
 // rewards (0.12) — опыт, монеты и 💎 за каждую запись продукта; не задано — по умолчанию из настроек
-export const FOOD_FIELDS = ['name', 'brand', 'unit', 'servingName', 'servingSize', 'nutrients', 'favorite', 'note', 'rewards', 'deletedAt'];
+// 0.12.5: каталог общий — продукты и лекарства (kind: 'food' | 'med'; нет поля — продукт). У лекарства: unit — форма
+// (MED_UNITS), dose — обычная доза; у продукта meds — лекарства, которые записываются вместе с ним ({ medId, amount }).
+export const FOOD_FIELDS = ['name', 'brand', 'unit', 'servingName', 'servingSize', 'nutrients', 'favorite', 'note', 'rewards',
+  'kind', 'dose', 'meds', 'deletedAt'];
 // Записи 0.11 хранили один продукт в своих полях (foodId, name, amount, unit, nutrients) — они читаются как есть;
 // с 0.12 продукты — во вложенном массиве items (сливается поэлементно), у записи — время и заметка.
 export const ENTRY_FIELDS = ['date', 'meal', 'time', 'note', 'deletedAt'];
 export const LEGACY_ENTRY_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients'];
 // order — порядок продуктов в записи (как добавляли), дробный ключ
-// note (0.12.4) — заметка к продукту в записи (например, сколько единиц инсулина)
-export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'note', 'deletedAt'];
+// note (0.12.4) — заметка к продукту в записи (например, сколько единиц инсулина); kind (0.12.5) — 'med' у лекарства
+export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'note', 'kind', 'deletedAt'];
 export const MEAL_FIELDS = ['name', 'icon', 'time', 'order', 'date', 'archived', 'deletedAt'];
 export const MEAL_NOTE_FIELDS = ['date', 'meal', 'text', 'deletedAt'];
 export const BODY_FIELDS = ['date', 'weightKg', 'waistCm', 'neckCm', 'hipCm', 'bodyFatPct', 'note', 'deletedAt'];
-export const DAY_ARCHIVE_FIELDS = ['date', 'count', 'totals', 'meals', 'foods', 'rewards', 'deletedAt'];
+export const DAY_ARCHIVE_FIELDS = ['date', 'count', 'totals', 'meals', 'foods', 'meds', 'rewards', 'deletedAt'];
 
 export const FOOD_NAME_MAX = 120;
 export const MEAL_NAME_MAX = 40;
 export const NOTE_MAX = 2000;
-export const UNITS = [{ key: 'g', label: 'граммы' }, { key: 'ml', label: 'миллилитры' }];
+export const UNITS = [{ key: 'g', label: tr('граммы') }, { key: 'ml', label: tr('миллилитры') }];
+
+/** Лекарство ли это (запись каталога или продукт записи). */
+export const isMed = (x) => x?.kind === 'med';
+const medUnit = (u) => (MED_UNIT[u] ? u : 'tab');
+const cleanMedLinks = (list) => (Array.isArray(list) ? list : [])
+  .filter((m) => m && typeof m.medId === 'string' && m.medId)
+  .map((m) => ({ medId: m.medId, amount: num(m.amount) || 1 }))
+  .filter((m, i, a) => a.findIndex((x) => x.medId === m.medId) === i)
+  .slice(0, 20);
 
 const iso = (ctx) => new Date(ctx.now).toISOString();
 const timesFor = (names, t) => Object.fromEntries(names.map((k) => [k, t]));
@@ -97,7 +110,7 @@ export function defaultFeastSettings() {
 export const REWARD_KEYS = ['xp', 'coins', 'gems'];
 /** По умолчанию — мало: опыт 1, монеты 0,2, 💎 0,05 за каждую запись продукта (целые копятся из дробных). */
 export const REWARD_DEFAULTS = { xp: 1, coins: 0.2, gems: 0.05 };
-export const REWARD_LABELS = { xp: 'Опыт', coins: 'Монеты', gems: 'Алмазы' };
+export const REWARD_LABELS = { xp: tr('Опыт'), coins: tr('Монеты'), gems: tr('Алмазы') };
 export const REWARD_ICONS = { xp: '✨', coins: '🪙', gems: '💎' };
 const REWARD_MAX = 1000;
 const SETTING_OF = { xp: 'rewardXp', coins: 'rewardCoins', gems: 'rewardGems' };
@@ -173,13 +186,15 @@ export function feastRewards(data) {
 
 // ---------- Продукты ----------
 
-export function newFood({ name, brand = '', unit = 'g', servingName = '', servingSize = null, nutrients = {}, note = '', barcodes = [], rewards = {} }, ctx) {
+export function newFood({ name, brand = '', unit = 'g', servingName = '', servingSize = null, nutrients = {}, note = '', barcodes = [], rewards = {}, kind = 'food', dose = null }, ctx) {
   const n = normalizeName(name);
   if (!n) throw new Error('newFood: пустое название');
+  const med = kind === 'med';
   let f = create(uuidv7(ctx.now), {
     name: n,
     brand: normalizeName(brand),
-    unit: unit === 'ml' ? 'ml' : 'g',
+    unit: med ? medUnit(unit) : unit === 'ml' ? 'ml' : 'g',
+    ...(med ? { kind: 'med', dose: num(dose) || 1 } : {}),
     servingName: normalizeName(servingName).slice(0, 40),
     servingSize: num(servingSize) || null,
     nutrients: cleanNutrients(nutrients),
@@ -196,6 +211,12 @@ export function newFood({ name, brand = '', unit = 'g', servingName = '', servin
 export function editFood(food, changes, ctx) {
   const c = { ...changes };
   if ('rewards' in c) c.rewards = cleanRewards(c.rewards);
+  if ('meds' in c) c.meds = cleanMedLinks(c.meds);
+  if ('dose' in c) c.dose = num(c.dose) || 1;
+  if (isMed(food) && 'unit' in c) {
+    c.unit = medUnit(c.unit);
+    return touch(food, c, ctx);
+  }
   if ('name' in c) c.name = normalizeName(c.name) || food.name;
   if ('brand' in c) c.brand = normalizeName(c.brand);
   if ('nutrients' in c) c.nutrients = cleanNutrients(c.nutrients);
@@ -299,7 +320,7 @@ export function mealInfo(data, id) {
   const m = data.meals.get(id);
   if (m && !m.deletedAt) return m;
   const d = MEALS.find((x) => x.key === id);
-  return { id, name: d ? d.label : 'Другое', icon: d ? d.icon : '🍽️', time: null, order: m?.order || '~', date: null, archived: false, missing: true };
+  return { id, name: d ? d.label : tr('Другое'), icon: d ? d.icon : '🍽️', time: null, order: m?.order || '~', date: null, archived: false, missing: true };
 }
 
 /**
@@ -408,16 +429,26 @@ function nestedItem(fields, ctx) {
  * amount в граммах/мл. Быстрая запись без продукта — unit 'portion', amount — число порций, значения — на порцию.
  * snapshot — копия продукта другой записи («как вчера»).
  */
-export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null, note = null }) {
+export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null, note = null, med = null }) {
   // награда — снимок на момент записи (правка продукта или настроек прошлые записи не меняет); заметка — если есть
   const text = cleanNote(note ?? snapshot?.note ?? '').trim() ? cleanNote(note ?? snapshot?.note) : '';
   const withRewards = (f, r) => {
     const out = hasRewards(r) ? { ...f, rewards: cleanRewards(r) } : f;
     return text ? { ...out, note: text } : out;
   };
+  // лекарство (0.12.5): без пищевой ценности и наград
+  const asMed = med || (food && isMed(food)) ? (med || food) : null;
+  if (asMed) {
+    const out = { foodId: asMed.id, kind: 'med', name: asMed.name + (asMed.brand ? ` (${asMed.brand})` : ''), amount: num(amount) || num(asMed.dose) || 1, unit: medUnit(asMed.unit), nutrients: {} };
+    return text ? { ...out, note: text } : out;
+  }
   if (snapshot) {
+    if (isMed(snapshot)) {
+      const out = { foodId: snapshot.foodId ?? null, kind: 'med', name: normalizeName(snapshot.name) || tr('Лекарство'), amount: num(snapshot.amount) || 1, unit: medUnit(snapshot.unit), nutrients: {} };
+      return text ? { ...out, note: text } : out;
+    }
     return withRewards({
-      foodId: snapshot.foodId ?? null, name: normalizeName(snapshot.name) || 'Запись',
+      foodId: snapshot.foodId ?? null, name: normalizeName(snapshot.name) || tr('Запись'),
       amount: num(snapshot.amount), unit: ['g', 'ml', 'portion'].includes(snapshot.unit) ? snapshot.unit : 'g',
       nutrients: cleanNutrients(snapshot.nutrients || {}),
     }, rewards ?? snapshot.rewards);
@@ -429,7 +460,7 @@ export function itemFields({ food = null, amount, quick = null, snapshot = null,
     }, rewards);
   }
   return withRewards({
-    foodId: null, name: normalizeName(quick?.name) || 'Быстрая запись',
+    foodId: null, name: normalizeName(quick?.name) || tr('Быстрая запись'),
     amount: num(amount) || 1, unit: quick?.unit === 'g' || quick?.unit === 'ml' ? quick.unit : 'portion',
     nutrients: cleanNutrients(quick?.nutrients || {}),
   }, rewards);
@@ -459,13 +490,16 @@ const cleanMealId = (m) => (typeof m === 'string' && m && m.length <= 64 ? m : '
  * Запись дневника (0.12): рацион, время (по умолчанию — переданное «сейчас»), заметка и продукты.
  * items — [{ food, amount } | { quick, amount }]; для краткости можно передать один продукт: { food, amount }.
  */
-export function newEntry({ date, meal, time = null, note = '', items = null, food = null, amount, quick = null }, ctx) {
+export function newEntry({ date, meal, time = null, note = '', notes = null, items = null, food = null, amount, quick = null }, ctx) {
   const specs = items || [{ food, amount, quick }];
   const orders = nextOrders(null, specs.length);
   const list = specs.map((x, i) => newItem(x, ctx, orders[i])).sort((a, b) => (a.id < b.id ? -1 : 1));
-  return create(uuidv7(ctx.now), {
-    date, meal: cleanMealId(meal), time: cleanTime(time), note: cleanNote(note), items: list,
+  const texts = (notes || [note]).map(cleanNote).filter((t) => t.trim());
+  let e = create(uuidv7(ctx.now), {
+    date, meal: cleanMealId(meal), time: cleanTime(time), note: texts[0] || '', items: list,
   }, ENTRY_FIELDS, ctx);
+  for (const t of texts.slice(1)) e = addEntryNote(e, t, ctx);
+  return e;
 }
 
 export const isLiveEntry = (e) => !!e && !e.deletedAt;
@@ -477,16 +511,16 @@ export const isLiveEntry = (e) => !!e && !e.deletedAt;
 export function entryItems(e) {
   if (!e || e.deletedAt) return [];
   if (Array.isArray(e.items)) return e.items.filter((x) => x && !x.deletedAt).sort(byItemOrder);
-  return [{ id: e.id, createdAt: e.createdAt, foodId: e.foodId ?? null, name: e.name || 'Запись', amount: e.amount, unit: e.unit, nutrients: e.nutrients || {}, legacy: true }];
+  return [{ id: e.id, createdAt: e.createdAt, foodId: e.foodId ?? null, name: e.name || tr('Запись'), amount: e.amount, unit: e.unit, nutrients: e.nutrients || {}, legacy: true }];
 }
 
 /** Название записи: продукт или «Творог, банан и ещё 2». */
 export function entryTitle(e) {
   const items = entryItems(e);
-  if (!items.length) return 'Пустая запись';
+  if (!items.length) return tr('Пустая запись');
   if (items.length === 1) return items[0].name;
   if (items.length <= 3) return items.map((x) => x.name).join(', ');
-  return `${items.slice(0, 2).map((x) => x.name).join(', ')} и ещё ${items.length - 2}`;
+  return tr('{p0} и ещё {p1}', { p0: items.slice(0, 2).map((x) => x.name).join(', '), p1: items.length - 2 });
 }
 
 /**
@@ -498,7 +532,7 @@ export function upgradeEntry(e, ctx) {
   const at = iso(ctx);
   const item = {
     id: e.id, createdAt: e.createdAt || at, updatedAt: at, deletedAt: null, fieldTimes: timesFor(ITEM_FIELDS, 1),
-    foodId: e.foodId ?? null, name: e.name || 'Запись', amount: Number.isFinite(e.amount) ? e.amount : 0,
+    foodId: e.foodId ?? null, name: e.name || tr('Запись'), amount: Number.isFinite(e.amount) ? e.amount : 0,
     unit: e.unit || 'g', nutrients: e.nutrients || {},
   };
   return { ...e, items: [item], updatedAt: at, updatedBy: ctx.deviceId };
@@ -527,6 +561,42 @@ export function setItemAmount(e, itemId, amount, ctx) {
 
 export function removeItem(e, itemId, ctx) {
   return removeNested(upgradeEntry(e, ctx), 'items', itemId, ctx);
+}
+
+// ---------- Заметки записи (0.12.5): первая — поле note, дальше — вложенный массив notes (сколько угодно) ----------
+
+export const MAIN_NOTE = 'main';
+
+/** Все заметки записи по порядку: [{ id, text }] (первая — note, её id — MAIN_NOTE). Пустые не попадают. */
+export function entryNoteList(e) {
+  if (!e) return [];
+  const out = [];
+  if ((e.note || '').trim()) out.push({ id: MAIN_NOTE, text: e.note });
+  const extra = (e.notes || []).filter((n) => n && !n.deletedAt && (n.text || '').trim())
+    .sort((a, b) => ((a.order || '') === (b.order || '') ? (a.id < b.id ? -1 : 1) : (a.order || '') < (b.order || '') ? -1 : 1));
+  for (const n of extra) out.push({ id: n.id, text: n.text });
+  return out;
+}
+
+/** Добавить заметку к записи (в конец). */
+export function addEntryNote(e, text, ctx) {
+  const t = cleanNote(text);
+  if (!t.trim()) return e;
+  const live = (e.notes || []).filter((n) => !n.deletedAt && (n.text || '').trim());
+  // первая заметка — в поле note (его видят и старые версии); если первую убрали, а другие есть — новая в конец
+  if (!(e.note || '').trim() && !live.length) return touch(e, { note: t }, ctx);
+  const last = (e.notes || []).filter((n) => !n.deletedAt).map((n) => n.order || '').sort().at(-1) || null;
+  const at = iso(ctx);
+  const note = { id: uuidv7(ctx.now), createdAt: at, updatedAt: at, deletedAt: null, fieldTimes: timesFor(['text', 'order', 'deletedAt'], ctx.stamp()), text: t, order: keyBetween(last, null) };
+  return { ...e, notes: [...(e.notes || []), note].sort((a, b) => (a.id < b.id ? -1 : 1)), updatedAt: at, updatedBy: ctx.deviceId };
+}
+
+/** Изменить заметку записи; пустой текст — убрать её. */
+export function editEntryNote(e, id, text, ctx) {
+  const t = cleanNote(text);
+  if (id === MAIN_NOTE) return touch(e, { note: t.trim() ? t : '' }, ctx);
+  if (!t.trim()) return removeNested(e, 'notes', id, ctx);
+  return touchNested(e, 'notes', id, { text: t }, ctx);
 }
 
 /** Правка полей записи: время, заметка, рацион, дата. */
@@ -667,8 +737,16 @@ export function archiveFor(date, entries, prev, ctx) {
   }
   for (const k of Object.keys(meals)) meals[k] = Math.round(meals[k]);
   const foods = {};
+  const meds = {};
   for (const e of entries) {
     for (const it of entryItems(e)) {
+      if (isMed(it)) {
+        const key = it.foodId || 'med:' + it.name;
+        const m = meds[key] || (meds[key] = { name: it.name, unit: it.unit, count: 0, amount: 0 });
+        m.count++;
+        m.amount = Math.round((m.amount + (it.amount || 0)) * 1000) / 1000;
+        continue;
+      }
       const key = it.foodId || 'quick:' + it.name;
       const f = foods[key] || (foods[key] = { name: it.name, count: 0, kcal: 0 });
       f.count++;
@@ -685,15 +763,18 @@ export function archiveFor(date, entries, prev, ctx) {
     for (const [k, v] of Object.entries(meals)) pm[k] = (pm[k] || 0) + v;
     const pf = { ...(prev.foods || {}) };
     for (const [k, v] of Object.entries(foods)) pf[k] = pf[k] ? { ...pf[k], count: pf[k].count + v.count, kcal: pf[k].kcal + v.kcal } : v;
+    const pmed = { ...(prev.meds || {}) };
+    for (const [k, v] of Object.entries(meds)) pmed[k] = pmed[k] ? { ...pmed[k], count: pmed[k].count + v.count, amount: pmed[k].amount + v.amount } : v;
     return touch(prev, {
-      count: (prev.count || 0) + entries.length,
+      count: (prev.count || 0) + entries.filter(hasFood).length,
       totals: round(addNutrients(prev.totals || {}, totals)),
       meals: pm,
       foods: pf,
+      meds: pmed,
       rewards,
     }, ctx);
   }
-  return create(archiveId(date), { date, count: entries.length, totals: round(totals), meals, foods, rewards }, DAY_ARCHIVE_FIELDS, ctx);
+  return create(archiveId(date), { date, count: entries.filter(hasFood).length, totals: round(totals), meals, foods, meds, rewards }, DAY_ARCHIVE_FIELDS, ctx);
 }
 
 // ---------- Статистика за период ----------
@@ -706,7 +787,7 @@ export function dailySeries(data, from, to) {
     return days.get(date);
   };
   for (const e of data.entries.values()) {
-    if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
+    if (!isLiveEntry(e) || e.date < from || e.date > to || !hasFood(e)) continue;
     const d = get(e.date);
     const n = entryNutrients(e);
     d.totals = addNutrients(d.totals, n);
@@ -722,6 +803,53 @@ export function dailySeries(data, from, to) {
     for (const [k, kcal] of Object.entries(a.meals || {})) d.meals[k] = (d.meals[k] || 0) + (kcal || 0);
   }
   return [...days.values()].sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/** Есть ли в записи еда (а не только лекарства). */
+export const hasFood = (e) => entryItems(e).some((it) => !isMed(it));
+
+/**
+ * Лекарства за период [from, to] (0.12.5): по каждому — приёмы, сумма, дни, последний приём, ряд по дням; журнал приёмов.
+ * Учитываются и сводки дней, удалённых лимитом хранения (без журнала).
+ */
+export function medStats(data, from, to) {
+  const meds = new Map();
+  const log = [];
+  const get = (key, name, unit) => meds.get(key) || meds.set(key, { key, name, unit, count: 0, amount: 0, days: new Map(), last: '' }).get(key);
+  for (const e of data.entries.values()) {
+    if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
+    const foods = entryItems(e).filter((it) => !isMed(it)).map((it) => it.name);
+    for (const it of entryItems(e)) {
+      if (!isMed(it)) continue;
+      const m = get(it.foodId || 'med:' + it.name, it.name, it.unit);
+      m.count++;
+      m.amount += it.amount || 0;
+      const d = m.days.get(e.date) || { date: e.date, count: 0, amount: 0 };
+      d.count++;
+      d.amount += it.amount || 0;
+      m.days.set(e.date, d);
+      const when = e.date + ' ' + (e.time || '');
+      if (when > m.last) m.last = when;
+      log.push({ date: e.date, time: e.time || null, key: m.key, name: it.name, amount: it.amount, unit: it.unit, note: it.note || '', foods, entryId: e.id, meal: e.meal });
+    }
+  }
+  for (const a of data.dayArchive.values()) {
+    if (a.deletedAt || a.date < from || a.date > to) continue;
+    for (const [key, v] of Object.entries(a.meds || {})) {
+      const m = get(key, v.name, v.unit);
+      m.count += v.count || 0;
+      m.amount += v.amount || 0;
+      const d = m.days.get(a.date) || { date: a.date, count: 0, amount: 0 };
+      d.count += v.count || 0;
+      d.amount += v.amount || 0;
+      m.days.set(a.date, d);
+      if (a.date + ' ' > m.last) m.last = a.date + ' ';
+    }
+  }
+  const list = [...meds.values()].map((m) => ({ ...m, amount: Math.round(m.amount * 1000) / 1000, days: [...m.days.values()].sort((x, y) => (x.date < y.date ? -1 : 1)) }))
+    .sort((a, b) => b.count - a.count || (a.name < b.name ? -1 : 1));
+  log.sort((a, b) => (a.date + (a.time || '') < b.date + (b.time || '') ? 1 : -1));
+  return { meds: list, log, intakes: list.reduce((s, m) => s + m.count, 0), days: new Set(list.flatMap((m) => m.days.map((d) => d.date))).size };
 }
 
 /** Самый ранний день с записями (или сводкой). */
@@ -752,7 +880,7 @@ export function periodStats(data, from, to, goal) {
   };
   for (const e of data.entries.values()) {
     if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
-    for (const it of entryItems(e)) add(it.foodId || 'quick:' + it.name, it.name, nv(itemNutrients(it), 'kcal'), 1);
+    for (const it of entryItems(e)) if (!isMed(it)) add(it.foodId || 'quick:' + it.name, it.name, nv(itemNutrients(it), 'kcal'), 1);
   }
   for (const a of data.dayArchive.values()) {
     if (a.deletedAt || a.date < from || a.date > to) continue;

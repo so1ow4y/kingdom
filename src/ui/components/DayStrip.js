@@ -9,8 +9,9 @@ import { addDays, mondayOf, weekDates, WEEKDAY_SHORT, localDateOf } from '../../
 import { planningDate } from '../../core/planning.js';
 import { countLabel } from '../../core/plural.js';
 import * as RP from '../../core/repeat.js';
+import { tr } from '../../core/i18n.js';
 
-const MONTHS = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
+const MONTHS = [tr('Январь'), tr('Февраль'), tr('Март'), tr('Апрель'), tr('Май'), tr('Июнь'), tr('Июль'), tr('Август'), tr('Сентябрь'), tr('Октябрь'), tr('Ноябрь'), tr('Декабрь')];
 
 /** По дням недели: сколько активных задач запланировано (дата, дедлайн или «главное») и сколько выполнено. */
 export function weekStats(data, tz, dates) {
@@ -36,8 +37,8 @@ function taskMarks(days) {
   const stats = weekStats(store.data, store.data.settings.timeZone, days);
   return new Map(days.map((d) => {
     const s = stats.get(d);
-    const title = [s.planned ? 'запланировано ' + countLabel(s.planned, ['задача', 'задачи', 'задач']) : '', s.done ? 'выполнено ' + s.done : ''].filter(Boolean).join(', ');
-    return [d, { dots: Math.min(3, s.planned), mark: s.done && !s.planned ? '✓' : '', title: title || 'Свободный день' }];
+    const title = [s.planned ? tr('запланировано ') + countLabel(s.planned, ['задача', 'задачи', 'задач']) : '', s.done ? tr('выполнено ') + s.done : ''].filter(Boolean).join(', ');
+    return [d, { dots: Math.min(3, s.planned), mark: s.done && !s.planned ? '✓' : '', title: title || tr('Свободный день') }];
   }));
 }
 
@@ -94,7 +95,7 @@ export function DayStrip({ date, onGo, marksFn = taskMarks }) {
         <button class="icon-btn small" aria-label="Предыдущая неделя" title="Предыдущая неделя" onClick=${() => onGo(addDays(date, -7))}><${Icon} name="back" size=${18}/></button>
         <button class="icon-btn small" aria-label="Следующая неделя" title="Следующая неделя" onClick=${() => onGo(addDays(date, 7))}><${Icon} name="chevron" size=${18}/></button>
       </div>
-      <div class="ds-days" role="tablist" aria-label=${thisWeek ? 'Эта неделя' : 'Неделя'} onKeyDown=${onKey}>
+      <div class="ds-days" role="tablist" aria-label=${thisWeek ? tr('Эта неделя') : tr('Неделя')} onKeyDown=${onKey}>
         ${days.map((d, i) => {
           const s = stats.get(d) || { dots: 0, mark: '', title: '' };
           const cls = 'ds-day' + (d === date ? ' selected' : '') + (d === today ? ' is-today' : '') + (d < today ? ' past' : '') + (i > 4 ? ' weekend' : '');

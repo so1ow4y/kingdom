@@ -9,6 +9,7 @@ import { readLocal, writeLocal } from '../hooks.js';
 import { getPrefs } from '../prefs.js';
 import { emitVillage } from '../../village/bus.js';
 import { keepersOf } from '../../village/keepers.js';
+import { tr } from '../../core/i18n.js';
 
 export const gameOn = () => !!store.data.settings?.gameEnabled;
 
@@ -24,7 +25,7 @@ export function SkillBadge({ listId, className = '' }) {
   if (!gameOn()) return null;
   const s = skillsNow().get(listId);
   if (!s) return null;
-  const title = `Навык: уровень ${s.level}${s.prestige ? `, престиж ${s.roman}` : ''}${s.max ? ' — можно повысить престиж' : ''}`;
+  const title = tr('Навык: уровень {level}{p1}{p2}', { level: s.level, p1: s.prestige ? tr(', престиж {roman}', { roman: s.roman }) : '', p2: s.max ? tr(' — можно повысить престиж') : '' });
   return html`<span class=${'skill-badge' + (s.prestige ? ' prestige' : '') + (s.max ? ' max' : '') + (className ? ' ' + className : '')} title=${title} aria-label=${title}>
     ${s.prestige ? html`<b>${s.roman}</b>` : null}<span>${s.level}</span></span>`;
 }
@@ -40,14 +41,14 @@ export function SkillBar({ list }) {
   return html`<div class=${'skill-bar' + (s.max ? ' max' : '')} style=${{ '--list-color': list.color }}>
     <div class="sb-head">
       <span class="sb-title">Навык <${SkillBadge} listId=${list.id}/></span>
-      <span class="sb-next">${s.max ? 'Максимальный уровень' : `до ${s.level + 1} ур.: ${s.need - s.into} опыта`}</span>
+      <span class="sb-next">${s.max ? tr('Максимальный уровень') : tr('до {p0} ур.: {p1} опыта', { p0: s.level + 1, p1: s.need - s.into })}</span>
     </div>
     <div class="sb-track" role="progressbar" aria-valuemin="0" aria-valuemax=${s.need || 1} aria-valuenow=${s.max ? 1 : s.into}
-      aria-label=${`Опыт навыка «${list.name}»`}><i style=${{ width: (s.max ? 100 : pct) + '%' }}></i></div>
+      aria-label=${tr('Опыт навыка «{name}»', { name: list.name })}><i style=${{ width: (s.max ? 100 : pct) + '%' }}></i></div>
     <div class="sb-foot">
       <small class="muted">${[
-        s.max ? `Престиж обнулит уровень и навсегда добавит ${roman(s.prestige + 1)}` : `${s.into} / ${s.need} ⭐`,
-        `выполнено ${s.done}`,
+        s.max ? tr('Престиж обнулит уровень и навсегда добавит {p0}', { p0: roman(s.prestige + 1) }) : `${s.into} / ${s.need} ⭐`,
+        tr('выполнено {done}', { done: s.done }),
         k ? `${k.name}, ${STAGES[k.stage][k.gender].toLowerCase()}` : '',
       ].filter(Boolean).join(' · ')}</small>
       ${s.max ? html`<button class="btn small primary sb-prestige" disabled=${readOnly} onClick=${() => A.prestigeList(list.id)}>✨ Престиж ${roman(s.prestige + 1)}</button>` : null}
@@ -76,7 +77,7 @@ export function SkillToast() {
     if (!up.length || !gameOn()) return;
     for (const u of up) emitVillage('levelup', { listId: u.l.id, prestige: u.prestige });
     if (p.achievementNotifications === false) return;
-    setNotice(up.map((u) => (u.prestige ? `«${u.l.name}» — престиж ${u.s.roman}` : `«${u.l.name}» — уровень ${u.s.level}${u.s.level >= MAX_LEVEL ? ' (можно повысить престиж!)' : ''}`)).join(' · '));
+    setNotice(up.map((u) => (u.prestige ? tr('«{name}» — престиж {roman}', { name: u.l.name, roman: u.s.roman }) : tr('«{name}» — уровень {level}{p2}', { name: u.l.name, level: u.s.level, p2: u.s.level >= MAX_LEVEL ? tr(' (можно повысить престиж!)') : '' }))).join(' · '));
     clearTimeout(timer.current);
     timer.current = setTimeout(() => setNotice(null), 7000);
   }, [skills]);

@@ -6,6 +6,7 @@ import { byOrder } from './order.js';
 import { daysBetween, localDateOf } from './dates.js';
 import * as RP from './repeat.js';
 import { SOON_DEADLINE_DAYS, LIMITS } from '../config.js';
+import { tr } from './i18n.js';
 
 export const MAX_DEPTH = LIMITS.maxDepth; // уровней вложенности: задача → подзадача → … (4 уровня всего)
 
@@ -127,11 +128,11 @@ export function subtreeHeight(data, id, index = null) {
  */
 export function nestError(data, childId, parentId) {
   if (!parentId) return null;
-  if (childId === parentId) return 'Задачу нельзя вложить саму в себя';
+  if (childId === parentId) return tr('Задачу нельзя вложить саму в себя');
   const parent = data.tasks.get(parentId);
-  if (!parent || !isAlive(parent)) return 'Родительская задача не найдена';
-  if (ancestors(data, parent).some((a) => a.id === childId)) return 'Нельзя вложить задачу в её же подзадачу';
-  if (depthOf(data, parent) + subtreeHeight(data, childId) > MAX_DEPTH) return `Вложенность не больше ${MAX_DEPTH} уровней`;
+  if (!parent || !isAlive(parent)) return tr('Родительская задача не найдена');
+  if (ancestors(data, parent).some((a) => a.id === childId)) return tr('Нельзя вложить задачу в её же подзадачу');
+  if (depthOf(data, parent) + subtreeHeight(data, childId) > MAX_DEPTH) return tr('Вложенность не больше {MAX_DEPTH} уровней', { MAX_DEPTH });
   return null;
 }
 
@@ -428,4 +429,31 @@ export function priorityOf(data, t) {
 export function priorityInUse(data, priorityId) {
   for (const t of data.tasks.values()) if (isAlive(t) && t.priorityId === priorityId) return true;
   return false;
+}
+
+/**
+ * Дела по дням (0.12.5, разговор с жителем): открытые задачи списка (или всех списков) группами — сначала «сегодня»
+ * (★ на сегодня, просроченные, на сегодня), потом по дням вперёд, в конце — без даты. Внутри дня — как на экране «Сегодня».
+ * → [{ key: 'today' | 'YYYY-MM-DD' | 'none', date, tasks: [{ task, overdue, star }] }], total — сколько всего.
+ */
+export function dayGroups(data, today, time, { listId = null } = {}) {
+  const tz = data.settings.timeZone;
+  const groups = new Map();
+  const add = (key, date, item) => (groups.get(key) || groups.set(key, { key, date, tasks: [] }).get(key)).tasks.push(item);
+  let total = 0;
+  for (const t of data.tasks.values()) {
+    if (!isActive(t) || inArchivedList(data, t)) continue;
+    if (listId && !t.lists?.[listId]?.in) continue;
+    total++;
+    const star = t.focusDate === today;
+    const overdue = isOverdue(t, today, time);
+    const planned = t.repeat ? RP.dueDate(t, today, tz) : t.scheduledDate || t.deadlineDate || null;
+    if (star || overdue || (planned && planned <= today)) add('today', today, { task: t, overdue, star });
+    else if (planned) add(planned, planned, { task: t, overdue: false, star: false });
+    else add('none', null, { task: t, overdue: false, star: false });
+  }
+  const dc = (a, b) => (a.overdue !== b.overdue ? (a.overdue ? -1 : 1) : a.star !== b.star ? (a.star ? -1 : 1) : dayCompare(a.task, b.task, data));
+  const list = [...groups.values()].sort((a, b) => (a.key === 'today' ? -1 : b.key === 'today' ? 1 : a.key === 'none' ? 1 : b.key === 'none' ? -1 : a.key < b.key ? -1 : 1));
+  for (const g of list) g.tasks.sort(dc);
+  return { groups: list, total };
 }

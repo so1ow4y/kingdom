@@ -4,6 +4,7 @@ import { html, useState, useMemo, useEffect } from '../html.js';
 import { Icon } from '../icons.js';
 import { NumField, RewardEditor, rewardLine } from './FeastParts.js';
 import { Link } from '../router.js';
+import { getPrefs, setPrefs } from '../prefs.js';
 import { store, showSnackbar } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
 import * as F from '../../core/feast.js';
@@ -14,6 +15,7 @@ import { recommendation, calcGoals } from '../../core/body.js';
 import { bodyState } from './FeastProfile.js';
 import { FEAST_RETENTION } from '../../config.js';
 import { buildFeastDb } from '../../data/feastEnvelope.js';
+import { tr } from '../../core/i18n.js';
 
 /** Черновик формы целей из настроек. */
 function goalsDraft(s) {
@@ -90,8 +92,8 @@ export function FeastGoalsSection({ st = null }) {
     if (!calc.kcal) return;
     // БЖУ посчитаны в граммах по весу — так и ставим (в процентах они бы округлились иначе); переключить можно потом
     setDraft({ ...draft, kcal: calc.kcal, mode: 'grams', grams: calc.grams, pct: normalizedPct(calc.grams) });
-    setCalcNote(`Посчитано: ${calc.kcal} ккал (${r.own ? 'твоя рекомендация' : 'расход с активностью и цель'}); ${calc.why}. `
-      + 'БЖУ — в граммах. Проверь и нажми «Сохранить».');
+    setCalcNote(tr('Посчитано: {kcal} ккал ({p1}); {why}. ', { kcal: calc.kcal, p1: r.own ? tr('твоя рекомендация') : tr('расход с активностью и цель'), why: calc.why })
+      + tr('БЖУ — в граммах. Проверь и нажми «Сохранить».'));
   };
   const total = draft.mode === 'pct' ? MACROS.reduce((t, k) => t + (draft.pct[k] || 0), 0) : grams ? macrosKcal(grams) : 0;
   return html`
@@ -104,8 +106,8 @@ export function FeastGoalsSection({ st = null }) {
         <div class="form-actions wrap calc-row">
           <button type="button" class="btn primary" disabled=${ro || !calc.kcal} onClick=${runCalc}><${Icon} name="flame" size=${16}/> Рассчитать</button>
           <span class="muted small">${calc.kcal
-            ? `По параметрам: ${calc.kcal} ккал, белки ${calc.grams.protein} г, жиры ${calc.grams.fat} г, углеводы ${calc.grams.carbs} г`
-            : `Для расчёта нужны: ${calc.missing.join(', ')} — заполни «Параметры» выше.`}</span>
+            ? tr('По параметрам: {kcal} ккал, белки {protein} г, жиры {fat} г, углеводы {carbs} г', { kcal: calc.kcal, protein: calc.grams.protein, fat: calc.grams.fat, carbs: calc.grams.carbs })
+            : tr('Для расчёта нужны: {p0} — заполни «Параметры» выше.', { p0: calc.missing.join(', ') })}</span>
         </div>
         ${calcNote ? html`<p class="hint" role="status">${calcNote}</p>` : null}
         <p class="muted small">От ${KCAL_RANGE[0]} до ${KCAL_RANGE[1]} ккал. В дневнике: «Осталось 247» — сколько ещё можно съесть, «−247» — насколько лимит превышен.</p>
@@ -122,15 +124,15 @@ export function FeastGoalsSection({ st = null }) {
           ${MACROS.map((k) => {
             const kcalOf = grams ? Math.round((grams[k] || 0) * KCAL_PER_G[k]) : null;
             const after = draft.mode === 'pct'
-              ? (grams ? `= ${grams[k]} г · ${kcalOf} ккал` : '')
-              : (kcalOk && Number.isFinite(grams[k]) ? `= ${kcalOf} ккал · ${Math.round((kcalOf * 100) / draft.kcal)} %` : '');
-            return html`<${IntField} key=${draft.mode + k} label=${NUTRIENT[k].label} unit=${draft.mode === 'pct' ? '%' : 'г'}
+              ? (grams ? tr('= {p0} г · {kcalOf} ккал', { p0: grams[k], kcalOf }) : '')
+              : (kcalOk && Number.isFinite(grams[k]) ? tr('= {kcalOf} ккал · {p1} %', { kcalOf, p1: Math.round((kcalOf * 100) / draft.kcal) }) : '');
+            return html`<${IntField} key=${draft.mode + k} label=${NUTRIENT[k].label} unit=${draft.mode === 'pct' ? '%' : tr('г')}
               value=${draft.mode === 'pct' ? draft.pct[k] : draft.grams[k]} disabled=${ro} after=${after} onChange=${(v) => setMacro(k, v)}/>`;
           })}
         </div>
         <p class=${'goals-total ' + (check.ok ? 'ok' : 'bad')} role="status">
           ${check.ok
-            ? (draft.mode === 'pct' ? `✓ Сумма ${total} % — граммы считаются от лимита сами` : `✓ БЖУ: ${total} из ${draft.kcal} ккал${draft.kcal - total > 0 ? ` (свободно ${draft.kcal - total})` : ''}`)
+            ? (draft.mode === 'pct' ? tr('✓ Сумма {total} % — граммы считаются от лимита сами', { total }) : tr('✓ БЖУ: {total} из {kcal} ккал{p2}', { total, kcal: draft.kcal, p2: draft.kcal - total > 0 ? tr(' (свободно {p0})', { p0: draft.kcal - total }) : '' }))
             : `⚠ ${check.error}`}
         </p>
         <p class="muted small">В процентах — доли калорий (белок и углеводы — 4 ккал в грамме, жир — 9); при смене лимита граммы пересчитываются.
@@ -154,7 +156,24 @@ function exportFeast() {
   a.download = `crimson-harvest-${store.now.today}.json`;
   a.click();
   setTimeout(() => URL.revokeObjectURL(a.href), 2000);
-  showSnackbar('Файл с данными Crimson Harvest сохранён');
+  showSnackbar(tr('Файл с данными Crimson Harvest сохранён'));
+}
+
+/** Какие заметки показывать в дневнике и на страницах рационов (0.12.5; только для этого устройства). */
+function NoteDisplaySettings() {
+  const p = getPrefs().feastNotes || {};
+  const val = (k, def) => (typeof p[k] === 'boolean' ? p[k] : def);
+  const set = (k, v) => setPrefs({ feastNotes: { ...(getPrefs().feastNotes || {}), [k]: v } });
+  const row = (k, def, label, hint) => html`<label class="toggle-row compact"><input type="checkbox" checked=${val(k, def)} onChange=${(e) => set(k, e.target.checked)}/>
+    <span>${label}<small>${hint}</small></span></label>`;
+  return html`<section class="set-section">
+    <h2>Заметки в дневнике и рационах</h2>
+    ${row('itemDiary', true, tr('Заметки к продуктам записи — в дневнике'), tr('Например, «4 ед. инсулина» под продуктом'))}
+    ${row('itemMeals', true, tr('Заметки к продуктам записи — на страницах рационов'), tr('Рационы → завтрак, обед…'))}
+    ${row('foodDiary', false, tr('Заметка из карточки продукта — в дневнике'), tr('То, что написано в самом продукте или лекарстве'))}
+    ${row('foodMeals', false, tr('Заметка из карточки продукта — на страницах рационов'), tr('Видна под продуктом на странице рациона'))}
+    <p class="muted small">Только для этого устройства. Заметки к самим записям видны всегда.</p>
+  </section>`;
 }
 
 export function FeastDataSection() {
@@ -169,12 +188,13 @@ export function FeastDataSection() {
     FA.updateFeastSettings({ entryLimit: Math.max(FEAST_RETENTION.entryMin, Math.min(FEAST_RETENTION.entryMax, n)) });
   };
   return html`
+    <${NoteDisplaySettings}/>
     <section class="set-section">
       <h2>Записи дневника</h2>
       <div class="ne-main">
         <${NumField} big label="Хранить записей" unit="шт." value=${limit} disabled=${ro} onCommit=${setLimit}/>
       </div>
-      <p class="muted small">Сейчас записей: ${count}${archived ? `, дней в сводках: ${archived}` : ''}. Когда записей больше лимита, самые старые дни
+      <p class="muted small">Сейчас записей: ${count}${archived ? tr(', дней в сводках: {archived}', { archived }) : ''}. Когда записей больше лимита, самые старые дни
         удаляются целиком, а их итоги (калории, БЖУ, витамины, продукты) остаются в аналитике. Записи последних ${FEAST_RETENTION.keepRecentDays} дней
         не удаляются никогда. От ${FEAST_RETENTION.entryMin} до ${FEAST_RETENTION.entryMax}.</p>
       <div class="form-actions">

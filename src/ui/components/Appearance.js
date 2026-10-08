@@ -11,8 +11,9 @@ import { getAppPrefs, setAppPrefs, activeApp, DOCK_POSITIONS, SCHEMES, FREE_SCHE
 import { getTheme, setTheme } from '../theme.js';
 import { APPS, APP_IDS_ORDER } from '../apps.js';
 import { AppLetter } from './Dock.js';
+import { tr } from '../../core/i18n.js';
 
-const POS_LABEL = { left: 'Слева', bottom: 'Снизу', right: 'Справа', top: 'Сверху' };
+const POS_LABEL = { left: tr('Слева'), bottom: tr('Снизу'), right: tr('Справа'), top: tr('Сверху') };
 
 /** Цвета превью тем (как --bg/--surface/--text/--muted/--border в styles/app.css). */
 const PALETTE = {
@@ -92,16 +93,16 @@ export function AppearanceSection({ phone }) {
     </div>
     <section class="set-section" id="appearance">
       <h2>Панель навигации${app !== activeApp() ? ` — ${APPS[app].name}` : ''}</h2>
-      <p class="muted small">Плавающая плашка по центру выбранного края.${phone ? ' На телефоне развёрнутая панель открывается шторкой поверх экрана — кнопкой ⠿.' : ''}</p>
+      <p class="muted small">Плавающая плашка по центру выбранного края.${phone ? tr(' На телефоне развёрнутая панель открывается шторкой поверх экрана — кнопкой ⠿.') : ''}</p>
       <div class="opt-grid four" role="radiogroup" aria-label="Положение панели">
         ${DOCK_POSITIONS.map((k) => html`
           <${Option} key=${k} selected=${pos === k} onSelect=${() => setPrefs({ dock: k })} label=${POS_LABEL[k]}
-            hint=${(phone ? 'bottom' : 'left') === k ? 'по умолчанию' : null}>
+            hint=${(phone ? 'bottom' : 'left') === k ? tr('по умолчанию') : null}>
             <${DockPreview} position=${k}/>
           <//>`)}
       </div>
       <${Check} label="Развёрнутая" checked=${!!p.expanded} onChange=${(v) => setPrefs({ expanded: v })}
-        hint=${phone ? 'На компьютере — значки с подписями и названиями групп. На телефоне панель всегда свёрнута.' : 'Значки с подписями и названиями групп; свёрнутая — только значки с подсказками.'}/>
+        hint=${phone ? tr('На компьютере — значки с подписями и названиями групп. На телефоне панель всегда свёрнута.') : tr('Значки с подписями и названиями групп; свёрнутая — только значки с подсказками.')}/>
       <${Check} label="Автоскрытие" checked=${!!p.autoHide} onChange=${(v) => setPrefs({ autoHide: v })}
         hint="Панель уезжает за край и выезжает, когда подводишь к нему мышь. Только с мышью: на телефоне не действует."/>
       <${Check} label="Спрятать целиком" checked=${!!p.hidden} onChange=${(v) => setPrefs({ hidden: v })}
@@ -112,7 +113,7 @@ export function AppearanceSection({ phone }) {
       <h2>Тема</h2>
       <p class="muted small">Светлая, тёмная или как в системе.</p>
       <div class="opt-grid three" role="radiogroup" aria-label="Тема">
-        ${[['system', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([k, label]) => html`
+        ${[['system', tr('Как в системе')], ['light', tr('Светлая')], ['dark', tr('Тёмная')]].map(([k, label]) => html`
           <${Option} key=${k} selected=${theme === k} onSelect=${() => onTheme(k)} label=${label}>
             <${ThemePreview} mode=${k} accent=${accent} letter=${p.letter}/>
           <//>`)}
@@ -121,13 +122,13 @@ export function AppearanceSection({ phone }) {
 
     <section class="set-section">
       <h2>Цветовая схема</h2>
-      <p class="muted small">${store.data.settings.gameEnabled ? 'Закрытые схемы открываются в «Магазине».' : 'Игра выключена — все схемы доступны.'}</p>
+      <p class="muted small">${store.data.settings.gameEnabled ? tr('Закрытые схемы открываются в «Магазине».') : tr('Игра выключена — все схемы доступны.')}</p>
       <div class="opt-grid" role="radiogroup" aria-label="Цветовая схема">
         ${Object.entries(SCHEMES).map(([k, s]) => {
           const ok = schemeOk(k);
           return html`
             <${Option} key=${k} selected=${(p.scheme || 'indigo') === k} disabled=${!ok} onSelect=${() => setPrefs({ scheme: k })}
-              label=${s.name} title=${ok ? s.name : 'Можно купить в магазине'}>
+              label=${s.name} title=${ok ? s.name : tr('Можно купить в магазине')}>
               <${ThemePreview} mode=${mode} accent=${{ light: s.light, dark: s.dark }} locked=${!ok}/>
             <//>`;
         })}
@@ -145,7 +146,7 @@ export function AppearanceSection({ phone }) {
           const ok = G.cosmeticAvailable(store.data, c.id);
           return html`
             <${Option} key=${c.id} selected=${p.letter === c.value} disabled=${!ok} onSelect=${() => setPrefs({ letter: c.value })}
-              label=${c.name.replace(' квадрат', '')} title=${ok ? c.name : 'Можно купить в магазине'}>
+              label=${c.name.replace(tr(' квадрат'), '')} title=${ok ? c.name : tr('Можно купить в магазине')}>
               <span class="letter-preview"><span class="app-letter" style=${{ width: '32px', height: '32px', fontSize: '16px', background: c.value, color: '#fff' }}>${ok ? APPS[app].letter : '🔒'}</span></span>
             <//>`;
         })}

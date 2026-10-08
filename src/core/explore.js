@@ -7,15 +7,16 @@ import { parseQuery, evaluate, textMatch, textContains } from './query.js';
 import * as S from './selectors.js';
 import { liveNotes, liveAttachments } from './model.js';
 import { localDateOf, isoWeekday, addDays, WEEKDAY_SHORT, WEEKDAY_LONG } from './dates.js';
+import { LANG, tr } from './i18n.js';
 import { describeRule, ruleCategory, CATEGORIES } from './repeat.js';
 
 /** Виды обозревателя: какие задачи, по какому времени, какие поля в топе. */
 export const KINDS = {
-  all: { title: 'Все задачи', time: 'createdAt', timeLabel: 'Создана', histogram: 'Создано задач',
+  all: { title: tr('Все задачи'), time: 'createdAt', timeLabel: tr('Создана'), histogram: tr('Создано задач'),
     facets: ['статус', 'список', 'приоритет', 'повтор', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
-  done: { title: 'Выполненные', time: 'completedAt', timeLabel: 'Выполнена', histogram: 'Выполнено задач',
+  done: { title: tr('Выполненные'), time: 'completedAt', timeLabel: tr('Выполнена'), histogram: tr('Выполнено задач'),
     facets: ['список', 'приоритет', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
-  trash: { title: 'Корзина', time: 'trashedAt', timeLabel: 'В корзине', histogram: 'Удалено в корзину',
+  trash: { title: tr('Корзина'), time: 'trashedAt', timeLabel: tr('В корзине'), histogram: tr('Удалено в корзину'),
     facets: ['список', 'приоритет', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
 };
 
@@ -41,12 +42,15 @@ export function fieldChips(kind) {
 }
 
 export const PLACEHOLDER = {
-  all: 'список:Работа -статус:выполнена повтор:годы есть:заметка текст',
-  done: 'дата:2026-10 приоритет:высокий -список:Дом',
-  trash: 'устройство:телефон список:входящие текст',
+  all: LANG === 'en' ? 'list:Work -status:done repeat:years has:note text' : 'список:Работа -статус:выполнена повтор:годы есть:заметка текст',
+  done: LANG === 'en' ? 'date:2026-10 priority:high -list:Home' : 'дата:2026-10 приоритет:высокий -список:Дом',
+  trash: LANG === 'en' ? 'device:phone list:inbox text' : 'устройство:телефон список:входящие текст',
 };
 
-export const STATUS_LABEL = { active: 'активна', done: 'выполнена', trash: 'в корзине' };
+/** Как показать поле запроса: по-английски — первый английский синоним (запрос понимает оба). */
+export const fieldLabel = (f) => (LANG === 'en' ? (FIELDS[f] || []).find((x) => /^[a-z]+$/.test(x)) || f : f);
+
+export const STATUS_LABEL = { active: tr('активна'), done: tr('выполнена'), trash: tr('в корзине') };
 const STATUS_ALIASES = {
   active: ['active', 'open', 'активна', 'активные', 'активная', 'открыта', 'открытые', 'в работе'],
   done: ['done', 'completed', 'выполнена', 'выполненные', 'выполнено', 'готово', 'сделано'],
@@ -65,10 +69,10 @@ const HAS = {
   plan: ['plan', 'date', 'план', 'дата'],
   focus: ['focus', 'фокус'],
 };
-export const HAS_HINT = 'заметка, вложение, напоминание, повтор, подзадачи, родитель, срок, план, фокус';
-export const REPEAT_HINT = 'дни, недели, месяцы, годы, есть, нет — или слово из правила: будни, март, 15-го';
+export const HAS_HINT = LANG === 'en' ? 'note, file, reminder, repeat, subtasks, parent, deadline, plan, focus' : 'заметка, вложение, напоминание, повтор, подзадачи, родитель, срок, план, фокус';
+export const REPEAT_HINT = LANG === 'en' ? 'days, weeks, months, years, yes, no — or a word from the rule: weekdays, March, 15th' : 'дни, недели, месяцы, годы, есть, нет — или слово из правила: будни, март, 15-го';
 
-export const INBOX_NAME = 'Входящие';
+export const INBOX_NAME = tr('Входящие');
 const NO = ['нет', 'no', 'none', 'без', '-'];
 const YES = ['есть', 'yes', 'any', 'да', '*'];
 
@@ -106,7 +110,7 @@ export function listNames(ctx, t) {
 }
 
 export function priorityName(data, t) {
-  return S.priorityOf(data, t)?.name || 'Без приоритета';
+  return S.priorityOf(data, t)?.name || tr('Без приоритета');
 }
 
 export function deviceName(data, id) {
@@ -170,16 +174,16 @@ export function fieldValues(ctx, t, field, kind) {
 /** Группа повтора для топа: «по дням», «по неделям», «по месяцам», «по годам» или «без повтора». */
 export function repeatGroup(t) {
   const c = ruleCategory(t.repeat);
-  return c ? CATEGORIES.find((x) => x.key === c).label.toLowerCase() : 'без повтора';
+  return c ? CATEGORIES.find((x) => x.key === c).label.toLowerCase() : tr('без повтора');
 }
 
 /** «повтор:годы», «повтор:нет», «повтор:есть», «повтор:март» (по тексту правила: «каждый год 8 марта»). */
 function repeatMatch(t, value) {
   const v = value.toLowerCase();
-  if (NO.includes(v) || v === 'без повтора') return !t.repeat;
+  if (NO.includes(v) || v === 'без повтора' || v === tr('без повтора')) return !t.repeat;
   if (YES.includes(v)) return !!t.repeat;
   if (!t.repeat) return false;
-  const cat = CATEGORIES.find((c) => c.aliases.includes(v) || c.label.toLowerCase() === v || c.label.toLowerCase().replace('по ', '') === v);
+  const cat = CATEGORIES.find((c) => c.aliases.includes(v) || c.label.toLowerCase() === v || c.label.toLowerCase().replace('по ', '').replace('by ', '') === v);
   if (cat) return ruleCategory(t.repeat) === cat.key;
   return v.includes('*') ? textMatch(describeRule(t.repeat), value) : textContains(describeRule(t.repeat), value);
 }
@@ -191,7 +195,7 @@ export function matchTerm(ctx, t, { field, value }, kind) {
     case 'название': return textContains(t.title, value);
     case 'заметка': return textContains(notesText(t), value);
     case 'список': return listNames(ctx, t).some((n) => textMatch(n, value))
-      || (['inbox', 'входящие'].includes(value.toLowerCase()) && listNames(ctx, t)[0] === INBOX_NAME);
+      || (['inbox', 'входящие', INBOX_NAME.toLowerCase()].includes(value.toLowerCase()) && listNames(ctx, t)[0] === INBOX_NAME);
     case 'приоритет': return textMatch(priorityName(ctx.data, t), value);
     case 'статус': {
       const v = value.toLowerCase();
@@ -223,7 +227,7 @@ export const compile = (q) => parseQuery(q, FIELDS);
 // ---------- Диапазон времени (siem.range.*) ----------
 
 export const RANGES = ['24h', '7d', '30d', '90d', '365d', 'all'];
-export const RANGE_LABEL = { '24h': 'За сутки', '7d': 'За 7 дней', '30d': 'За 30 дней', '90d': 'За 90 дней', '365d': 'За год', all: 'За всё время' };
+export const RANGE_LABEL = { '24h': tr('За сутки'), '7d': tr('За 7 дней'), '30d': tr('За 30 дней'), '90d': tr('За 90 дней'), '365d': tr('За год'), all: tr('За всё время') };
 const RANGE_MS = { '24h': 864e5, '7d': 7 * 864e5, '30d': 30 * 864e5, '90d': 90 * 864e5, '365d': 365 * 864e5 };
 export const rangeFrom = (key, nowMs = Date.now()) => (key === 'all' ? null : new Date(nowMs - RANGE_MS[key]).toISOString());
 
@@ -258,12 +262,12 @@ const HOUR = 3600000;
 /** Шаг гистограммы под длину диапазона (histogramInterval сервера + «30 дней» для долгих архивов). */
 export function histogramInterval(fromMs, toMs) {
   const span = toMs - fromMs;
-  if (span <= 3 * HOUR) return { ms: 5 * 60000, label: '5 минут' };
-  if (span <= 2 * 24 * HOUR) return { ms: HOUR, label: '1 час' };
-  if (span <= 14 * 24 * HOUR) return { ms: 6 * HOUR, label: '6 часов' };
-  if (span <= 90 * 24 * HOUR) return { ms: 24 * HOUR, label: '1 день' };
-  if (span <= 730 * 24 * HOUR) return { ms: 7 * 24 * HOUR, label: '7 дней' };
-  return { ms: 30 * 24 * HOUR, label: '30 дней' };
+  if (span <= 3 * HOUR) return { ms: 5 * 60000, label: tr('5 минут') };
+  if (span <= 2 * 24 * HOUR) return { ms: HOUR, label: tr('1 час') };
+  if (span <= 14 * 24 * HOUR) return { ms: 6 * HOUR, label: tr('6 часов') };
+  if (span <= 90 * 24 * HOUR) return { ms: 24 * HOUR, label: tr('1 день') };
+  if (span <= 730 * 24 * HOUR) return { ms: 7 * 24 * HOUR, label: tr('7 дней') };
+  return { ms: 30 * 24 * HOUR, label: tr('30 дней') };
 }
 
 /**
@@ -284,27 +288,27 @@ export function histogram(rows, kind, from, nowMs = Date.now()) {
     const i = Math.floor((align(ms) - start) / interval.ms);
     if (i >= 0 && i < n) buckets[i].count++;
   }
-  return { interval: interval.label, buckets };
+  return { interval: interval.label, ms: interval.ms, buckets };
 }
 
 // ---------- Массовые действия ----------
 
 /** Почему элемент не прошёл массовую операцию (toastBulkResult: «сколько прошло, сколько нет и почему»). */
 export const BULK_REASONS = {
-  NOT_FOUND: 'задача уже удалена',
-  ALREADY_DONE: 'уже выполнены',
-  NOT_DONE: 'ещё не выполнены',
-  IN_TRASH: 'лежат в корзине',
-  NOT_IN_TRASH: 'не в корзине',
-  REPEATING: 'повторяющиеся — их отмечают по одной',
-  UNCHANGED: 'и так такие',
+  NOT_FOUND: tr('задача уже удалена'),
+  ALREADY_DONE: tr('уже выполнены'),
+  NOT_DONE: tr('ещё не выполнены'),
+  IN_TRASH: tr('лежат в корзине'),
+  NOT_IN_TRASH: tr('не в корзине'),
+  REPEATING: tr('повторяющиеся — их отмечают по одной'),
+  UNCHANGED: tr('и так такие'),
 };
 
 /** Итог массового действия одной строкой. */
-export function bulkSummary(result, verb = 'Готово') {
+export function bulkSummary(result, verb = tr('Готово')) {
   if (!result.failed.length) return `${verb}: ${result.succeeded}`;
   const byCode = new Map();
   for (const f of result.failed) byCode.set(f.code, (byCode.get(f.code) || 0) + 1);
   const why = [...byCode].map(([code, n]) => `${BULK_REASONS[code] || code} (${n})`).join(', ');
-  return `${verb}: ${result.succeeded} из ${result.total}. Не подошли: ${why}`;
+  return tr('{verb}: {succeeded} из {total}. Не подошли: {why}', { verb, succeeded: result.succeeded, total: result.total, why });
 }

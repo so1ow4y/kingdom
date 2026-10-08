@@ -16,13 +16,14 @@ import { VoiceRecorder, micPermission, recordingSupported } from '../../media/re
 import { drive } from '../../sync/syncEngine.js';
 import { tokenValid } from '../../google/auth.js';
 import { readLocal, writeLocal } from '../hooks.js';
+import { tr } from '../../core/i18n.js';
 
 const STATUS_TEXT = {
-  loading: 'Загрузка…',
-  offline: 'Нет на устройстве — нужен интернет и вход в Google',
-  missing: 'Файл не найден на Диске',
-  corrupt: 'Файл на Диске повреждён',
-  error: 'Не удалось скачать',
+  loading: tr('Загрузка…'),
+  offline: tr('Нет на устройстве — нужен интернет и вход в Google'),
+  missing: tr('Файл не найден на Диске'),
+  corrupt: tr('Файл на Диске повреждён'),
+  error: tr('Не удалось скачать'),
 };
 
 const canDownload = () => navigator.onLine && tokenValid() && !!store.sync.layout;
@@ -47,7 +48,7 @@ const FILE_ICONS = { pdf: '📕', doc: '📘', docx: '📘', xls: '📗', xlsx: 
 function Missing({ media, onLoad, label }) {
   const st = mediaStatus(media.id);
   return html`<button type="button" class="att-missing" onClick=${onLoad} disabled=${st === 'loading'}>
-    <span>${st === 'loading' ? '⏳' : '☁'}</span><span>${STATUS_TEXT[st] || label || `Загрузить · ${formatBytes(media.size)}`}</span></button>`;
+    <span>${st === 'loading' ? '⏳' : '☁'}</span><span>${STATUS_TEXT[st] || label || tr('Загрузить · {p0}', { p0: formatBytes(media.size) })}</span></button>`;
 }
 
 /** Плеер голосового: play/pause, перемотка, длительность, скорость 1× / 1.5× / 2×. */
@@ -63,7 +64,7 @@ export function AudioPlayer({ media, url, name }) {
   const toggle = () => {
     const a = el.current;
     if (!a) return;
-    if (a.paused) a.play().catch(() => showSnackbar('Этот формат не воспроизводится в этом браузере — скачай файл'));
+    if (a.paused) a.play().catch(() => showSnackbar(tr('Этот формат не воспроизводится в этом браузере — скачай файл')));
     else a.pause();
   };
   const nextRate = () => {
@@ -76,7 +77,7 @@ export function AudioPlayer({ media, url, name }) {
     <div class="audio-player">
       <audio ref=${el} src=${url} preload="metadata" onPlay=${() => setPlaying(true)} onPause=${() => setPlaying(false)}
         onEnded=${() => { setPlaying(false); setPos(0); }} onTimeUpdate=${(e) => setPos(e.target.currentTime * 1000)}></audio>
-      <button type="button" class="ap-play" onClick=${toggle} aria-label=${playing ? 'Пауза' : 'Слушать'} disabled=${!url}>
+      <button type="button" class="ap-play" onClick=${toggle} aria-label=${playing ? tr('Пауза') : tr('Слушать')} disabled=${!url}>
         ${playing ? html`<span class="ap-pause"></span>` : html`<span class="ap-tri"></span>`}</button>
       <div class="ap-main">
         <input type="range" class="ap-seek" min="0" max=${Math.max(1, Math.round(total))} step="100" value=${Math.round(pos)} disabled=${!url}
@@ -108,7 +109,7 @@ function AttachmentTile({ att, media, onOpen, onDelete, locked, handle, dragging
   if (kind === 'audio') {
     return html`<div class=${'att-row att-audio' + (dragging ? ' dragging' : '')} data-aid=${att.id}>
       ${grip}
-      ${url ? html`<${AudioPlayer} media=${media} url=${url}/>` : html`<${Missing} media=${media} onLoad=${() => load(true)} label=${`🎤 ${formatDuration(media.durationMs)} · загрузить`}/>`}
+      ${url ? html`<${AudioPlayer} media=${media} url=${url}/>` : html`<${Missing} media=${media} onLoad=${() => load(true)} label=${tr('🎤 {p0} · загрузить', { p0: formatDuration(media.durationMs) })}/>`}
       ${del}</div>`;
   }
   const icon = FILE_ICONS[media.ext] || '📎';
@@ -259,7 +260,7 @@ function AttachBar({ taskId, noteId }) {
           <label class="mini-chip" title="Фото и видео из галереи"><input type="file" accept="image/*,video/*" multiple hidden onChange=${pick}/>🖼 Фото и видео</label>
           <label class="mini-chip" title="Любые файлы"><input type="file" multiple hidden onChange=${pick}/>📄 Файл</label>
           <button type="button" class=${'mini-chip' + (original ? ' on' : '')} onClick=${flip} aria-pressed=${original}
-            title=${original ? 'Фото сохраняются без сжатия (у JPEG удаляется геолокация)' : 'Фото сжимаются до ~1600 px (рекомендуется)'}>${original ? 'Фото: оригинал' : 'Фото: сжать'}</button>
+            title=${original ? tr('Фото сохраняются без сжатия (у JPEG удаляется геолокация)') : tr('Фото сжимаются до ~1600 px (рекомендуется)')}>${original ? tr('Фото: оригинал') : tr('Фото: сжать')}</button>
         </div>` : null}
     </div>`;
 }
@@ -275,25 +276,25 @@ const sessionSet = (k, v) => session.set(k, v);
  */
 export async function startVoice(taskId, noteId, newNote) {
   if (!recordingSupported()) {
-    showSnackbar('Этот браузер не умеет записывать звук');
+    showSnackbar(tr('Этот браузер не умеет записывать звук'));
     if (newNote) A.dropEmptyNote(taskId, noteId);
     return;
   }
   const perm = await micPermission();
   if (perm === 'denied') {
     await ask({
-      title: 'Нет доступа к микрофону',
-      text: 'Браузер запретил Kingdom микрофон. Чтобы разрешить: нажми на значок слева от адреса сайта (замок или «настройки сайта») → «Микрофон» → «Разрешить», затем попробуй снова. В установленном приложении на Android: Настройки телефона → Приложения → Chrome → Разрешения → Микрофон.',
-      buttons: [{ label: 'Понятно', value: true, kind: 'primary' }],
+      title: tr('Нет доступа к микрофону'),
+      text: tr('Браузер запретил Kingdom микрофон. Чтобы разрешить: нажми на значок слева от адреса сайта (замок или «настройки сайта») → «Микрофон» → «Разрешить», затем попробуй снова. В установленном приложении на Android: Настройки телефона → Приложения → Chrome → Разрешения → Микрофон.'),
+      buttons: [{ label: tr('Понятно'), value: true, kind: 'primary' }],
     });
     if (newNote) A.dropEmptyNote(taskId, noteId);
     return;
   }
   if (perm !== 'granted' && !readLocal('micExplained', false)) {
     const ok = await ask({
-      title: 'Запись голоса',
-      text: 'Голосовая заметка записывается прямо в приложении и хранится как аудиофайл (без расшифровки в текст): на этом устройстве, а после «Пуш» — на твоём Google Диске. Сейчас браузер спросит разрешение на микрофон.',
-      buttons: [{ label: 'Отмена', value: false }, { label: 'Продолжить', value: true, kind: 'primary' }],
+      title: tr('Запись голоса'),
+      text: tr('Голосовая заметка записывается прямо в приложении и хранится как аудиофайл (без расшифровки в текст): на этом устройстве, а после «Пуш» — на твоём Google Диске. Сейчас браузер спросит разрешение на микрофон.'),
+      buttons: [{ label: tr('Отмена'), value: false }, { label: tr('Продолжить'), value: true, kind: 'primary' }],
     });
     if (!ok) {
       if (newNote) A.dropEmptyNote(taskId, noteId);
@@ -334,7 +335,7 @@ export function RecorderSheet({ taskId, noteId, newNote }) {
       onTick: (t) => alive && setMs(t),
       onLevel: (l) => alive && setLevel(l),
       onLimit: () => {
-        showSnackbar(`Достигнута максимальная длина записи (${formatDuration(maxMs)}) — сохранено`);
+        showSnackbar(tr('Достигнута максимальная длина записи ({p0}) — сохранено', { p0: formatDuration(maxMs) }));
         save();
       },
     }).then((r) => {
@@ -346,8 +347,8 @@ export function RecorderSheet({ taskId, noteId, newNote }) {
       setState('recording');
     }).catch((e) => {
       setState('error');
-      setError(e?.name === 'NotAllowedError' ? 'Нет доступа к микрофону. Разреши его в настройках сайта браузера (значок слева от адреса) и попробуй снова.'
-        : e?.name === 'NotFoundError' ? 'Микрофон не найден.' : `Не удалось начать запись: ${e?.message || e}`);
+      setError(e?.name === 'NotAllowedError' ? tr('Нет доступа к микрофону. Разреши его в настройках сайта браузера (значок слева от адреса) и попробуй снова.')
+        : e?.name === 'NotFoundError' ? tr('Микрофон не найден.') : tr('Не удалось начать запись: {p0}', { p0: e?.message || e }));
     });
     return () => {
       alive = false;
@@ -373,11 +374,11 @@ export function RecorderSheet({ taskId, noteId, newNote }) {
           <div class=${'rec-dot' + (paused || state !== 'recording' ? ' idle' : '')}></div>
           <div class="rec-time">${formatDuration(ms)}<small> / ${formatDuration(maxMs)}</small></div>
           <div class="rec-level" aria-hidden="true"><i style=${{ width: Math.round(level * 100) + '%' }}></i></div>
-          <div class="rec-state">${state === 'starting' ? 'Включаю микрофон…' : state === 'saving' ? 'Сохраняю…' : paused ? 'Пауза' : 'Идёт запись'}</div>
+          <div class="rec-state">${state === 'starting' ? tr('Включаю микрофон…') : state === 'saving' ? tr('Сохраняю…') : paused ? tr('Пауза') : tr('Идёт запись')}</div>
         </div>
         <div class="rec-actions">
           <button class="btn rec-btn" onClick=${closeSheet} disabled=${state === 'saving'}>Отмена</button>
-          <button class="btn rec-btn" onClick=${pauseResume} disabled=${state !== 'recording'}>${paused ? '▶ Продолжить' : '⏸ Пауза'}</button>
+          <button class="btn rec-btn" onClick=${pauseResume} disabled=${state !== 'recording'}>${paused ? tr('▶ Продолжить') : tr('⏸ Пауза')}</button>
           <button class="btn primary rec-btn" onClick=${save} disabled=${state !== 'recording'}>✓ Готово</button>
         </div>`}
     <//>`;

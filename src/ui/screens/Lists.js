@@ -15,12 +15,13 @@ import { store, openSheet } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { SkillBadge, SkillBar } from '../components/Skills.js';
+import { tr } from '../../core/i18n.js';
 
 const SECTIONS = [
-  ['scheduled', 'Запланировано', 'Порядок здесь по дате — можно вложить или вынести'],
-  ['noDate', 'Без даты', null],
-  ['repeating', 'Повторяющиеся', 'Порядок здесь по названию — можно вложить или вынести'],
-  ['done', 'Выполнено', 'Порядок здесь по времени выполнения'],
+  ['scheduled', tr('Запланировано'), tr('Порядок здесь по дате — можно вложить или вынести')],
+  ['noDate', tr('Без даты'), null],
+  ['repeating', tr('Повторяющиеся'), tr('Порядок здесь по названию — можно вложить или вынести')],
+  ['done', tr('Выполнено'), tr('Порядок здесь по времени выполнения')],
 ];
 const EXPANDED_LIMIT = 10;
 
@@ -31,7 +32,7 @@ function sectionZone(listId, section, autoReason, crossList = false) {
     listId,
     crossList,
     accepts: (t) => S.listSection(t) === section,
-    rejectReason: 'Задача из другого раздела — сюда её можно только вложить',
+    rejectReason: tr('Задача из другого раздела — сюда её можно только вложить'),
     autoReason,
   };
 }
@@ -42,18 +43,18 @@ function ListRow({ list, count, handle = null, reorder = false, onUp, onDown, op
       <${Link} to=${list ? '/list/' + list.id : '/inbox'} className="list-link">
         <i class="list-color" style=${{ background: list ? list.color : 'var(--muted)' }}></i>
         <span class="list-emoji">${list ? list.emoji || '•' : '📥'}</span>
-        <span class="list-name">${list ? list.name : 'Входящие'}</span>
+        <span class="list-name">${list ? list.name : tr('Входящие')}</span>
         ${list ? html`<${SkillBadge} listId=${list.id}/>` : null}
         <span class="list-count">${count || ''}</span>
       <//>
-      ${list && !reorder ? html`<button class="icon-btn" title="Изменить список" aria-label=${'Изменить список ' + list.name}
+      ${list && !reorder ? html`<button class="icon-btn" title="Изменить список" aria-label=${tr('Изменить список ') + list.name}
         disabled=${!!store.ui.readOnly} onClick=${() => openSheet('listEditor', { listId: list.id })}><${Icon} name="edit" size=${18}/></button>` : null}
       ${reorder ? html`
         <button class="icon-btn" onClick=${onUp} aria-label="Выше" disabled=${!onUp}><${Icon} name="up" size=${18}/></button>
         <button class="icon-btn" onClick=${onDown} aria-label="Ниже" disabled=${!onDown}><${Icon} name="down" size=${18}/></button>
         <${DragHandle} handle=${handle}/>`
         : onExpand ? html`<button class="list-expand" onClick=${onExpand} aria-expanded=${!!open}
-            aria-label=${(open ? 'Свернуть ' : 'Раскрыть ') + (list ? list.name : 'Входящие')} title=${open ? 'Свернуть' : 'Показать задачи здесь'}>
+            aria-label=${(open ? tr('Свернуть ') : tr('Раскрыть ')) + (list ? list.name : tr('Входящие'))} title=${open ? tr('Свернуть') : tr('Показать задачи здесь')}>
             <${Icon} name=${open ? 'chevronDown' : 'chevron'} size=${20}/></button>` : null}
     </div>`;
 }
@@ -80,17 +81,17 @@ function ExpandedList({ listId }) {
       <${TaskTree} key=${zone} zone=${zone} roots=${roots} cfg=${cfg} showList=${false} limit=${left} className="compact"/>`);
     left -= roots.length;
   }
-  const name = inbox ? 'Входящие' : list?.name || '';
+  const name = inbox ? tr('Входящие') : list?.name || '';
   return html`
     <div class="list-expanded">
       ${list ? html`<${SkillBar} list=${list}/>` : null}
       ${total ? parts : html`<${EmptyDrop} zone=${'exp:' + listId + ':empty'}
         cfg=${inbox ? { ...INBOX_ZONE, crossList: true, manual: false } : { manual: false, listId, crossList: true, accepts: () => false }}
-        text=${inbox ? 'Входящие пусты — перетащи сюда задачу из списка' : 'Задач нет — перетащи сюда задачу из другого списка'}/>`}
+        text=${inbox ? tr('Входящие пусты — перетащи сюда задачу из списка') : tr('Задач нет — перетащи сюда задачу из другого списка')}/>`}
       ${total > EXPANDED_LIMIT && !all ? html`<button class="link-btn" onClick=${() => setAll(true)}>Показать ещё ${total - EXPANDED_LIMIT}</button>` : null}
-      ${readOnly ? null : html`<${AddLine} placeholder=${`Задача в «${name}»`}
+      ${readOnly ? null : html`<${AddLine} placeholder=${tr('Задача в «{name}»', { name })}
         onAdd=${(title) => A.createTask({ title, listIds: inbox ? [] : [listId] })}/>`}
-      <${Link} to=${inbox ? '/inbox' : '/list/' + listId} className="link-btn exp-open">Открыть ${inbox ? '«Входящие»' : 'список'} →<//>
+      <${Link} to=${inbox ? '/inbox' : '/list/' + listId} className="link-btn exp-open">Открыть ${inbox ? tr('«Входящие»') : tr('список')} →<//>
     </div>`;
 }
 
@@ -114,9 +115,9 @@ export function ListsScreen() {
       <div class="toolbar">
         ${lists.length > 1 ? html`
           <button class=${'btn' + (reorder ? ' selected' : '')} onClick=${() => setReorder(!reorder)} disabled=${readOnly}>
-            ${reorder ? 'Готово' : 'Изменить порядок'}</button>` : null}
+            ${reorder ? tr('Готово') : tr('Изменить порядок')}</button>` : null}
         ${reorder ? null : html`<button class="btn" onClick=${() => setOpenIds(anyOpen ? [] : allIds)}>
-          <${Icon} name=${anyOpen ? 'up' : 'down'} size=${18}/> ${anyOpen ? 'Свернуть все' : 'Развернуть все'}</button>`}
+          <${Icon} name=${anyOpen ? 'up' : 'down'} size=${18}/> ${anyOpen ? tr('Свернуть все') : tr('Развернуть все')}</button>`}
       </div>
       <button class="new-list-card" onClick=${() => openSheet('listEditor', { listId: null })} disabled=${readOnly}>
         <${Icon} name="plus" size=${20}/> Новый список</button>

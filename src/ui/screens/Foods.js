@@ -1,7 +1,9 @@
 // Feast (обновление 0.11): «Продукты» — своя база продуктов таблицей, как обозреватель задач: строка
 // «поле:значение», топ значений справа, галочки и массовые действия, раскрытие строки; карточка продукта
 // открывается справа (на широком экране) или на весь экран: КБЖУ, витамины и минералы (по умолчанию нули),
-// несколько штрихкодов (сканер или вручную), дата создания.
+// несколько штрихкодов (сканер или вручную), дата создания. 0.12.5: каталог общий — продукты и лекарства (фильтр
+// «Всё / Продукты / Лекарства», поле «тип:»); у лекарства — форма, обычная доза, без КБЖУ и наград; к продукту можно
+// привязать лекарства, которые предлагаются при записи.
 
 import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
@@ -9,18 +11,19 @@ import { openFood, currentFoodId, Link } from '../router.js';
 import { store, openSheet, confirm } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
 import * as F from '../../core/feast.js';
-import { FOOD_FIELDS, FOOD_PLACEHOLDER, makeFoodContext, searchFoods, foodFacets, facetTerm } from '../../core/foodQuery.js';
+import { FOOD_FIELDS, FOOD_PLACEHOLDER, makeFoodContext, searchFoods, foodFacets, facetTerm, foodFieldLabel } from '../../core/foodQuery.js';
 import { withTerm } from '../../core/query.js';
-import { nv, fmt, MACROS, NUTRIENT } from '../../core/nutrition.js';
+import { nv, fmt, num, MACROS, NUTRIENT, MED_UNITS, MED_UNIT, amountLabel } from '../../core/nutrition.js';
 import { encodeEan, normalizeBarcode, barcodeWarning } from '../../core/barcode.js';
 import { formatMoment, localDateOf, longDate } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { useSelection } from '../components/Explorer.js';
 import { NutrientEditor, NutrientTable, macroLine, RewardEditor } from '../components/FeastParts.js';
 import { openAddFood } from '../components/AddFood.js';
+import { tr } from '../../core/i18n.js';
 
 const PAGE = 50;
-const SYNTAX = '· * — подстановка · пробел — оба условия · OR — любое · - — исключить · числа: >200, <5, 100..300';
+const SYNTAX = tr('· * — подстановка · пробел — оба условия · OR — любое · - — исключить · числа: >200, <5, 100..300');
 const readOnly = () => !!store.ui.feastReadOnly;
 
 /** Штрихкод картинкой (EAN-13/EAN-8) или просто цифрами. */
@@ -28,7 +31,7 @@ export function BarcodeImage({ code, height = 34 }) {
   const mods = encodeEan(code);
   if (!mods) return null; // не EAN (или контрольная цифра не сходится) — только цифры рядом
   const w = mods.length + 14;
-  return html`<svg class="bc-svg" viewBox=${`0 0 ${w} ${height}`} width=${w * 1.6} height=${height} role="img" aria-label=${'Штрихкод ' + code}
+  return html`<svg class="bc-svg" viewBox=${`0 0 ${w} ${height}`} width=${w * 1.6} height=${height} role="img" aria-label=${tr('Штрихкод ') + code}
     preserveAspectRatio="none">
     <rect width=${w} height=${height} fill="#fff"/>
     ${mods.map((b, i) => (b ? html`<rect key=${i} x=${7 + i} y="2" width="1" height=${height - 4} fill="#000"/>` : null))}
@@ -40,7 +43,7 @@ function Facets({ list, onFilter }) {
     ${list.map((f) => {
       const max = Math.max(1, ...f.values.map((v) => v.count));
       return html`<div class="ex-card" key=${f.field + (f.label || '')}>
-        <p class="ex-facet-title">Топ: ${f.label || f.field}</p>
+        <p class="ex-facet-title">Топ: ${f.label || foodFieldLabel(f.field)}</p>
         ${!f.values.length ? html`<p class="ex-empty small">—</p>` : null}
         <ul class="ex-facet-list">
           ${f.values.map((v) => html`<li key=${v.value} class="ex-facet">
@@ -56,11 +59,21 @@ function Facets({ list, onFilter }) {
   </aside>`;
 }
 
-const SORTS = [['created', 'Сначала новые'], ['name', 'По названию'], ['kcal', 'Калорийнее'], ['protein', 'Больше белка'], ['uses', 'Чаще ем']];
+const SORTS = [['created', tr('Сначала новые')], ['name', tr('По названию')], ['kcal', tr('Калорийнее')], ['protein', tr('Больше белка')], ['uses', tr('Чаще ем')]];
+const KINDS = [['all', tr('Всё')], ['food', tr('Продукты')], ['med', tr('💊 Лекарства')]];
+const kindOk = (kind, f) => kind === 'all' || (kind === 'med') === F.isMed(f);
+const catalogLabel = (n) => countLabel(n, ['запись', 'записи', 'записей']);
+
+/** Новый продукт или лекарство — сразу открыть карточку. */
+export async function createCatalogItem(kind = 'food') {
+  const f = await FA.createFood(kind === 'med' ? { name: tr('Новое лекарство'), kind: 'med', unit: 'tab', dose: 1 } : { name: tr('Новый продукт') });
+  if (f) openFood(f.id);
+}
 
 export function FoodsScreen({ query = {} }) {
   const [draft, setDraft] = useState(query.q || '');
   const [q, setQ] = useState(query.q || '');
+  const [kind, setKind] = useState(['food', 'med'].includes(query.kind) ? query.kind : 'all');
   const [sort, setSort] = useState('created');
   const [skip, setSkip] = useState(0);
   const [open, setOpen] = useState(() => new Set());
@@ -69,8 +82,9 @@ export function FoodsScreen({ query = {} }) {
   const res = useMemo(() => {
     const ctx = makeFoodContext(store.feast, tz);
     const r = searchFoods(ctx, q, sort);
-    return { ...r, ctx, facets: foodFacets(ctx, r.rows) };
-  }, [store.version, q, sort, tz]);
+    const rows = r.rows.filter((f) => kindOk(kind, f));
+    return { ...r, rows, ctx, facets: foodFacets(ctx, rows) };
+  }, [store.version, q, sort, tz, kind]);
   const total = res.rows.length;
   const page = res.rows.slice(skip, skip + PAGE);
   const apply = (next) => {
@@ -80,7 +94,7 @@ export function FoodsScreen({ query = {} }) {
   };
   const addTerm = (field, value, negate = false) => {
     const [f, v, neg] = facetTerm(field, value);
-    apply(withTerm(q, f, v, negate !== neg));
+    apply(withTerm(q, foodFieldLabel(f), v, negate !== neg));
   };
   const toggleOpen = (id) => setOpen((prev) => {
     const n = new Set(prev);
@@ -89,25 +103,32 @@ export function FoodsScreen({ query = {} }) {
     return n;
   });
   const del = async (ids) => {
-    if (!(await confirm({ title: 'Удалить продукты?', text: `Затронет ${countLabel(ids.length, ['продукт', 'продукта', 'продуктов'])}. Записи в дневнике останутся.`, confirmLabel: 'Удалить', danger: true }))) return;
+    if (!(await confirm({ title: tr('Удалить из каталога?'), text: tr('Затронет {p0}. Записи в дневнике останутся.', { p0: catalogLabel(ids.length) }), confirmLabel: tr('Удалить'), danger: true }))) return;
     const r = await FA.deleteFoods(ids);
     if (r) selection.clear();
   };
   const current = currentFoodId();
   const picked = page.map((f) => f.id);
   const pickedOnPage = picked.filter((id) => selection.has(id)).length;
+  const all = [...store.feast.foods.values()].filter((f) => !f.deletedAt);
+  const medCount = all.filter(F.isMed).length;
 
   return html`
     <div class="screen foods">
       <header class="page-header">
-        <p class="page-desc">Твоя база продуктов: ${countLabel([...store.feast.foods.values()].filter((f) => !f.deletedAt).length, ['продукт', 'продукта', 'продуктов'])}.
-          Значения — на 100 г (или 100 мл), чего не указано — ноль. К продукту можно привязать несколько штрихкодов.</p>
+        <p class="page-desc">Твоя база: ${countLabel(all.length - medCount, ['продукт', 'продукта', 'продуктов'])} и ${countLabel(medCount, ['лекарство', 'лекарства', 'лекарств'])}.
+          У продуктов значения — на 100 г (или 100 мл), чего не указано — ноль. У лекарства — форма и обычная доза. Можно привязать несколько штрихкодов.</p>
         <div class="page-actions">
           <button type="button" class="btn" disabled=${readOnly()} onClick=${() => openSheet('scan', { target: 'open' })}><${Icon} name="barcode" size=${16}/> Сканировать</button>
-          <button type="button" class="btn primary" disabled=${readOnly()} onClick=${async () => { const f = await FA.createFood({ name: 'Новый продукт' }); if (f) openFood(f.id); }}>
+          <button type="button" class="btn" disabled=${readOnly()} onClick=${() => createCatalogItem('med')}>💊 Новое лекарство</button>
+          <button type="button" class="btn primary" disabled=${readOnly()} onClick=${() => createCatalogItem('food')}>
             <${Icon} name="plus" size=${16}/> Новый продукт</button>
         </div>
       </header>
+      <div class="chip-row wrap foods-kinds" role="tablist" aria-label="Что показывать">
+        ${KINDS.map(([k, l]) => html`<button type="button" role="tab" key=${k} aria-selected=${kind === k} class=${'chip' + (kind === k ? ' selected' : '')}
+          onClick=${() => { setKind(k); setSkip(0); }}>${l}</button>`)}
+      </div>
       <div class="explorer">
         <form class="ex-query" onSubmit=${(e) => { e.preventDefault(); apply(draft); }}>
           <div class="ex-query-row">
@@ -124,7 +145,7 @@ export function FoodsScreen({ query = {} }) {
           </div>
           <div class="ex-fields">
             <span>Поля:</span>
-            ${Object.keys(FOOD_FIELDS).map((f) => html`<button type="button" class="ex-field" key=${f} onClick=${() => setDraft((d) => `${d.trim()} ${f}:`.trim())}>${f}:</button>`)}
+            ${Object.keys(FOOD_FIELDS).map((f) => html`<button type="button" class="ex-field" key=${f} onClick=${() => setDraft((d) => `${d.trim()} ${foodFieldLabel(f)}:`.trim())}>${foodFieldLabel(f)}:</button>`)}
             <span class="ex-syntax">${SYNTAX}</span>
           </div>
         </form>
@@ -145,41 +166,44 @@ export function FoodsScreen({ query = {} }) {
                     checked=${pickedOnPage > 0 && pickedOnPage === picked.length} ref=${(el) => el && (el.indeterminate = pickedOnPage > 0 && pickedOnPage < picked.length)}
                     onChange=${() => selection.togglePage(picked)}/></th>
                   <th class="ex-w-chev"></th>
-                  <th>Продукт</th>
-                  <th class="num">ккал</th>
+                  <th>${kind === 'med' ? tr('Лекарство') : kind === 'food' ? tr('Продукт') : tr('Продукт / лекарство')}</th>
+                  <th class="num">${kind === 'med' ? tr('доза') : tr('ккал')}</th>
                   ${MACROS.map((k) => html`<th class="num ex-col-list" key=${k}>${NUTRIENT[k].short}</th>`)}
                   <th class="ex-col-prio">Штрихкоды</th>
                   <th class="ex-col-time">Создан</th>
                 </tr></thead>
                 <tbody>
-                  ${!page.length ? html`<tr><td colSpan="9" class="ex-empty-row">${q ? 'Ничего не найдено.' : 'Продуктов пока нет — создай свой или отсканируй штрихкод.'}</td></tr>` : null}
+                  ${!page.length ? html`<tr><td colSpan="9" class="ex-empty-row">${q ? tr('Ничего не найдено.') : kind === 'med' ? tr('Лекарств пока нет — нажми «Новое лекарство».') : tr('Продуктов пока нет — создай свой или отсканируй штрихкод.')}</td></tr>` : null}
                   ${page.map((f) => {
                     const codes = F.foodBarcodes(f);
                     const isOpen = open.has(f.id);
                     const uses = res.ctx.usage.get(f.id)?.count || 0;
+                    const med = F.isMed(f);
                     return html`
                       <tr key=${f.id} class=${'ex-row' + (selection.has(f.id) ? ' selected' : '') + (current === f.id ? ' current' : '')} onClick=${() => toggleOpen(f.id)} aria-expanded=${isOpen}>
                         <td class="ex-w-check" onClick=${(e) => e.stopPropagation()}><input type="checkbox" class="ex-check" aria-label="Выбрать строку"
                           checked=${selection.has(f.id)} onChange=${() => selection.toggle(f.id)}/></td>
                         <td class="ex-w-chev"><${Icon} name=${isOpen ? 'chevronDown' : 'chevron'} size=${16}/></td>
                         <td class="ex-title-cell">
-                          <button type="button" class="ex-title" onClick=${(e) => { e.stopPropagation(); openFood(f.id); }}>${f.favorite ? '★ ' : ''}${f.name}</button>
+                          <button type="button" class="ex-title" onClick=${(e) => { e.stopPropagation(); openFood(f.id); }}>${f.favorite ? '★ ' : ''}${med ? '💊 ' : ''}${f.name}</button>
                           ${f.brand ? html`<button type="button" class="ex-value fd-brand" onClick=${(e) => { e.stopPropagation(); addTerm('бренд', f.brand); }}>${f.brand}</button>` : null}
-                          <div class="ex-narrow-meta"><span>${macroLine(f.nutrients)}</span>${codes.length ? html`<span>▮ ${codes.length}</span>` : null}</div>
+                          <div class="ex-narrow-meta"><span>${med ? tr('Лекарство · ') + (MED_UNIT[f.unit]?.label || '') : macroLine(f.nutrients)}</span>${codes.length ? html`<span>▮ ${codes.length}</span>` : null}</div>
                         </td>
-                        <td class="num"><b>${fmt(nv(f.nutrients, 'kcal'), 'kcal')}</b></td>
-                        ${MACROS.map((k) => html`<td class="num ex-col-list" key=${k}>${fmt(nv(f.nutrients, k), k)}</td>`)}
+                        <td class="num">${med ? html`<span class="med-dose">${amountLabel({ amount: f.dose || 1, unit: f.unit })}</span>` : html`<b>${fmt(nv(f.nutrients, 'kcal'), 'kcal')}</b>`}</td>
+                        ${MACROS.map((k) => html`<td class="num ex-col-list" key=${k}>${med ? html`<span class="muted">—</span>` : fmt(nv(f.nutrients, k), k)}</td>`)}
                         <td class="ex-col-prio">${codes.length ? codes.map((c) => html`<button type="button" key=${c} class="ex-value bc-chip" title="Искать по штрихкоду"
-                          onClick=${(e) => { e.stopPropagation(); apply(withTerm(q, 'штрихкод', c)); }}>${c}</button>`) : html`<span class="muted">—</span>`}</td>
+                          onClick=${(e) => { e.stopPropagation(); apply(withTerm(q, foodFieldLabel('штрихкод'), c)); }}>${c}</button>`) : html`<span class="muted">—</span>`}</td>
                         <td class="ex-col-time ex-time">${formatMoment(f.createdAt, tz)}</td>
                       </tr>
                       ${isOpen ? html`<tr class="ex-details" key=${f.id + ':d'}><td colSpan="9">
                         <div class="ex-details-body">
+                          ${f.note ? html`<p class="fd-note">${f.note}</p>` : null}
+                          ${med ? html`<p class="muted small">${MED_UNIT[f.unit]?.label || ''} · обычная доза ${amountLabel({ amount: f.dose || 1, unit: f.unit })} · принято: ${countLabel(uses, ['раз', 'раза', 'раз'])}</p>` : html`
                           <${NutrientTable} values=${f.nutrients} pct=${false}/>
-                          <p class="muted small">${f.unit === 'ml' ? 'На 100 мл' : 'На 100 г'}${f.servingSize ? ` · порция ${fmt(f.servingSize, 'x')} ${f.unit === 'ml' ? 'мл' : 'г'}` : ''} · в дневнике: ${countLabel(uses, ['раз', 'раза', 'раз'])}</p>
+                          <p class="muted small">${f.unit === 'ml' ? tr('На 100 мл') : tr('На 100 г')}${f.servingSize ? tr(' · порция {p0} {p1}', { p0: fmt(f.servingSize, 'x'), p1: f.unit === 'ml' ? tr('мл') : tr('г') }) : ''} · в дневнике: ${countLabel(uses, ['раз', 'раза', 'раз'])}</p>`}
                           <div class="ex-details-actions">
                             <button type="button" class="btn small" onClick=${() => openFood(f.id)}><${Icon} name="chevron" size=${16}/> Открыть карточку</button>
-                            <button type="button" class="btn small" disabled=${readOnly()} onClick=${() => openAddFood({ foodId: f.id })}><${Icon} name="plus" size=${16}/> В дневник</button>
+                            <button type="button" class="btn small" disabled=${readOnly()} onClick=${() => openAddFood({ foodId: f.id })}><${Icon} name="plus" size=${16}/> ${med ? tr('Записать приём') : tr('В дневник')}</button>
                             <button type="button" class="btn small danger-outline" disabled=${readOnly()} onClick=${() => del([f.id])}><${Icon} name="trash" size=${16}/> Удалить</button>
                           </div>
                         </div></td></tr>` : null}`;
@@ -215,6 +239,68 @@ function TextField({ label, value, onCommit, placeholder = '', maxLength = F.FOO
       onInput=${(e) => setDraft(e.target.value)} onBlur=${commit} onKeyDown=${(e) => { if (e.key === 'Enter') e.target.blur(); }}/></label>`;
 }
 
+/** Заметка к продукту или лекарству целиком — многострочная, сохраняется при уходе из поля. */
+function AreaField({ label, value, onCommit, placeholder = '', disabled = false }) {
+  const [draft, setDraft] = useState(null);
+  const commit = () => {
+    if (draft === null) return;
+    if (draft !== (value || '')) onCommit(draft);
+    setDraft(null);
+  };
+  return html`<label class="field fc-note"><span>${label}</span>
+    <textarea class="note-area" rows="3" value=${draft ?? value ?? ''} placeholder=${placeholder} maxlength=${F.NOTE_MAX} disabled=${disabled}
+      onInput=${(e) => setDraft(e.target.value)} onBlur=${commit}></textarea></label>`;
+}
+
+/** Лекарства, которые записываются вместе с продуктом (при записи — галочки, их можно снять или поменять дозу). */
+function LinkedMedsEditor({ f, ro }) {
+  const [pick, setPick] = useState('');
+  const links = (f.meds || []).map((l) => ({ ...l, med: store.feast.foods.get(l.medId) })).filter((l) => l.med && !l.med.deletedAt);
+  const meds = [...store.feast.foods.values()].filter((m) => !m.deletedAt && F.isMed(m) && !links.some((l) => l.medId === m.id))
+    .sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  const save = (list) => FA.updateFood(f.id, { meds: list.map(({ medId, amount }) => ({ medId, amount })) });
+  const add = () => {
+    const m = store.feast.foods.get(pick);
+    if (!m) return;
+    save([...links, { medId: m.id, amount: m.dose || 1 }]);
+    setPick('');
+  };
+  return html`
+    <h3 class="set-sub">Лекарства вместе с продуктом</h3>
+    ${links.length ? html`<ul class="fc-meds">${links.map((l) => html`<li key=${l.medId}>
+      <button type="button" class="link-btn" onClick=${() => openFood(l.medId)}>💊 ${l.med.name}</button>
+      <input class="lm-amount" inputmode="decimal" value=${String(l.amount).replace('.', ',')} disabled=${ro} aria-label=${tr('Доза: ') + l.med.name}
+        onChange=${(e) => save(links.map((x) => (x.medId === l.medId ? { ...x, amount: num(e.target.value) || x.amount } : x)))}/>
+      <small class="muted">${MED_UNIT[l.med.unit]?.short || ''}</small>
+      <button type="button" class="icon-btn small" disabled=${ro} aria-label=${tr('Отвязать ') + l.med.name} data-hint="Отвязать"
+        onClick=${() => save(links.filter((x) => x.medId !== l.medId))}><${Icon} name="close" size=${16}/></button>
+    </li>`)}</ul>` : html`<p class="muted small">Например, инсулин к сладкому: при записи продукта лекарство предложится галочкой — её можно снять.</p>`}
+    ${meds.length ? html`<div class="bc-add">
+      <select value=${pick} disabled=${ro} aria-label="Лекарство" onChange=${(e) => setPick(e.target.value)}>
+        <option value="">Выбери лекарство…</option>
+        ${meds.map((m) => html`<option value=${m.id} key=${m.id}>${m.name}</option>`)}
+      </select>
+      <button type="button" class="btn" disabled=${ro || !pick} onClick=${add}>Привязать</button>
+    </div>` : html`<button type="button" class="btn small" disabled=${ro} onClick=${() => createCatalogItem('med')}>💊 Новое лекарство</button>`}`;
+}
+
+/** Карточка лекарства: название, производитель, форма, обычная доза, заметка, штрихкоды; без КБЖУ и наград. */
+function MedFields({ f, ro, set }) {
+  const unit = MED_UNIT[f.unit] || MED_UNITS[0];
+  const foods = [...store.feast.foods.values()].filter((x) => !x.deletedAt && (x.meds || []).some((l) => l.medId === f.id));
+  return html`
+    <div class="field-row">
+      <${TextField} label="Производитель" value=${f.brand} placeholder="необязательно" disabled=${ro} onCommit=${(v) => set({ brand: v })}/>
+      <label class="field"><span>Форма</span>
+        <select value=${unit.key} disabled=${ro} onChange=${(e) => set({ unit: e.target.value })}>${MED_UNITS.map((u) => html`<option value=${u.key}>${u.label}</option>`)}</select></label>
+    </div>
+    <div class="field-row">
+      <${TextField} label=${tr('Обычная доза, {short}', { short: unit.short })} value=${String(f.dose || 1).replace('.', ',')} maxLength=${8} disabled=${ro} onCommit=${(v) => set({ dose: num(v) || 1 })}/>
+    </div>
+    <${AreaField} label="Заметка" value=${f.note} placeholder="Как принимать, назначение, что важно помнить…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>
+    ${foods.length ? html`<p class="muted small">Предлагается вместе с: ${foods.map((x, i) => html`${i ? ', ' : ''}<button type="button" class="link-btn" key=${x.id} onClick=${() => openFood(x.id)}>${x.name}</button>`)}</p>` : null}`;
+}
+
 export function FoodCard({ id, panel = false, onClose }) {
   const f = store.feast.foods.get(id);
   const [code, setCode] = useState('');
@@ -224,13 +310,14 @@ export function FoodCard({ id, panel = false, onClose }) {
       <p class="muted">Продукт удалён или ещё не пришёл с другого устройства.</p></div>`;
   }
   const ro = readOnly();
+  const med = F.isMed(f);
   const codes = F.foodBarcodes(f);
   const uses = F.foodUsage(store.feast).get(f.id);
   const typed = normalizeBarcode(code);
   const warn = typed ? barcodeWarning(typed) : '';
   const set = (changes) => FA.updateFood(f.id, changes);
   const remove = async () => {
-    if (await confirm({ title: `Удалить «${f.name}»?`, text: 'Записи в дневнике останутся — в них сохранены название и значения.', confirmLabel: 'Удалить', danger: true })) {
+    if (await confirm({ title: tr('Удалить «{name}»?', { name: f.name }), text: tr('Записи в дневнике останутся — в них сохранены название и значения.'), confirmLabel: tr('Удалить'), danger: true })) {
       onClose();
       FA.deleteFoods([f.id]);
     }
@@ -243,14 +330,15 @@ export function FoodCard({ id, panel = false, onClose }) {
     <div class=${'screen food-card' + (panel ? ' in-panel' : '')}>
       <div class="task-header">
         <button class="icon-btn" onClick=${onClose} aria-label="Закрыть"><${Icon} name=${panel ? 'close' : 'back'}/></button>
-        <span class="fc-kind">Продукт</span>
+        <span class="fc-kind">${med ? tr('💊 Лекарство') : tr('Продукт')}</span>
         <span class="ds-spacer"></span>
         <button class=${'icon-btn' + (f.favorite ? ' fav' : '')} disabled=${ro} onClick=${() => FA.toggleFavorite(f.id)}
-          aria-pressed=${!!f.favorite} title=${f.favorite ? 'Убрать из избранного' : 'В избранное'} aria-label="Избранное"><${Icon} name="star" filled=${!!f.favorite}/></button>
-        <button class="icon-btn" disabled=${ro} onClick=${() => FA.duplicateFood(f.id).then((c) => c && openFood(c.id))} title="Копия продукта" aria-label="Копия"><${Icon} name="copy2"/></button>
-        <button class="icon-btn danger" disabled=${ro} onClick=${remove} title="Удалить продукт" aria-label="Удалить"><${Icon} name="trash"/></button>
+          aria-pressed=${!!f.favorite} title=${f.favorite ? tr('Убрать из избранного') : tr('В избранное')} aria-label="Избранное"><${Icon} name="star" filled=${!!f.favorite}/></button>
+        <button class="icon-btn" disabled=${ro} onClick=${() => FA.duplicateFood(f.id).then((c) => c && openFood(c.id))} title="Копия" aria-label="Копия"><${Icon} name="copy2"/></button>
+        <button class="icon-btn danger" disabled=${ro} onClick=${remove} title="Удалить" aria-label="Удалить"><${Icon} name="trash"/></button>
       </div>
       <${TextField} label="Название" value=${f.name} disabled=${ro} onCommit=${(v) => set({ name: v })}/>
+      ${med ? html`<${MedFields} f=${f} ro=${ro} set=${set}/>` : html`
       <div class="field-row">
         <${TextField} label="Бренд" value=${f.brand} placeholder="необязательно" disabled=${ro} onCommit=${(v) => set({ brand: v })}/>
         <label class="field"><span>Единица</span>
@@ -258,16 +346,18 @@ export function FoodCard({ id, panel = false, onClose }) {
       </div>
       <div class="field-row">
         <${TextField} label="Порция — название" value=${f.servingName} placeholder="например, стакан" maxLength=${40} disabled=${ro} onCommit=${(v) => set({ servingName: v })}/>
-        <${TextField} label=${`Порция, ${f.unit === 'ml' ? 'мл' : 'г'}`} value=${f.servingSize ? String(f.servingSize) : ''} placeholder="—" maxLength=${8} disabled=${ro} onCommit=${(v) => set({ servingSize: v })}/>
+        <${TextField} label=${tr('Порция, {p0}', { p0: f.unit === 'ml' ? tr('мл') : tr('г') })} value=${f.servingSize ? String(f.servingSize) : ''} placeholder="—" maxLength=${8} disabled=${ro} onCommit=${(v) => set({ servingSize: v })}/>
       </div>
+      <${AreaField} label="Заметка к продукту" value=${f.note} placeholder="Например, сколько единиц инсулина обычно нужно, где покупать…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>
 
       <h3 class="set-sub">Пищевая ценность</h3>
       <${NutrientEditor} key=${f.id} nutrients=${f.nutrients} unit=${f.unit} disabled=${ro} onChange=${(n) => set({ nutrients: n })}/>
+      <${LinkedMedsEditor} f=${f} ro=${ro}/>`}
 
       <h3 class="set-sub">Штрихкоды</h3>
       ${codes.length ? html`<ul class="bc-list">${codes.map((c) => html`<li key=${c}>
         <${BarcodeImage} code=${c}/><span class="bc-code">${c}</span>
-        <button type="button" class="icon-btn small" disabled=${ro} aria-label=${'Отвязать ' + c} title="Отвязать" onClick=${() => FA.detachBarcode(f.id, c)}><${Icon} name="close" size=${16}/></button>
+        <button type="button" class="icon-btn small" disabled=${ro} aria-label=${tr('Отвязать ') + c} title="Отвязать" onClick=${() => FA.detachBarcode(f.id, c)}><${Icon} name="close" size=${16}/></button>
       </li>`)}</ul>` : html`<p class="muted small">Штрихкодов нет — продукт можно найти по названию. Привяжи код, чтобы находить его сканером.</p>`}
       <form class="bc-add" onSubmit=${addCode}>
         <input inputmode="numeric" value=${code} placeholder="Цифры штрихкода" aria-label="Штрихкод" disabled=${ro} onInput=${(e) => setCode(e.target.value)}/>
@@ -276,18 +366,18 @@ export function FoodCard({ id, panel = false, onClose }) {
       </form>
       ${warn ? html`<p class="hint warn">${warn}</p>` : null}
 
+      ${med ? null : html`
       <h3 class="set-sub">Награда за запись</h3>
       <${RewardEditor} key=${'r' + f.id} rewards=${f.rewards || {}} defaults=${F.rewardDefaults(store.feast.settings)} disabled=${ro}
         onChange=${(r) => set({ rewards: r })}/>
       <p class="muted small">Начисляется за каждую запись этого продукта в дневнике, сколько бы ни съел(а). Пустое поле — по умолчанию
         (<${Link} to="/settings?section=feast-rewards">настройки наград<//>). Дробные монеты и 💎 копятся: тратятся целые. Уже сделанные записи
-        не пересчитываются.${store.data.settings?.gameEnabled ? '' : ' Игра сейчас выключена — награды копятся, но не видны.'}</p>
+        не пересчитываются.${store.data.settings?.gameEnabled ? '' : tr(' Игра сейчас выключена — награды копятся, но не видны.')}</p>`}
 
-      <${TextField} label="Заметка" value=${f.note} placeholder="необязательно" maxLength=${2000} disabled=${ro} onCommit=${(v) => set({ note: v })}/>
       <div class="form-actions">
-        <button type="button" class="btn primary" disabled=${ro} onClick=${() => openAddFood({ foodId: f.id })}><${Icon} name="plus" size=${16}/> В дневник</button>
+        <button type="button" class="btn primary" disabled=${ro} onClick=${() => openAddFood({ foodId: f.id })}><${Icon} name="plus" size=${16}/> ${med ? tr('Записать приём') : tr('В дневник')}</button>
       </div>
       <p class="muted small fc-meta">Создан ${longDate(localDateOf(f.createdAt, tz))} ${localDateOf(f.createdAt, tz).slice(0, 4)} · изменён ${formatMoment(f.updatedAt, tz)}
-        · в дневнике ${countLabel(uses?.count || 0, ['раз', 'раза', 'раз'])}</p>
+        · ${med ? tr('принято') : tr('в дневнике')} ${countLabel(uses?.count || 0, ['раз', 'раза', 'раз'])}</p>
     </div>`;
 }

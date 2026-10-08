@@ -8,6 +8,7 @@
 
 import { FOLDER_MIME } from './drive.js';
 import { SyncError } from './http.js';
+import { tr } from '../core/i18n.js';
 
 /** Пространства: ключ appProperties, имя папки, нужна ли папка медиа. */
 export const SPACES = {
@@ -90,7 +91,7 @@ export async function ensureLayout(drive, { cached, makeDbBytes, makeManifest, s
   let db = d.db;
   if (!db) {
     // Манифест есть, а базы нет — её удалили руками. Без манифеста — прерванная первая инициализация.
-    if (d.manifest) throw Object.assign(new SyncError('E-DB-MISSING', `Файл базы в папке ${space.rootName} на Диске не найден`), { space: space.key });
+    if (d.manifest) throw Object.assign(new SyncError('E-DB-MISSING', tr('Файл базы в папке {rootName} на Диске не найден', { rootName: space.rootName })), { space: space.key });
     db = await createDb(drive, space, d.root.id, makeDbBytes);
     created = true;
   }

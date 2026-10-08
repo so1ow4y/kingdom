@@ -6,24 +6,25 @@ import { SCHEMA_VERSION } from '../../version.js';
 import { SyncError } from '../../core/errors.js';
 import m001to002 from './m001_to_002.js';
 import m002to003 from './m002_to_003.js';
+import { tr } from '../../core/i18n.js';
 
 export const MIGRATIONS = [m001to002, m002to003];
 
 /** Довести базу до SCHEMA_VERSION. Версия новее приложения — E-READONLY. */
 export function migrateDb(db, migrations = MIGRATIONS, target = SCHEMA_VERSION) {
   if (db.schemaVersion > target) {
-    throw new SyncError('E-READONLY', `Формат v${db.schemaVersion} новее приложения (v${target})`, { remoteVersion: db.schemaVersion });
+    throw new SyncError('E-READONLY', tr('Формат v{schemaVersion} новее приложения (v{target})', { schemaVersion: db.schemaVersion, target }), { remoteVersion: db.schemaVersion });
   }
   let cur = db;
   while (cur.schemaVersion < target) {
     const step = migrations.find((m) => m.from === cur.schemaVersion);
     if (!step) {
-      throw new SyncError('E-MIGRATION', `Нет миграции v${cur.schemaVersion} → v${cur.schemaVersion + 1}`);
+      throw new SyncError('E-MIGRATION', tr('Нет миграции v{schemaVersion} → v{p1}', { schemaVersion: cur.schemaVersion, p1: cur.schemaVersion + 1 }));
     }
     try {
       cur = { ...step.migrate(cur), schemaVersion: step.to };
     } catch (e) {
-      throw new SyncError('E-MIGRATION', `Ошибка миграции v${step.from} → v${step.to}: ${e.message}`, { cause: e });
+      throw new SyncError('E-MIGRATION', tr('Ошибка миграции v{from} → v{to}: {message}', { from: step.from, to: step.to, message: e.message }), { cause: e });
     }
   }
   return cur;

@@ -15,6 +15,7 @@ import { keyBetween } from './order.js';
 import { touch, setListMembership, taskListIds } from './model.js';
 import { nestError, parentOf, ancestors, descendants, focusTasks, inList } from './selectors.js';
 import { LIMITS } from '../config.js';
+import { tr } from './i18n.js';
 
 export const INDENT_STEP = 28; // px сдвига вбок на один уровень
 
@@ -142,18 +143,18 @@ export function keyboardTarget(rows, id, key) {
 export function resolveDrop(data, rows, zones, dragId, target, { readOnly = false } = {}) {
   const task = data.tasks.get(dragId);
   const block = blockRange(rows, dragId);
-  if (!task || block[0] < 0 || !target) return { ok: false, reason: 'Нельзя переместить', label: 'Нельзя переместить' };
-  if (readOnly) return bad('Только чтение');
+  if (!task || block[0] < 0 || !target) return { ok: false, reason: tr('Нельзя переместить'), label: tr('Нельзя переместить') };
+  if (readOnly) return bad(tr('Только чтение'));
   const src = rows[block[0]];
   const srcZone = zones[src.zone] || {};
 
   if (target.type === 'nest') {
     const row = rows[target.index];
     const parent = row && data.tasks.get(row.id);
-    if (!parent) return bad('Нельзя переместить');
+    if (!parent) return bad(tr('Нельзя переместить'));
     const err = nestError(data, dragId, parent.id);
     if (err) return bad(err);
-    return { ok: true, label: `Вложить в «${short(parent.title)}»`, move: { id: dragId, parentId: parent.id, order: { append: true } } };
+    return { ok: true, label: tr('Вложить в «{p0}»', { p0: short(parent.title) }), move: { id: dragId, parentId: parent.id, order: { append: true } } };
   }
 
   const zone = zones[target.zone] || {};
@@ -168,7 +169,7 @@ export function resolveDrop(data, rows, zones, dragId, target, { readOnly = fals
     let p = prev;
     while (p >= 0 && rows[p].depth > depth - 1) p = prevInZone(rows, p, target.zone, block);
     const parent = p >= 0 && data.tasks.get(rows[p].id);
-    if (!parent) return bad('Нельзя переместить');
+    if (!parent) return bad(tr('Нельзя переместить'));
     const err = nestError(data, dragId, parent.id);
     if (err) return bad(err);
     let order;
@@ -182,14 +183,14 @@ export function resolveDrop(data, rows, zones, dragId, target, { readOnly = fals
       order = after == null && before == null ? { append: true } : { field: 'order', after, before };
     }
     const changed = (task.parentId ?? null) !== parent.id;
-    return { ok: true, label: changed ? `В «${short(parent.title)}»` : '', move: { id: dragId, parentId: parent.id, order } };
+    return { ok: true, label: changed ? tr('В «{p0}»', { p0: short(parent.title) }) : '', move: { id: dragId, parentId: parent.id, order } };
   }
 
   // Верхний уровень блока. Перенос из другого списка (экран «Списки») принимается в любой раздел списка —
   // задача встанет в свой раздел сама; место между соседями учитывается, только если раздел её.
   const fits = !zone.accepts || zone.accepts(task);
   const cross = !!zone.crossList && zone.listId != null && srcZone.listId !== zone.listId;
-  if (!fits && !cross) return bad(zone.rejectReason || 'Сюда эта задача не попадает');
+  if (!fits && !cross) return bad(zone.rejectReason || tr('Сюда эта задача не попадает'));
   let parentId;
   if (zone.rootParentId !== undefined && zone.rootParentId !== null) parentId = zone.rootParentId;
   else parentId = src.depth === 0 ? task.parentId ?? null : null; // корень остаётся при своём (скрытом) родителе
@@ -207,10 +208,10 @@ export function resolveDrop(data, rows, zones, dragId, target, { readOnly = fals
     const before = next >= 0 ? data.tasks.get(rows[next].id)?.[field] ?? null : null;
     order = { field, after, before };
   } else if ((task.parentId ?? null) === (parentId ?? null) && !lists) {
-    return bad(zone.autoReason || 'Порядок здесь автоматический — можно вложить или вынести');
+    return bad(zone.autoReason || tr('Порядок здесь автоматический — можно вложить или вынести'));
   }
-  const label = lists?.add && lists.add !== srcZone.listId ? `В список «${short(data.lists.get(lists.add)?.name || '')}»`
-    : lists?.removeAll ? 'Во «Входящие»' : (task.parentId ?? null) !== (parentId ?? null) ? 'Вынести на верхний уровень' : '';
+  const label = lists?.add && lists.add !== srcZone.listId ? tr('В список «{p0}»', { p0: short(data.lists.get(lists.add)?.name || '') })
+    : lists?.removeAll ? tr('Во «Входящие»') : (task.parentId ?? null) !== (parentId ?? null) ? tr('Вынести на верхний уровень') : '';
   return { ok: true, label, move: { id: dragId, parentId, order, lists } };
 }
 

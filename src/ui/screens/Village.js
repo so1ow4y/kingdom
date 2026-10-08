@@ -20,11 +20,12 @@ import { getPrefs, setPrefs } from '../prefs.js';
 import { readLocal, writeLocal } from '../hooks.js';
 import { getFocus } from '../../store/focus.js';
 import { navigate } from '../router.js';
+import { tr } from '../../core/i18n.js';
 
-const TABS = [['building', 'Постройки'], ['upgrade', 'Прокачка'], ['char', 'Жители'], ['light', 'Свет и небо'], ['decor', 'Декор']];
+const TABS = [['building', tr('Постройки')], ['upgrade', tr('Прокачка')], ['char', tr('Жители')], ['light', tr('Свет и небо')], ['decor', tr('Декор')]];
 const BASE_INFO = {
-  'base:house': { name: 'Дом старосты', emoji: '🏠', desc: 'С него началась деревня. Ночью в окнах горит свет — нажми на дом, чтобы выключить.' },
-  'base:wanderer': { name: 'Странник', emoji: '🧑‍🌾', desc: 'Живёт в деревне с самого начала. Без строителя сам берётся за работу во время фокуса.' },
+  'base:house': { name: tr('Дом старосты'), emoji: '🏠', desc: tr('С него началась деревня. Ночью в окнах горит свет — нажми на дом, чтобы выключить.') },
+  'base:wanderer': { name: tr('Странник'), emoji: '🧑‍🌾', desc: tr('Живёт в деревне с самого начала. Без строителя сам берётся за работу во время фокуса.') },
 };
 
 const infoOf = (id) => BASE_INFO[id] || V.villageItem(id);
@@ -38,17 +39,17 @@ function UpgradeButton({ obj, bal, small = true }) {
   if (!nu) return V.isUpgradable(obj.place) ? html`<span class="v-owned">★ Макс. уровень</span>` : null;
   const check = V.canUpgrade(store.data, obj, bal);
   return html`<button class=${'btn' + (small ? ' small' : '') + (check.ok ? ' primary' : '')} disabled=${!check.ok || !!store.ui.readOnly}
-    title=${check.reason || `Дальше: ${V.bonusText(obj.place, nu.level)}`} onClick=${() => A.upgradeVillageObject(obj.key)}>
+    title=${check.reason || tr('Дальше: {p0}', { p0: V.bonusText(obj.place, nu.level) })} onClick=${() => A.upgradeVillageObject(obj.key)}>
     ⬆ Ур. ${nu.level} · ${price(nu.price)}</button>`;
 }
 
 /** Бонусы деревни одной строкой. */
 function bonusesLine(b) {
   const parts = [];
-  if (b.coins) parts.push(`+${b.coins} % монет за задачи`);
-  if (b.food) parts.push(`+${b.food} % наград за еду`);
-  if (b.focus) parts.push(`+${b.focus} 💎 за фокус`);
-  if (b.mood) parts.push(`настроение +${b.mood}`);
+  if (b.coins) parts.push(tr('+{coins} % монет за задачи', { coins: b.coins }));
+  if (b.food) parts.push(tr('+{food} % наград за еду', { food: b.food }));
+  if (b.focus) parts.push(tr('+{focus} 💎 за фокус', { focus: b.focus }));
+  if (b.mood) parts.push(tr('настроение +{mood}', { mood: b.mood }));
   return parts.join(' · ');
 }
 
@@ -61,15 +62,15 @@ function Mood({ mood, bal, gems, compact = false, onView = null, viewOpen = fals
   const f = getFocus();
   return html`
     <div class=${'village-head' + (compact ? ' hud' : ' card-block')}>
-      <div class="vh-mood" title=${`Выполнено за 3 дня: ${mood.parts.done} · фокус сегодня: ${mood.parts.focus} · просрочено: ${mood.parts.overdue}`}>
+      <div class="vh-mood" title=${tr('Выполнено за 3 дня: {done} · фокус сегодня: {focus} · просрочено: {overdue}', { done: mood.parts.done, focus: mood.parts.focus, overdue: mood.parts.overdue })}>
         <span class="vh-emoji">${mood.emoji}</span>
         <div><b>Жители: ${mood.label.toLowerCase()}</b>
           <div class="progress mood"><i style=${{ width: mood.value + '%' }}></i></div>
-          <small class="muted">${mood.parts.overdue ? `Просрочено задач: ${mood.parts.overdue} — жители грустят` : 'Выполняй задачи — деревня радуется'}</small></div>
+          <small class="muted">${mood.parts.overdue ? tr('Просрочено задач: {overdue} — жители грустят', { overdue: mood.parts.overdue }) : tr('Выполняй задачи — деревня радуется')}</small></div>
       </div>
       <div class="vh-wallet"><span>🪙 <b>${bal}</b></span><span>💎 <b>${gems}</b></span></div>
       <div class="vh-actions">
-        <button class="btn small primary" onClick=${() => openSheet('focus', {})} disabled=${!!f}><${Icon} name="focus" size=${16}/> ${f ? 'Фокус идёт' : 'Фокус'}</button>
+        <button class="btn small primary" onClick=${() => openSheet('focus', {})} disabled=${!!f}><${Icon} name="focus" size=${16}/> ${f ? tr('Фокус идёт') : tr('Фокус')}</button>
         <button class="btn small" onClick=${() => world.sendVisitor()} title="Кто-нибудь подойдёт к экрану">👋 Позвать</button>
         ${onView ? html`<button class=${'btn small' + (viewOpen ? ' active' : '')} onClick=${onView} aria-pressed=${viewOpen} title="Приближение, время суток и свет">🔭 Вид</button>` : null}
         ${compact ? html`<button class="btn small" onClick=${openVillageShop} title="Магазин деревни"><${Icon} name="shop" size=${16}/> Магазин</button>`
@@ -80,9 +81,9 @@ function Mood({ mood, bal, gems, compact = false, onView = null, viewOpen = fals
 
 /** Как называется объект деревни на карте (дом, шахта нужного уровня, мишень…). */
 function objInfo(o) {
-  if (!o) return { name: 'Объект', emoji: '🏠', desc: '' };
+  if (!o) return { name: tr('Объект'), emoji: '🏠', desc: '' };
   if (o.id === 'base:house') return BASE_INFO['base:house'];
-  if (o.virtual) return { name: 'Мишень', emoji: '🎯', desc: 'Здесь тренируется лучница. Ставится сама.' };
+  if (o.virtual) return { name: tr('Мишень'), emoji: '🎯', desc: tr('Здесь тренируется лучница. Ставится сама.') };
   if (o.place === 'goldmine' || o.place === 'gemmine') return V.villageItem(o.id) || V.villageItem(o.itemId);
   return V.shopItems().find((it) => it.place === o.place && !it.upgrade) || V.villageItem(o.itemId) || { name: o.place, emoji: '🏠', desc: '' };
 }
@@ -119,7 +120,7 @@ function Selected({ sel, bal }) {
     };
     return html`<div class="village-sel village-build">
       <span class="vs-emoji">🌱</span>
-      <div class="vs-main"><b>Свободное место</b><p class="muted small">${build ? 'Что поставить? Если не влезет ровно сюда — встанет на ближайшее свободное место.' : 'Здесь можно построить дом, шахту, огород или поставить декор.'}</p></div>
+      <div class="vs-main"><b>Свободное место</b><p class="muted small">${build ? tr('Что поставить? Если не влезет ровно сюда — встанет на ближайшее свободное место.') : tr('Здесь можно построить дом, шахту, огород или поставить декор.')}</p></div>
       <div class="vs-actions">
         ${build ? null : html`<button class="btn small primary" disabled=${readOnly} onClick=${() => setBuild(true)}><${Icon} name="plus" size=${16}/> Построить здесь</button>`}
         ${close}
@@ -146,14 +147,14 @@ function Selected({ sel, bal }) {
   const count = own ? V.villageObjects(store.data).filter((x) => x.place === o.place).length : 0;
   return html`<div class="village-sel">
     <span class="vs-emoji">${it.emoji}</span>
-    <div class="vs-main"><b>${(it.name || '').replace(/ · ур\. \d$/, '')}${up ? html` <small class="v-level" title=${'Уровень ' + o.level + ' из ' + V.MAX_LEVEL}>${stars(o.level)}</small>` : null}${count > 1 ? html` <small class="muted">· таких ${count}</small>` : null}</b>
-      <p class="muted small">${o.fixed ? 'С него началась деревня — он всегда на своём месте.' : it.desc || ''}</p>
+    <div class="vs-main"><b>${(it.name || '').replace(/ · ур\. \d$/, '')}${up ? html` <small class="v-level" title=${tr('Уровень ') + o.level + tr(' из ') + V.MAX_LEVEL}>${stars(o.level)}</small>` : null}${count > 1 ? html` <small class="muted">· таких ${count}</small>` : null}</b>
+      <p class="muted small">${o.fixed ? tr('С него началась деревня — он всегда на своём месте.') : it.desc || ''}</p>
       ${up ? html`<p class="small">Ур. ${o.level}: ${V.bonusText(o.place, o.level)}${nu ? html` <span class="muted">→ ур. ${nu.level}: ${V.bonusText(o.place, nu.level)}</span>` : ''}</p>` : null}</div>
     <div class="vs-actions">
-      ${lights ? html`<button class="btn small" onClick=${() => setPrefs({ villageLightsOff: world.toggleLight(lightId) })}>${world.lightOn(lightId) ? '💡 Погасить' : '💡 Зажечь'}</button>` : null}
+      ${lights ? html`<button class="btn small" onClick=${() => setPrefs({ villageLightsOff: world.toggleLight(lightId) })}>${world.lightOn(lightId) ? tr('💡 Погасить') : tr('💡 Зажечь')}</button>` : null}
       ${up ? html`<${UpgradeButton} obj=${o} bal=${bal}/>` : null}
       ${own ? html`<button class="btn small" disabled=${readOnly} onClick=${() => startMove(o.key)}><${Icon} name="move" size=${16}/> Переставить</button>` : null}
-      ${own ? html`<button class="btn small" disabled=${!!plan.error || readOnly} title=${plan.error || 'Вернётся полная цена'}
+      ${own ? html`<button class="btn small" disabled=${!!plan.error || readOnly} title=${plan.error || tr('Вернётся полная цена')}
         onClick=${async () => { if (await A.sellVillageObject(o.key)) selectInVillage(null); }}>Продать${back ? ` · ${back}` : ''}</button>` : null}
       ${close}
     </div></div>`;
@@ -174,8 +175,8 @@ function MoveBar() {
   return html`<div class="village-sel village-move" role="status">
     <span class="vs-emoji">${it.emoji}</span>
     <div class="vs-main"><b>Переставить: ${it.name}</b>
-      <p class=${'small' + (m.ok ? ' muted' : ' vm-bad')}>${m.ok ? 'Тяни объект или нажми на клетку. Зелёная рамка — сюда можно.'
-        : 'Здесь не встанет: нужна свободная трава, вокруг построек — клетка зазора и проход к двери.'}</p></div>
+      <p class=${'small' + (m.ok ? ' muted' : ' vm-bad')}>${m.ok ? tr('Тяни объект или нажми на клетку. Зелёная рамка — сюда можно.')
+        : tr('Здесь не встанет: нужна свободная трава, вокруг построек — клетка зазора и проход к двери.')}</p></div>
     <div class="vs-actions">
       <button class="btn small" onClick=${cancelMove}>Отмена</button>
       <button class="btn small primary" disabled=${!m.ok} onClick=${done}>Готово</button>
@@ -189,7 +190,7 @@ export function ZoomControl() {
   const auto = !Number.isFinite(p.villageZoom);
   const z = auto ? viewZoom.auto : snapZoom(p.villageZoom);
   return html`<div class="vz-row">
-    <label class="vl-slider"><span>🔭 Приближение: <b>${auto ? 'авто' : `×${z.toFixed(z < 1 ? 2 : 1)}`}</b></span>
+    <label class="vl-slider"><span>🔭 Приближение: <b>${auto ? tr('авто') : `×${z.toFixed(z < 1 ? 2 : 1)}`}</b></span>
       <input type="range" min=${min} max=${max} step="0.05" value=${z} onInput=${(e) => setPrefs({ villageZoom: +e.target.value })} aria-label="Приближение деревни"/></label>
     <button class=${'chip' + (auto ? ' selected' : '')} onClick=${() => setPrefs({ villageZoom: null })} title="Чем больше деревня, тем дальше">Авто</button>
   </div>`;
@@ -208,14 +209,14 @@ function ViewControls() {
   const lightsOff = getPrefs().villageLightsOff || [];
   return html`<div class="village-time">
     <${ZoomControl}/>
-    <label class="vl-slider"><span>☀️ <b>${h == null ? 'как сейчас' : label}</b></span>
+    <label class="vl-slider"><span>☀️ <b>${h == null ? tr('как сейчас') : label}</b></span>
       <input type="range" min="0" max="24" step="0.25" value=${cur} onInput=${(e) => set(+e.target.value)} aria-label="Время суток в деревне"/></label>
     <div class="chip-row">
       <button class="chip" onClick=${() => set(12)} title="День">🌞</button>
       <button class="chip" onClick=${() => set(18.25)} title="Закат">🌇</button>
       <button class="chip" onClick=${() => set(23)} title="Ночь">🌙</button>
       <button class=${'chip' + (h == null ? ' selected' : '')} onClick=${() => set(null)}>Сейчас</button>
-      <button class="chip" title=${lightsOff.length ? 'Зажечь весь свет' : 'Погасить весь свет'}
+      <button class="chip" title=${lightsOff.length ? tr('Зажечь весь свет') : tr('Погасить весь свет')}
         onClick=${() => setPrefs({ villageLightsOff: lightsOff.length ? [] : [...world.lanterns.map((l) => l.id), ...world.buildings.map((b) => b.id)] })}>💡</button>
     </div>
   </div>`;
@@ -250,8 +251,8 @@ function ShopGrid({ bal }) {
           ${mine && V.isUpgradable(mine.place) ? html`<${UpgradeButton} obj=${mine} bal=${bal}/>`
             : has ? html`<span class="v-owned">✓ Есть</span>`
             : locked ? html`<small class="muted">${check.reason}</small>`
-            : html`<button class=${'btn small' + (check.ok ? ' primary' : '')} disabled=${!check.ok || readOnly} title=${check.reason || 'Купить'}
-                onClick=${() => A.buyVillageItem(it.id)}>${count ? 'Ещё · ' : ''}${price(V.priceOf(store.data, it))}</button>`}
+            : html`<button class=${'btn small' + (check.ok ? ' primary' : '')} disabled=${!check.ok || readOnly} title=${check.reason || tr('Купить')}
+                onClick=${() => A.buyVillageItem(it.id)}>${count ? tr('Ещё · ') : ''}${price(V.priceOf(store.data, it))}</button>`}
         </div>`;
       })}
     </div>`}`;
@@ -267,7 +268,7 @@ function UpgradeList({ bal }) {
   const num = new Map();
   if (!objects.length) return html`<p class="muted">Пока нечего прокачивать — построй что-нибудь во вкладке «Постройки».</p>`;
   return html`
-    <p class="muted small">Сейчас деревня даёт: <b>${bonusesLine(b) || 'бонусов пока нет'}</b>. Улучшенная постройка выглядит богаче:
+    <p class="muted small">Сейчас деревня даёт: <b>${bonusesLine(b) || tr('бонусов пока нет')}</b>. Улучшенная постройка выглядит богаче:
       цветы у входа, флажок цвета иконки, золотая кайма и фонари, герб со свечением.</p>
     <ul class="upgrade-list">
       ${objects.sort((x, y) => (x.place < y.place ? -1 : x.place > y.place ? 1 : x.at < y.at ? -1 : 1)).map((o) => {
@@ -296,7 +297,7 @@ export function VillageSettings() {
   return html`<div class="village-settings">
     <label class="toggle-row compact"><input type="checkbox" checked=${p.villageBackdrop !== false} onChange=${(e) => setPrefs({ villageBackdrop: e.target.checked })}/>
       <span>Деревня на фоне вкладок<small>Во весь экран за карточками, приглушённая. На экране «Деревня» видна всегда</small></span></label>
-    <label class="field village-dim-field"><span>Затемнение на вкладках: ${Math.round(dim * 100)} %${dim >= 1 ? ' — деревни на вкладках не видно' : ''}</span>
+    <label class="field village-dim-field"><span>Затемнение на вкладках: ${Math.round(dim * 100)} %${dim >= 1 ? tr(' — деревни на вкладках не видно') : ''}</span>
       <input type="range" min="0" max="1" step="0.05" value=${dim} onInput=${(e) => setPrefs({ villageDim: +e.target.value })} aria-label="Затемнение деревни на вкладках"/></label>
     <label class="toggle-row compact"><input type="checkbox" checked=${p.visitors !== false} onChange=${(e) => setPrefs({ visitors: e.target.checked })}/>
       <span>Жители подходят к экрану<small>Иногда кто-нибудь выходит из леса и стучит по «стеклу»</small></span></label>
@@ -304,7 +305,7 @@ export function VillageSettings() {
     <${ZoomControl}/>
     <div class="field-label">Смена дня и ночи</div>
     <div class="chip-row wrap">
-      ${[['theme', 'Как тема приложения'], ['cycle', 'Каждые 5 минут'], ['real', 'Как в жизни']].map(([k, l]) => html`
+      ${[['theme', tr('Как тема приложения')], ['cycle', tr('Каждые 5 минут')], ['real', tr('Как в жизни')]].map(([k, l]) => html`
         <button class=${'chip' + (mode === k ? ' selected' : '')} disabled=${k !== 'theme' && !daynight} onClick=${() => setPrefs({ dayMode: k })}>${l}</button>`)}
     </div>
     ${daynight ? null : html`<p class="muted small">«Каждые 5 минут» и «Как в жизни» открываются покупкой «Смена дня и ночи» (3 💎) во вкладке «Свет и небо».</p>`}

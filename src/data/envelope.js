@@ -3,6 +3,7 @@
 import { SCHEMA_VERSION, APP_VERSION } from '../version.js';
 import { APP_NAME } from '../config.js';
 import { SyncError } from '../core/errors.js';
+import { tr } from '../core/i18n.js';
 
 export const DB_FORMAT = 'lifetasks-db';
 export const MANIFEST_FORMAT = 'lifetasks-manifest';
@@ -36,12 +37,12 @@ export function buildDb(data, { createdAt, deviceId, extraEnvelope = {}, extraCo
 /** Проверить конверт прочитанной базы. Бросает E-DB-CORRUPT. */
 export function checkDb(obj) {
   if (!obj || typeof obj !== 'object' || obj.format !== DB_FORMAT) {
-    throw new SyncError('E-DB-CORRUPT', 'Это не файл базы задач Chronicle (неверный format)');
+    throw new SyncError('E-DB-CORRUPT', tr('Это не файл базы задач Chronicle (неверный format)'));
   }
   if (!Number.isInteger(obj.schemaVersion) || obj.schemaVersion < 1) {
-    throw new SyncError('E-DB-CORRUPT', 'В базе нет корректного schemaVersion');
+    throw new SyncError('E-DB-CORRUPT', tr('В базе нет корректного schemaVersion'));
   }
-  if (!obj.data || typeof obj.data !== 'object') throw new SyncError('E-DB-CORRUPT', 'В базе нет раздела data');
+  if (!obj.data || typeof obj.data !== 'object') throw new SyncError('E-DB-CORRUPT', tr('В базе нет раздела data'));
   return obj;
 }
 

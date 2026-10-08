@@ -8,6 +8,7 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import { normalizeListName, firstGrapheme } from '../../core/model.js';
 import { LIST_COLORS, EMOJI_SUGGESTIONS, LIMITS } from '../../config.js';
+import { tr } from '../../core/i18n.js';
 
 export function ListEditorSheet({ listId = null }) {
   const existing = listId ? A.getList(listId) : null;
@@ -57,7 +58,7 @@ export function ListEditorSheet({ listId = null }) {
   };
 
   return html`
-    <${Sheet} title=${existing ? 'Список' : 'Новый список'} onClose=${closeSheet}>
+    <${Sheet} title=${existing ? tr('Список') : tr('Новый список')} onClose=${closeSheet}>
       <form onSubmit=${save} class="list-editor">
         <label class="field">
           <span>Название</span>
@@ -86,11 +87,11 @@ export function ListEditorSheet({ listId = null }) {
           </div>
         </div>
         <div class="form-actions">
-          <button type="submit" class="btn primary" disabled=${!n || readOnly}>${existing ? 'Сохранить' : 'Создать'}</button>
+          <button type="submit" class="btn primary" disabled=${!n || readOnly}>${existing ? tr('Сохранить') : tr('Создать')}</button>
           ${existing ? html`
-            <button type="button" class="btn" onClick=${archive} disabled=${readOnly}>${existing.archived ? 'Вернуть из архива' : 'Архивировать'}</button>
+            <button type="button" class="btn" onClick=${archive} disabled=${readOnly}>${existing.archived ? tr('Вернуть из архива') : tr('Архивировать')}</button>
             <button type="button" class="btn danger-outline" onClick=${remove} disabled=${hasTasks || readOnly}
-              title=${hasTasks ? 'Сначала перенеси или удали задачи' : ''}>Удалить</button>` : null}
+              title=${hasTasks ? tr('Сначала перенеси или удали задачи') : ''}>Удалить</button>` : null}
         </div>
         ${existing && hasTasks ? html`<p class="hint">Удалить можно только пустой список (включая выполненные и корзину). Сначала перенеси или удали задачи.</p>` : null}
       </form>

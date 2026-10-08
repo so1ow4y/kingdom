@@ -14,6 +14,7 @@ import { startSync } from './sync/syncEngine.js';
 import { startNotifier } from './ui/notifier.js';
 import { runRetention } from './ui/components/DataSettings.js';
 import { purgeOldEntries } from './store/feastActions.js';
+import { tr } from './core/i18n.js';
 
 // Самым первым: забрать токен из адреса и убрать его оттуда (до роутера и до любых логов).
 const oauth = takeOAuthFragment();
@@ -27,13 +28,13 @@ function showFatal(e) {
   const box = document.createElement('div');
   box.className = 'fatal';
   const h = document.createElement('h1');
-  h.textContent = 'Не удалось запустить Kingdom';
+  h.textContent = tr('Не удалось запустить Kingdom');
   const p = document.createElement('p');
-  p.textContent = `Не открылось локальное хранилище браузера: ${e?.message || e}. `
-    + 'Проверь, что сайт открыт не в режиме инкогнито и что браузеру хватает места. Данные на устройстве не тронуты.';
+  p.textContent = tr('Не открылось локальное хранилище браузера: {p0}. ', { p0: e?.message || e })
+    + tr('Проверь, что сайт открыт не в режиме инкогнито и что браузеру хватает места. Данные на устройстве не тронуты.');
   const b = document.createElement('button');
   b.className = 'btn primary';
-  b.textContent = 'Перезагрузить';
+  b.textContent = tr('Перезагрузить');
   b.onclick = () => location.reload();
   box.append(h, p, b);
   root.append(box);

@@ -6,6 +6,7 @@
 // пропущенные раньше экземпляры не копятся: текущим становится последний незакрытый до сегодня (или ближайший после).
 
 import { addDays, daysBetween, isoWeekday, mondayOf, localDateOf, WEEKDAY_SHORT, MONTH_GEN } from './dates.js';
+import { LANG, tr } from './i18n.js';
 
 const pad = (n) => String(n).padStart(2, '0');
 const ymd = (d) => [Number(d.slice(0, 4)), Number(d.slice(5, 7)), Number(d.slice(8, 10))];
@@ -160,9 +161,34 @@ export function ruleKind(rule) {
   return { kind: 'daily', weekdays: [], monthDay: null, interval: 1 };
 }
 
+const ordinal = (d) => `${d}${d % 10 === 1 && d !== 11 ? 'st' : d % 10 === 2 && d !== 12 ? 'nd' : d % 10 === 3 && d !== 13 ? 'rd' : 'th'}`;
+
+/** По-английски (0.12.5): «every day», «on Mon, Wed», «monthly on the 15th», «every 3 days». */
+function describeRuleEn(rule) {
+  const n = Math.max(1, rule.interval | 0 || 1);
+  const after = rule.mode === 'afterCompletion' ? ' after completion' : '';
+  if (rule.freq === 'daily') return n === 1 ? 'every day' + after : `every ${n} days${after}`;
+  if (rule.freq === 'weekly') {
+    const days = rule.byWeekday?.length ? rule.byWeekday : [isoWeekday(rule.startDate)];
+    const list = days.length === 7 ? 'every day' : days.length === 5 && days.join() === '1,2,3,4,5' ? 'on weekdays' : days.length === 2 && days.join() === '6,7' ? 'on weekends' : 'on ' + days.map((d) => WEEKDAY_SHORT[d - 1]).join(', ');
+    return n === 1 ? list + after : `${list}, every ${n} weeks${after}`;
+  }
+  if (rule.freq === 'monthly') {
+    const day = rule.byMonthDay || ymd(rule.startDate)[2];
+    return n === 1 ? `monthly on the ${ordinal(day)}${after}` : `every ${n} months on the ${ordinal(day)}${after}`;
+  }
+  if (rule.freq === 'yearly') {
+    const when = `${MONTH_GEN[(rule.byMonth || ymd(rule.startDate)[1]) - 1]} ${rule.byMonthDay || ymd(rule.startDate)[2]}`;
+    if (rule.mode === 'afterCompletion') return n === 1 ? 'once a year after completion' : `every ${n} years after completion`;
+    return n === 1 ? `every year on ${when}` : `every ${n} years on ${when}`;
+  }
+  return 'repeat';
+}
+
 /** «каждый день», «по Пн, Ср, Пт», «каждый месяц 15-го», «каждые 3 дня», «каждые 2 недели (Пн)». */
 export function describeRule(rule) {
   if (!rule) return '';
+  if (LANG === 'en') return describeRuleEn(rule);
   const n = Math.max(1, rule.interval | 0 || 1);
   const after = rule.mode === 'afterCompletion' ? ' от выполнения' : '';
   if (rule.freq === 'daily') return n === 1 ? 'каждый день' + after : `каждые ${n} ${n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 12 || n % 100 > 14) ? 'дня' : 'дней'}${after}`;
@@ -185,10 +211,10 @@ export function describeRule(rule) {
 
 /** Группы повторов (вкладка «Повторяющиеся», поиск «повтор:»). */
 export const CATEGORIES = [
-  { key: 'days', label: 'По дням', hint: 'каждый день и каждые N дней', aliases: ['дни', 'день', 'дням', 'ежедневно', 'daily', 'days', 'day', 'n'] },
-  { key: 'weeks', label: 'По неделям', hint: 'по дням недели', aliases: ['недели', 'неделя', 'неделям', 'еженедельно', 'weekly', 'weeks', 'week'] },
-  { key: 'months', label: 'По месяцам', hint: 'раз в месяц', aliases: ['месяцы', 'месяц', 'месяцам', 'ежемесячно', 'monthly', 'months', 'month'] },
-  { key: 'years', label: 'По годам', hint: 'раз в год', aliases: ['годы', 'год', 'годам', 'ежегодно', 'yearly', 'years', 'year'] },
+  { key: 'days', label: tr('По дням'), hint: tr('каждый день и каждые N дней'), aliases: ['дни', 'день', 'дням', 'ежедневно', 'daily', 'days', 'day', 'n'] },
+  { key: 'weeks', label: tr('По неделям'), hint: tr('по дням недели'), aliases: ['недели', 'неделя', 'неделям', 'еженедельно', 'weekly', 'weeks', 'week'] },
+  { key: 'months', label: tr('По месяцам'), hint: tr('раз в месяц'), aliases: ['месяцы', 'месяц', 'месяцам', 'ежемесячно', 'monthly', 'months', 'month'] },
+  { key: 'years', label: tr('По годам'), hint: tr('раз в год'), aliases: ['годы', 'год', 'годам', 'ежегодно', 'yearly', 'years', 'year'] },
 ];
 
 /** Группа правила: days | weeks | months | years (неизвестное правило — days). */

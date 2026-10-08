@@ -2,6 +2,7 @@
 // Фото перекодируется через canvas — EXIF (в том числе геолокация) при этом не переносится по построению.
 
 import { kindOf, extOf } from '../core/media.js';
+import { tr } from '../core/i18n.js';
 
 /** sha256 байтов → hex (id медиа). */
 export async function sha256Hex(blob) {
@@ -123,13 +124,13 @@ export async function prepareFile(file, { photoMaxSide, photoQuality, photoForma
   if (kind === 'image' && !/gif|svg/.test(mime)) {
     if (original) {
       if (mime === 'image/jpeg') blob = new Blob([stripJpegExif(new Uint8Array(await file.arrayBuffer()))], { type: mime });
-      else note = 'Оригинал сохранён с метаданными (может содержать геолокацию)';
+      else note = tr('Оригинал сохранён с метаданными (может содержать геолокацию)');
       ({ width, height } = await imageSize(blob));
     } else {
       const r = await compressPhoto(file, { maxSide: photoMaxSide, quality: photoQuality, format: photoFormat });
       if (!r) {
         kind = 'file';
-        note = 'Этот формат не удалось сжать — сохранён как есть';
+        note = tr('Этот формат не удалось сжать — сохранён как есть');
       } else if (!r.scaled && r.blob.size >= file.size && mime === 'image/jpeg') {
         // Сжатие не помогло, а размер и так мал — исходник без EXIF
         blob = new Blob([stripJpegExif(new Uint8Array(await file.arrayBuffer()))], { type: mime });
@@ -144,7 +145,7 @@ export async function prepareFile(file, { photoMaxSide, photoQuality, photoForma
   let durationMs = null;
   if (kind === 'video' || kind === 'audio') durationMs = await mediaDuration(blob, kind);
   const id = await sha256Hex(blob);
-  const name = renameExt(file.name || 'файл', ext, isOriginal);
+  const name = renameExt(file.name || tr('файл'), ext, isOriginal);
   return {
     blob, name, note,
     meta: { id, kind, mime: blob.type || mime, ext, codec, size: blob.size, width, height, durationMs, original: isOriginal },

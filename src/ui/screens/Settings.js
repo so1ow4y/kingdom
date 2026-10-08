@@ -40,6 +40,7 @@ import { tokenValid, startLogin, expireToken } from '../../google/auth.js';
 import { push, pull, revisionSpike } from '../../sync/syncEngine.js';
 import { confirmLogout } from '../account.js';
 import { buildMenu } from '../nav.js';
+import { tr } from '../../core/i18n.js';
 
 /** «Ещё» (#/more): всё меню дока одним списком — для старых ссылок и узких экранов. */
 export function MoreScreen() {
@@ -51,7 +52,7 @@ export function MoreScreen() {
         <section class="more-group" key=${g.title}>
           <h2 class="more-title">${g.title}</h2>
           <nav class="menu-list">
-            ${g.items.flatMap((it) => (it.items ? it.items.map((sub) => ({ ...sub, title: sub.title === 'Все списки' ? 'Списки' : sub.title, icon: sub.icon || it.icon })) : [it]))
+            ${g.items.flatMap((it) => (it.items ? it.items.map((sub) => ({ ...sub, title: sub.title === 'Все списки' ? tr('Списки') : sub.title, icon: sub.icon || it.icon })) : [it]))
               .filter((it) => !it.color)
               .map((it) => html`
                 <${Link} key=${it.to} to=${it.to} className="menu-item">
@@ -75,7 +76,7 @@ function Row({ label, hint, children }) {
 
 const PLATFORM = {
   'android-chrome': 'Android, Chrome', 'windows-chrome': 'Windows, Chrome', 'windows-edge': 'Windows, Edge',
-  'ios-safari': 'iPhone, Safari', bot: 'Telegram-бот', other: 'Другое',
+  'ios-safari': 'iPhone, Safari', bot: tr('Telegram-бот'), other: tr('Другое'),
 };
 
 function AccountSection() {
@@ -86,7 +87,7 @@ function AccountSection() {
     <section class="set-section">
       <h2>Аккаунт Google</h2>
       ${email || valid ? html`
-        <${Row} label=${email || 'Вход выполнен'} hint=${valid ? 'Доступ к Диску есть' : 'Сессия истекла — войдёт заново при пуше'}>
+        <${Row} label=${email || tr('Вход выполнен')} hint=${valid ? tr('Доступ к Диску есть') : tr('Сессия истекла — войдёт заново при пуше')}>
           ${valid
             ? html`<button class="btn small" onClick=${confirmLogout}><${Icon} name="logout" size=${16}/> Выйти</button>`
             : html`<button class="btn small primary" onClick=${() => startLogin({ action: 'pull' })} disabled=${offline}>Войти</button>`}
@@ -111,7 +112,7 @@ function AccountSection() {
 
 function SyncSection() {
   const tz = store.data.settings.timeZone;
-  const when = (iso) => (iso ? formatMoment(iso, tz) : 'ещё не было');
+  const when = (iso) => (iso ? formatMoment(iso, tz) : tr('ещё не было'));
   const me = store.data.devices.get(store.deviceId);
   const [name, setName] = useState(me?.name || '');
   const devices = [...store.data.devices.values()].filter((d) => !d.deletedAt)
@@ -149,10 +150,10 @@ function SyncSection() {
       <button class="btn" disabled=${!canRemove || devices.length < 2}
         onClick=${() => remove(devices.map(d => d.id))}>Очистить все сессии, кроме текущей</button>
       ${devices.map((d) => html`
-        <${Row} key=${d.id} label=${d.name + (d.id === store.deviceId ? ' (это устройство)' : '')}
-          hint=${`${PLATFORM[d.platform] || d.platform}, версия ${d.appVersion}`}>
-          <span class="muted small">${d.lastPushAt ? 'пуш ' + when(d.lastPushAt) : 'пушей не было'}</span>
-          ${d.id !== store.deviceId ? html`<button class="icon-btn" aria-label=${'Удалить устройство ' + d.name} title="Удалить устройство"
+        <${Row} key=${d.id} label=${d.name + (d.id === store.deviceId ? tr(' (это устройство)') : '')}
+          hint=${tr('{p0}, версия {appVersion}', { p0: PLATFORM[d.platform] || d.platform, appVersion: d.appVersion })}>
+          <span class="muted small">${d.lastPushAt ? tr('пуш ') + when(d.lastPushAt) : tr('пушей не было')}</span>
+          ${d.id !== store.deviceId ? html`<button class="icon-btn" aria-label=${tr('Удалить устройство ') + d.name} title="Удалить устройство"
             disabled=${!canRemove} onClick=${() => remove([d.id])}><${Icon} name="trash" size=${18}/></button>` : null}
         <//>`)}
     </section>`;
@@ -177,7 +178,7 @@ function TasksSection() {
           ${lists.map((l) => html`<option value=${l.id}>${(l.emoji ? l.emoji + ' ' : '') + l.name}</option>`)}
         </select>
       <//>
-      <${Row} label="Часовой пояс" hint=${s.timeZone !== deviceTz ? `На устройстве: ${deviceTz}` : 'Как на устройстве'}>
+      <${Row} label="Часовой пояс" hint=${s.timeZone !== deviceTz ? tr('На устройстве: {deviceTz}', { deviceTz }) : tr('Как на устройстве')}>
         <select value=${s.timeZone} disabled=${readOnly} onChange=${(e) => A.updateSettings({ timeZone: e.target.value })}>
           ${zones.map((z) => html`<option value=${z}>${z}</option>`)}
         </select>
@@ -204,9 +205,9 @@ function VillagePage() {
 function AboutSection() {
   const checkUpdate = async () => {
     const r = await checkForUpdate();
-    if (r === 'none') showSnackbar('Установлена последняя версия');
-    else if (r === 'unsupported') showSnackbar('Service Worker недоступен в этом браузере');
-    else if (r === 'error') showSnackbar('Не удалось проверить обновление (нет сети?)');
+    if (r === 'none') showSnackbar(tr('Установлена последняя версия'));
+    else if (r === 'unsupported') showSnackbar(tr('Service Worker недоступен в этом браузере'));
+    else if (r === 'error') showSnackbar(tr('Не удалось проверить обновление (нет сети?)'));
   };
   return html`
     <section class="set-section">
@@ -221,13 +222,13 @@ function DangerSection() {
   const clearLocal = async () => {
     const n = totalDirty();
     const v = await ask({
-      title: 'Очистить локальные данные?',
+      title: tr('Очистить локальные данные?'),
       text: n
-        ? `Есть ${countLabel(n, ['непушнутое изменение', 'непушнутых изменения', 'непушнутых изменений'])}. Они пропадут. Сначала сделай пуш.`
-        : 'Данные на этом устройстве будут удалены. На Google Диске всё останется — приложение заберёт данные заново после входа.',
+        ? tr('Есть {p0}. Они пропадут. Сначала сделай пуш.', { p0: countLabel(n, ['непушнутое изменение', 'непушнутых изменения', 'непушнутых изменений']) })
+        : tr('Данные на этом устройстве будут удалены. На Google Диске всё останется — приложение заберёт данные заново после входа.'),
       buttons: n
-        ? [{ label: 'Отмена', value: null }, { label: 'Сделать пуш', value: 'push', kind: 'primary' }, { label: 'Удалить всё равно', value: 'yes', kind: 'danger' }]
-        : [{ label: 'Отмена', value: null }, { label: 'Удалить', value: 'yes', kind: 'danger' }],
+        ? [{ label: tr('Отмена'), value: null }, { label: tr('Сделать пуш'), value: 'push', kind: 'primary' }, { label: tr('Удалить всё равно'), value: 'yes', kind: 'danger' }]
+        : [{ label: tr('Отмена'), value: null }, { label: tr('Удалить'), value: 'yes', kind: 'danger' }],
     });
     if (v === 'push') push();
     if (v === 'yes') A.clearLocalData();
@@ -252,20 +253,20 @@ function DebugSection() {
     store.sync.lastRevisionId = null;
     setFake(!fake);
     if (fake) setUi({ readOnly: null, readOnlySource: null });
-    showSnackbar(!fake ? 'Теперь база с Диска считается форматом v' + (SCHEMA_VERSION + 1) + '. Нажми «Обновить»' : 'Режим выключен. Нажми «Обновить»');
+    showSnackbar(!fake ? tr('Теперь база с Диска считается форматом v') + (SCHEMA_VERSION + 1) + tr('. Нажми «Обновить»') : tr('Режим выключен. Нажми «Обновить»'));
   };
   const spike = async () => {
-    showSnackbar('Проверяю ревизии… (около 5 секунд)');
+    showSnackbar(tr('Проверяю ревизии… (около 5 секунд)'));
     try {
       const r = await revisionSpike();
       await ask({
-        title: r.ok ? 'Ревизии: всё в порядке ✓' : 'Ревизии: проверка НЕ прошла',
-        text: `Ревизий у тестового файла: ${r.count} (ожидалось 4). Разные id: ${r.distinct ? 'да' : 'нет'}; все в списке: ${r.allListed ? 'да' : 'нет'}; `
-          + `по порядку: ${r.ordered ? 'да' : 'нет'}. ${r.ok ? 'Защита от одновременной записи работает как задумано.' : 'Сообщи разработчику — нужен запасной механизм (lock.json).'}`,
+        title: r.ok ? tr('Ревизии: всё в порядке ✓') : tr('Ревизии: проверка НЕ прошла'),
+        text: tr('Ревизий у тестового файла: {count} (ожидалось 4). Разные id: {p1}; все в списке: {p2}; ', { count: r.count, p1: r.distinct ? tr('да') : tr('нет'), p2: r.allListed ? tr('да') : tr('нет') })
+          + tr('по порядку: {p0}. {p1}', { p0: r.ordered ? tr('да') : tr('нет'), p1: r.ok ? tr('Защита от одновременной записи работает как задумано.') : tr('Сообщи разработчику — нужен запасной механизм (lock.json).') }),
         buttons: [{ label: 'OK', value: true, kind: 'primary' }],
       });
     } catch (e) {
-      showSnackbar('Проверка не удалась: ' + (e.message || e));
+      showSnackbar(tr('Проверка не удалась: ') + (e.message || e));
     }
   };
   return html`
@@ -273,8 +274,8 @@ function DebugSection() {
       <h2>Отладка</h2>
       <p class="muted small">Видно только по адресу #/settings?debug=1.</p>
       <div class="form-actions wrap-col">
-        <button class="btn" onClick=${async () => { await expireToken(); setUi({}); showSnackbar('Токен испорчен. Нажми «Пуш» — будет повторный вход'); }}>Испортить токен</button>
-        <button class="btn" onClick=${toggleFake}>${fake ? 'Выключить: база на Диске «новее»' : 'Притвориться, что база на Диске новее'}</button>
+        <button class="btn" onClick=${async () => { await expireToken(); setUi({}); showSnackbar(tr('Токен испорчен. Нажми «Пуш» — будет повторный вход')); }}>Испортить токен</button>
+        <button class="btn" onClick=${toggleFake}>${fake ? tr('Выключить: база на Диске «новее»') : tr('Притвориться, что база на Диске новее')}</button>
         <button class="btn" onClick=${spike} disabled=${!tokenValid()}>Проверить ревизии Диска</button>
       </div>
     </section>`;
@@ -285,56 +286,56 @@ function DebugSection() {
 /** Группы и разделы: название, описание шапки, ключевые слова для поиска. */
 const TREE = [
   {
-    id: 'account', title: 'Аккаунт', icon: 'user',
+    id: 'account', title: tr('Аккаунт'), icon: 'user',
     items: [
-      { key: 'account', title: 'Google и вход', desc: 'Вход через Google нужен только для синхронизации: задачи живут в браузере и в файле на твоём Google Диске.', keywords: 'google аккаунт вход выход почта диск папка login logout email' },
-      { key: 'sync', title: 'Синхронизация и устройства', desc: 'Пуш отправляет изменения на Диск, «Обновить» забирает изменения других устройств.', keywords: 'пуш обновить синхронизация устройства сессии имя устройства журнал конфликты push pull devices sync' },
+      { key: 'account', title: tr('Google и вход'), desc: tr('Вход через Google нужен только для синхронизации: задачи живут в браузере и в файле на твоём Google Диске.'), keywords: tr('google аккаунт вход выход почта диск папка login logout email') },
+      { key: 'sync', title: tr('Синхронизация и устройства'), desc: tr('Пуш отправляет изменения на Диск, «Обновить» забирает изменения других устройств.'), keywords: tr('пуш обновить синхронизация устройства сессии имя устройства журнал конфликты push pull devices sync') },
     ],
   },
   {
-    id: 'tasks', title: 'Задачи', icon: 'check',
+    id: 'tasks', title: tr('Задачи'), icon: 'check',
     items: [
-      { key: 'tasks', title: 'Общие', desc: 'Блок «Быт», часовой пояс и срок хранения корзины — общие для всех устройств.', keywords: 'быт дом часовой пояс корзина срок хранения timezone trash chores' },
-      { key: 'priorities', title: 'Приоритеты и опыт', desc: 'Цвет приоритета, монеты и опыт навыка за выполненную задачу.', keywords: 'приоритет приоритеты монеты опыт xp навык цвет priority coins' },
-      { key: 'notifications', title: 'Уведомления', desc: 'Напоминания о задачах на этом устройстве.', keywords: 'напоминания уведомления звук пропущенные настойчивые nag reminders notifications' },
+      { key: 'tasks', title: tr('Общие'), desc: tr('Блок «Быт», часовой пояс и срок хранения корзины — общие для всех устройств.'), keywords: tr('быт дом часовой пояс корзина срок хранения timezone trash chores') },
+      { key: 'priorities', title: tr('Приоритеты и опыт'), desc: tr('Цвет приоритета, монеты и опыт навыка за выполненную задачу.'), keywords: tr('приоритет приоритеты монеты опыт xp навык цвет priority coins') },
+      { key: 'notifications', title: tr('Уведомления'), desc: tr('Напоминания о задачах на этом устройстве.'), keywords: tr('напоминания уведомления звук пропущенные настойчивые nag reminders notifications') },
     ],
   },
   {
-    id: 'feast', title: 'Crimson Harvest — еда', icon: 'flame',
+    id: 'feast', title: tr('Crimson Harvest — еда'), icon: 'flame',
     items: [
-      { key: 'feast-goals', title: 'Цели и лимиты', desc: 'Параметры (пол, возраст, рост, вес, активность, цель), расчёт, дневной лимит калорий и БЖУ — то же, что в «Обо мне». Общие для всех устройств.', keywords: 'калории лимит цель белки жиры углеводы бжу ккал норма рассчитать активность пол рост вес возраст обо мне feast crimson harvest фитнес' },
-      { key: 'feast-rewards', title: 'Награды за еду', desc: 'Сколько опыта, монет и алмазов 💎 приносит запись продукта по умолчанию.', keywords: 'награда опыт монеты алмазы изумруды xp игра продукт еда' },
-      { key: 'feast-meals', title: 'Рационы', desc: 'Завтрак, обед, ужин, перекус и свои рационы: названия, значки, время, порядок.', keywords: 'рацион рационы приём пищи завтрак обед ужин перекус полдник время порядок значок' },
-      { key: 'feast-data', title: 'Дневник и хранение', desc: 'Сколько записей дневника хранить: старые дни удаляются, а их итоги остаются в аналитике.', keywords: 'дневник записи лимит хранение удаление сводки экспорт json feast' },
+      { key: 'feast-goals', title: tr('Цели и лимиты'), desc: tr('Параметры (пол, возраст, рост, вес, активность, цель), расчёт, дневной лимит калорий и БЖУ — то же, что в «Обо мне». Общие для всех устройств.'), keywords: tr('калории лимит цель белки жиры углеводы бжу ккал норма рассчитать активность пол рост вес возраст обо мне feast crimson harvest фитнес') },
+      { key: 'feast-rewards', title: tr('Награды за еду'), desc: tr('Сколько опыта, монет и алмазов 💎 приносит запись продукта по умолчанию.'), keywords: tr('награда опыт монеты алмазы изумруды xp игра продукт еда') },
+      { key: 'feast-meals', title: tr('Рационы'), desc: tr('Завтрак, обед, ужин, перекус и свои рационы: названия, значки, время, порядок.'), keywords: tr('рацион рационы приём пищи завтрак обед ужин перекус полдник время порядок значок') },
+      { key: 'feast-data', title: tr('Дневник и хранение'), desc: tr('Сколько записей дневника хранить: старые дни удаляются, а их итоги остаются в аналитике.'), keywords: tr('дневник записи лимит хранение удаление сводки экспорт json feast') },
     ],
   },
   {
-    id: 'interface', title: 'Интерфейс', icon: 'palette',
+    id: 'interface', title: tr('Интерфейс'), icon: 'palette',
     items: [
-      { key: 'appearance', title: 'Внешний вид', desc: 'Положение и вид док-панели, тема и цвета — у Chronicle и Crimson Harvest свои. Хранится только на этом устройстве.', keywords: 'тема цвет схема панель док буква квадрат автоскрытие тёмная светлая dock theme color appearance panel' },
-      { key: 'shortcuts', title: 'Горячие клавиши', desc: 'Клавиши для частых действий: переназначить, отключить, вернуть как было. Хранятся только на этом устройстве.', keywords: 'клавиши горячие сочетания клавиатура shortcut shortcuts hotkey keyboard' },
+      { key: 'appearance', title: tr('Внешний вид'), desc: tr('Положение и вид док-панели, тема и цвета — у Chronicle и Crimson Harvest свои. Хранится только на этом устройстве.'), keywords: tr('тема цвет схема панель док буква квадрат автоскрытие тёмная светлая dock theme color appearance panel') },
+      { key: 'shortcuts', title: tr('Горячие клавиши'), desc: tr('Клавиши для частых действий: переназначить, отключить, вернуть как было. Хранятся только на этом устройстве.'), keywords: tr('клавиши горячие сочетания клавиатура shortcut shortcuts hotkey keyboard') },
     ],
   },
   {
-    id: 'game', title: 'Игра', icon: 'village',
+    id: 'game', title: tr('Игра'), icon: 'village',
     items: [
-      { key: 'game', title: 'Игровой режим', desc: 'Монеты за задачи, магазин, уровни, серии и достижения.', keywords: 'игра монеты достижения украшения уровни серия game coins achievements' },
-      { key: 'village', title: 'Деревня', desc: 'Полоса деревни на фоне, гости у экрана, приближение, смена дня и ночи, строгий фокус.', keywords: 'деревня фон затемнение гости жители свет день ночь приближение фокус строгий анимация village' },
+      { key: 'game', title: tr('Игровой режим'), desc: tr('Монеты за задачи, магазин, уровни, серии и достижения.'), keywords: tr('игра монеты достижения украшения уровни серия game coins achievements') },
+      { key: 'village', title: tr('Деревня'), desc: tr('Полоса деревни на фоне, гости у экрана, приближение, смена дня и ночи, строгий фокус.'), keywords: tr('деревня фон затемнение гости жители свет день ночь приближение фокус строгий анимация village') },
     ],
   },
   {
-    id: 'data', title: 'Данные', icon: 'archive',
+    id: 'data', title: tr('Данные'), icon: 'archive',
     items: [
-      { key: 'data', title: 'Хранение и вложения', desc: 'Сколько хранить выполненных, архив zip, вложения, голосовые и кэш медиа.', keywords: 'данные архив zip выполненные лимит вложения фото видео голос кэш медиа export' },
-      { key: 'limits', title: 'Ограничения и хранилище', desc: 'Сколько места занято и какие ограничения действуют.', keywords: 'ограничения хранилище место квота лимиты storage limits' },
+      { key: 'data', title: tr('Хранение и вложения'), desc: tr('Сколько хранить выполненных, архив zip, вложения, голосовые и кэш медиа.'), keywords: tr('данные архив zip выполненные лимит вложения фото видео голос кэш медиа export') },
+      { key: 'limits', title: tr('Ограничения и хранилище'), desc: tr('Сколько места занято и какие ограничения действуют.'), keywords: tr('ограничения хранилище место квота лимиты storage limits') },
     ],
   },
   {
-    id: 'app', title: 'Приложение', icon: 'settings',
+    id: 'app', title: tr('Приложение'), icon: 'settings',
     items: [
-      { key: 'about', title: 'О приложении', desc: 'Версия приложения и формата данных, проверка обновления.', keywords: 'версия обновление формат about version update' },
-      { key: 'danger', title: 'Сброс данных', desc: 'Удаление данных этого браузера.', keywords: 'очистить локальные данные удалить сброс опасная зона reset clear' },
-      { key: 'debug', title: 'Отладка', desc: 'Проверки для разработчика.', keywords: 'отладка debug', debug: true },
+      { key: 'about', title: tr('О приложении'), desc: tr('Версия приложения и формата данных, проверка обновления.'), keywords: tr('версия обновление формат about version update') },
+      { key: 'danger', title: tr('Сброс данных'), desc: tr('Удаление данных этого браузера.'), keywords: tr('очистить локальные данные удалить сброс опасная зона reset clear') },
+      { key: 'debug', title: tr('Отладка'), desc: tr('Проверки для разработчика.'), keywords: tr('отладка debug'), debug: true },
     ],
   },
 ];

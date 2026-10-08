@@ -4,6 +4,7 @@
 // спортивный вид, без подробностей тела. Это иллюстрация оценки, а не медицинская картинка.
 
 import { html, useEffect, useRef } from '../html.js';
+import { tr } from '../../core/i18n.js';
 
 const FW = 56; // ширина холста в пикселях фигуры
 const FH = 112;
@@ -143,7 +144,7 @@ export function BodyFigure({ sex = 'male', bf = 20, heightCm = 175, label = '', 
   }, [sex, Math.round((bf || 0) * 2), heightCm, accent]);
   return html`<figure class="body-figure">
     <canvas ref=${ref} width=${FW} height=${FH} style=${{ width: FW * scale + 'px', height: FH * scale + 'px' }}
-      role="img" aria-label=${`Фигура при ${Math.round(bf)} % жира`}></canvas>
+      role="img" aria-label=${tr('Фигура при {p0} % жира', { p0: Math.round(bf) })}></canvas>
     ${label ? html`<figcaption>${label}</figcaption>` : null}
   </figure>`;
 }

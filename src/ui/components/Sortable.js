@@ -2,6 +2,7 @@
 // onMove(id, index) — index в списке БЕЗ перемещаемого элемента. Задачи перетаскиваются деревом — components/TaskTree.js.
 
 import { html, useRef, useState } from '../html.js';
+import { tr } from '../../core/i18n.js';
 
 export function SortableList({ items, render, onMove, className = '', disabled = false }) {
   const box = useRef(null);
@@ -75,7 +76,7 @@ export function SortableList({ items, render, onMove, className = '', disabled =
     </div>`;
 }
 
-export function DragHandle({ handle, label = 'Перетащить' }) {
+export function DragHandle({ handle, label = tr('Перетащить') }) {
   return html`<button class="drag-handle" aria-label=${label} title=${label}
     onClick=${(e) => e.stopPropagation()} ...${handle}>
     <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true" fill="currentColor">

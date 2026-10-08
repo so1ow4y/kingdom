@@ -130,6 +130,17 @@ test('разговор: у каждой ветки есть продолжени
     assert.equal(prestige, !!ctx.skill?.max, 'престиж — только на сотом уровне');
   }
   assert.equal(whoTitle({ ...keeper, stage: 3 }), 'Мастер · «Универ»');
+  // 0.12.5: из «Что у нас по делам?» — выбрать задачу для фокуса и закрыть задачу, не выходя из окна
+  const withTasks = talkTree({ ...base, who: keeper, affinity: affinityOf(3), tasks: { open: 2, overdue: 0, today: 0, any: true, next: null } });
+  const labels = withTasks.nodes.tasks.choices.map((ch) => ch.go || ch.act);
+  assert.deepEqual(labels, ['openList', 'pickFocus', 'pickDone', 'more']);
+  assert.equal(withTasks.nodes.pickFocus.picker, 'focus');
+  assert.equal(withTasks.nodes.pickDone.picker, 'done');
+  const resident = talkTree({ ...base, who: { kind: 'miner', keeper: false, ...RESIDENTS.miner }, affinity: affinityOf(3), tasks: { open: 3, overdue: 1, any: true, next: null } });
+  assert.ok(resident.nodes.hello.choices.some((ch) => ch.go === 'tasks'), 'у жителя из магазина — дела на сегодня');
+  assert.ok(/На сегодня у тебя 3 задачи, просрочено 1/.test(resident.nodes.tasks.lines[0].t));
+  const cat = talkTree({ ...base, who: { kind: 'cat', keeper: false, ...RESIDENTS.cat }, affinity: affinityOf(3), tasks: null });
+  assert.ok(!cat.nodes.tasks, 'у кота дел нет');
 });
 
 test('отрисовка: чиби во всех позах и портреты со всеми эмоциями рисуются, с обводкой', () => {
@@ -157,8 +168,10 @@ test('отрисовка: чиби во всех позах и портреты 
       }
     }
     for (const e of ['neutral', 'smile', 'grin', 'surprised', 'sad', 'blush', 'closed']) {
-      const p = painted(portrait({ kind: 'keeper', look }, e));
-      assert.ok(p.n > 1500, `портрет ${e}: ${p.n}`);
+      const cv = portrait({ kind: 'keeper', look }, e);
+      assert.equal(cv.width, 128, 'портрет 128 × 128 (0.12.5)');
+      const p = painted(cv);
+      assert.ok(p.n > 6000, `портрет ${e}: ${p.n}`);
     }
   }
   for (const kind of ['cat', 'kitten', 'fox', 'slime', 'shroom', 'ghost', 'dragon', 'spider']) {

@@ -3,6 +3,7 @@
 
 import { todayIn, nowTimeIn } from '../core/dates.js';
 import { TIMINGS } from '../config.js';
+import { tr } from '../core/i18n.js';
 
 export const store = {
   data: {
@@ -180,7 +181,7 @@ export async function confirm({ title, text = '', confirmLabel, danger = false }
     title,
     text,
     buttons: [
-      { label: 'Отмена', value: false },
+      { label: tr('Отмена'), value: false },
       { label: confirmLabel, value: true, kind: danger ? 'danger' : 'primary' },
     ],
   });

@@ -15,6 +15,7 @@ import { formatMinutes } from './Focus.js';
 import { PRIORITY_NONE_ID } from '../../core/priorities.js';
 import { TIMINGS } from '../../config.js';
 import { DragHandle } from './Sortable.js';
+import { tr } from '../../core/i18n.js';
 
 /** Списки задачи компактно: точка, эмодзи и название; больше двух — «+N». */
 function ListChips({ task }) {
@@ -44,7 +45,7 @@ export function TaskMeta({ task, showList, showParent = false, index = null }) {
     // повтор: правило и дата текущего раза
     const due = task.status === 'active' ? RP.dueDate(task, today, store.data.settings.timeZone) : null;
     const late = !!due && due < today;
-    parts.push(html`<span class=${'meta-date meta-repeat' + (late ? ' late' : '')} title=${'Повтор: ' + RP.describeRule(task.repeat)}>
+    parts.push(html`<span class=${'meta-date meta-repeat' + (late ? ' late' : '')} title=${tr('Повтор: ') + RP.describeRule(task.repeat)}>
       <${Icon} name="repeat" size=${13}/>${RP.describeRule(task.repeat)}${due ? ' · ' + humanDate(due, today).toLowerCase() : ''}${task.scheduledTime ? ' ' + task.scheduledTime : ''}</span>`);
   }
   if (task.scheduledDate) {
@@ -61,7 +62,7 @@ export function TaskMeta({ task, showList, showParent = false, index = null }) {
   }
   const prio = S.priorityOf(store.data, task);
   if (prio && prio.id !== PRIORITY_NONE_ID) {
-    parts.push(html`<span class="meta-prio" style=${{ color: prio.color }} title=${'Приоритет: ' + prio.name}><${Icon} name="flag" size=${13}/></span>`);
+    parts.push(html`<span class="meta-prio" style=${{ color: prio.color }} title=${tr('Приоритет: ') + prio.name}><${Icon} name="flag" size=${13}/></span>`);
   }
   if (index) {
     const pr = S.progressOf(store.data, task.id, index);
@@ -72,7 +73,7 @@ export function TaskMeta({ task, showList, showParent = false, index = null }) {
   if ((task.reminders || []).some((r) => !r.deletedAt)) parts.push(html`<span class="meta-note" title="Есть напоминания">🔔</span>`);
   const running = getFocus()?.taskId === task.id;
   const fm = focusTotal(task).minutes;
-  if (running || fm) parts.push(html`<span class=${'meta-focus' + (running ? ' running' : '')} title=${running ? 'Сейчас идёт фокус' : 'Фокус по задаче'}>◎ ${running ? 'фокус' : formatMinutes(fm)}</span>`);
+  if (running || fm) parts.push(html`<span class=${'meta-focus' + (running ? ' running' : '')} title=${running ? tr('Сейчас идёт фокус') : tr('Фокус по задаче')}>◎ ${running ? tr('фокус') : formatMinutes(fm)}</span>`);
   return parts.length ? html`<div class="task-meta">${parts}</div>` : null;
 }
 
@@ -150,10 +151,10 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
       style=${{ '--depth': depth }}
       onKeyDown=${(e) => onRowKey(e, open, onKeyMove)}>
       ${onToggle ? html`<button class=${'tree-toggle' + (kids ? '' : ' empty')} onClick=${stop(onToggle)} disabled=${!kids}
-        aria-label=${collapsed ? 'Развернуть подзадачи' : 'Свернуть подзадачи'} aria-expanded=${!collapsed}>
+        aria-label=${collapsed ? tr('Развернуть подзадачи') : tr('Свернуть подзадачи')} aria-expanded=${!collapsed}>
         ${kids ? html`<${Icon} name=${collapsed ? 'chevron' : 'chevronDown'} size=${16}/>` : null}</button>` : null}
       <button class=${'check' + (done || completing ? ' checked' : '')} onClick=${onCheck}
-        aria-label=${done ? 'Вернуть в работу' : 'Выполнить'} disabled=${readOnly}>
+        aria-label=${done ? tr('Вернуть в работу') : tr('Выполнить')} disabled=${readOnly}>
         ${done || completing ? html`<${Icon} name="check" size=${16}/>` : null}
       </button>
       <div class="task-main">
@@ -170,7 +171,7 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
       ${(!done && !hasParent) || focused ? html`
         <button class=${'star' + (focused ? ' on' : ' star-optional') + (quickActions ? ' star-visible' : '')}
           onClick=${stop(() => !readOnly && toggleFocus(task.id, today))}
-          aria-label=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(today, store.now.today)} title=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(today, store.now.today)}>
+          aria-label=${focused ? tr('Убрать из главного') : tr('Главное на ') + humanDate(today, store.now.today)} title=${focused ? tr('Убрать из главного') : tr('Главное на ') + humanDate(today, store.now.today)}>
           <${Icon} name="star" filled=${focused} size=${20}/>
         </button>` : null}
       <button class="icon-btn row-menu" onClick=${menu} aria-label="Действия" title="Действия"><${Icon} name="dots" size=${18}/></button>

@@ -1,4 +1,5 @@
 // Feast (обновление 0.11): справочник пищевых веществ и арифметика дневника. Чистые функции, без браузерных API.
+import { tr } from './i18n.js';
 //
 // Значения продукта хранятся на 100 г (или 100 мл) — разреженно: чего нет, то 0 (по умолчанию нули у всех).
 // Нормы (rdi) — справочные суточные значения для взрослого (как NRV/RI на этикетках ЕС и России): по ним
@@ -6,62 +7,62 @@
 
 /** Основные рационы по умолчанию (0.12 — это записи коллекции meals с этими id, их можно переименовать). */
 export const MEALS = [
-  { key: 'breakfast', label: 'Завтрак', icon: '🌅' },
-  { key: 'lunch', label: 'Обед', icon: '🍲' },
-  { key: 'dinner', label: 'Ужин', icon: '🌙' },
-  { key: 'snack', label: 'Перекус', icon: '🍎' },
+  { key: 'breakfast', label: tr('Завтрак'), icon: '🌅' },
+  { key: 'lunch', label: tr('Обед'), icon: '🍲' },
+  { key: 'dinner', label: tr('Ужин'), icon: '🌙' },
+  { key: 'snack', label: tr('Перекус'), icon: '🍎' },
 ];
 export const MEAL_KEYS = MEALS.map((m) => m.key);
-export const mealLabel = (k) => MEALS.find((m) => m.key === k)?.label || 'Перекус';
+export const mealLabel = (k) => MEALS.find((m) => m.key === k)?.label || tr('Перекус');
 
 /** group: main — КБЖУ, more — подробнее, vitamins, minerals. */
 export const NUTRIENTS = [
-  { key: 'kcal', label: 'Калории', short: 'ккал', unit: 'ккал', group: 'main', rdi: 2000 },
-  { key: 'protein', label: 'Белки', short: 'Б', unit: 'г', group: 'main', rdi: 50 },
-  { key: 'fat', label: 'Жиры', short: 'Ж', unit: 'г', group: 'main', rdi: 70 },
-  { key: 'carbs', label: 'Углеводы', short: 'У', unit: 'г', group: 'main', rdi: 260 },
+  { key: 'kcal', label: tr('Калории'), short: tr('ккал'), unit: tr('ккал'), group: 'main', rdi: 2000 },
+  { key: 'protein', label: tr('Белки'), short: tr('Б'), unit: tr('г'), group: 'main', rdi: 50 },
+  { key: 'fat', label: tr('Жиры'), short: tr('Ж'), unit: tr('г'), group: 'main', rdi: 70 },
+  { key: 'carbs', label: tr('Углеводы'), short: tr('У'), unit: tr('г'), group: 'main', rdi: 260 },
 
-  { key: 'fiber', label: 'Клетчатка', unit: 'г', group: 'more', rdi: 25 },
-  { key: 'sugar', label: 'Сахара', unit: 'г', group: 'more', rdi: 90 },
-  { key: 'satFat', label: 'Насыщенные жиры', unit: 'г', group: 'more', rdi: 20 },
-  { key: 'transFat', label: 'Трансжиры', unit: 'г', group: 'more', rdi: null },
-  { key: 'cholesterol', label: 'Холестерин', unit: 'мг', group: 'more', rdi: 300 },
-  { key: 'salt', label: 'Соль', unit: 'г', group: 'more', rdi: 6 },
-  { key: 'water', label: 'Вода', unit: 'г', group: 'more', rdi: null },
+  { key: 'fiber', label: tr('Клетчатка'), unit: tr('г'), group: 'more', rdi: 25 },
+  { key: 'sugar', label: tr('Сахара'), unit: tr('г'), group: 'more', rdi: 90 },
+  { key: 'satFat', label: tr('Насыщенные жиры'), unit: tr('г'), group: 'more', rdi: 20 },
+  { key: 'transFat', label: tr('Трансжиры'), unit: tr('г'), group: 'more', rdi: null },
+  { key: 'cholesterol', label: tr('Холестерин'), unit: tr('мг'), group: 'more', rdi: 300 },
+  { key: 'salt', label: tr('Соль'), unit: tr('г'), group: 'more', rdi: 6 },
+  { key: 'water', label: tr('Вода'), unit: tr('г'), group: 'more', rdi: null },
 
-  { key: 'vitA', label: 'Витамин A', unit: 'мкг', group: 'vitamins', rdi: 800 },
-  { key: 'vitB1', label: 'Витамин B1 (тиамин)', unit: 'мг', group: 'vitamins', rdi: 1.1 },
-  { key: 'vitB2', label: 'Витамин B2 (рибофлавин)', unit: 'мг', group: 'vitamins', rdi: 1.4 },
-  { key: 'vitB3', label: 'Витамин B3 (PP, ниацин)', unit: 'мг', group: 'vitamins', rdi: 16 },
-  { key: 'vitB5', label: 'Витамин B5', unit: 'мг', group: 'vitamins', rdi: 6 },
-  { key: 'vitB6', label: 'Витамин B6', unit: 'мг', group: 'vitamins', rdi: 1.4 },
-  { key: 'vitB7', label: 'Витамин B7 (биотин)', unit: 'мкг', group: 'vitamins', rdi: 50 },
-  { key: 'vitB9', label: 'Витамин B9 (фолаты)', unit: 'мкг', group: 'vitamins', rdi: 200 },
-  { key: 'vitB12', label: 'Витамин B12', unit: 'мкг', group: 'vitamins', rdi: 2.5 },
-  { key: 'vitC', label: 'Витамин C', unit: 'мг', group: 'vitamins', rdi: 80 },
-  { key: 'vitD', label: 'Витамин D', unit: 'мкг', group: 'vitamins', rdi: 5 },
-  { key: 'vitE', label: 'Витамин E', unit: 'мг', group: 'vitamins', rdi: 12 },
-  { key: 'vitK', label: 'Витамин K', unit: 'мкг', group: 'vitamins', rdi: 75 },
+  { key: 'vitA', label: tr('Витамин A'), unit: tr('мкг'), group: 'vitamins', rdi: 800 },
+  { key: 'vitB1', label: tr('Витамин B1 (тиамин)'), unit: tr('мг'), group: 'vitamins', rdi: 1.1 },
+  { key: 'vitB2', label: tr('Витамин B2 (рибофлавин)'), unit: tr('мг'), group: 'vitamins', rdi: 1.4 },
+  { key: 'vitB3', label: tr('Витамин B3 (PP, ниацин)'), unit: tr('мг'), group: 'vitamins', rdi: 16 },
+  { key: 'vitB5', label: tr('Витамин B5'), unit: tr('мг'), group: 'vitamins', rdi: 6 },
+  { key: 'vitB6', label: tr('Витамин B6'), unit: tr('мг'), group: 'vitamins', rdi: 1.4 },
+  { key: 'vitB7', label: tr('Витамин B7 (биотин)'), unit: tr('мкг'), group: 'vitamins', rdi: 50 },
+  { key: 'vitB9', label: tr('Витамин B9 (фолаты)'), unit: tr('мкг'), group: 'vitamins', rdi: 200 },
+  { key: 'vitB12', label: tr('Витамин B12'), unit: tr('мкг'), group: 'vitamins', rdi: 2.5 },
+  { key: 'vitC', label: tr('Витамин C'), unit: tr('мг'), group: 'vitamins', rdi: 80 },
+  { key: 'vitD', label: tr('Витамин D'), unit: tr('мкг'), group: 'vitamins', rdi: 5 },
+  { key: 'vitE', label: tr('Витамин E'), unit: tr('мг'), group: 'vitamins', rdi: 12 },
+  { key: 'vitK', label: tr('Витамин K'), unit: tr('мкг'), group: 'vitamins', rdi: 75 },
 
-  { key: 'calcium', label: 'Кальций', unit: 'мг', group: 'minerals', rdi: 800 },
-  { key: 'iron', label: 'Железо', unit: 'мг', group: 'minerals', rdi: 14 },
-  { key: 'magnesium', label: 'Магний', unit: 'мг', group: 'minerals', rdi: 375 },
-  { key: 'phosphorus', label: 'Фосфор', unit: 'мг', group: 'minerals', rdi: 700 },
-  { key: 'potassium', label: 'Калий', unit: 'мг', group: 'minerals', rdi: 2000 },
-  { key: 'sodium', label: 'Натрий', unit: 'мг', group: 'minerals', rdi: 2400 },
-  { key: 'zinc', label: 'Цинк', unit: 'мг', group: 'minerals', rdi: 10 },
-  { key: 'copper', label: 'Медь', unit: 'мг', group: 'minerals', rdi: 1 },
-  { key: 'manganese', label: 'Марганец', unit: 'мг', group: 'minerals', rdi: 2 },
-  { key: 'selenium', label: 'Селен', unit: 'мкг', group: 'minerals', rdi: 55 },
-  { key: 'iodine', label: 'Йод', unit: 'мкг', group: 'minerals', rdi: 150 },
+  { key: 'calcium', label: tr('Кальций'), unit: tr('мг'), group: 'minerals', rdi: 800 },
+  { key: 'iron', label: tr('Железо'), unit: tr('мг'), group: 'minerals', rdi: 14 },
+  { key: 'magnesium', label: tr('Магний'), unit: tr('мг'), group: 'minerals', rdi: 375 },
+  { key: 'phosphorus', label: tr('Фосфор'), unit: tr('мг'), group: 'minerals', rdi: 700 },
+  { key: 'potassium', label: tr('Калий'), unit: tr('мг'), group: 'minerals', rdi: 2000 },
+  { key: 'sodium', label: tr('Натрий'), unit: tr('мг'), group: 'minerals', rdi: 2400 },
+  { key: 'zinc', label: tr('Цинк'), unit: tr('мг'), group: 'minerals', rdi: 10 },
+  { key: 'copper', label: tr('Медь'), unit: tr('мг'), group: 'minerals', rdi: 1 },
+  { key: 'manganese', label: tr('Марганец'), unit: tr('мг'), group: 'minerals', rdi: 2 },
+  { key: 'selenium', label: tr('Селен'), unit: tr('мкг'), group: 'minerals', rdi: 55 },
+  { key: 'iodine', label: tr('Йод'), unit: tr('мкг'), group: 'minerals', rdi: 150 },
 ];
 export const NUTRIENT = Object.fromEntries(NUTRIENTS.map((n) => [n.key, n]));
 export const NUTRIENT_KEYS = NUTRIENTS.map((n) => n.key);
 export const NUTRIENT_GROUPS = [
-  { key: 'main', label: 'Калории и БЖУ' },
-  { key: 'more', label: 'Подробнее' },
-  { key: 'vitamins', label: 'Витамины' },
-  { key: 'minerals', label: 'Минералы' },
+  { key: 'main', label: tr('Калории и БЖУ') },
+  { key: 'more', label: tr('Подробнее') },
+  { key: 'vitamins', label: tr('Витамины') },
+  { key: 'minerals', label: tr('Минералы') },
 ];
 export const MACROS = ['protein', 'fat', 'carbs'];
 /** Ккал в грамме: белки и углеводы — 4, жиры — 9. */
@@ -153,11 +154,25 @@ export function entryNutrients(e) {
 
 export const entryKcal = (e) => nv(entryNutrients(e), 'kcal');
 
-/** Подпись количества: «150 г», «200 мл», «2 порции». */
+/** Формы лекарств (0.12.5): ключ, полное название, сокращение для «4 ед.». */
+export const MED_UNITS = [
+  { key: 'tab', label: tr('таблетки'), short: tr('табл.') },
+  { key: 'cap', label: tr('капсулы'), short: tr('капс.') },
+  { key: 'iu', label: tr('единицы (ед.)'), short: tr('ед.') },
+  { key: 'mg', label: tr('миллиграммы'), short: tr('мг') },
+  { key: 'mlm', label: tr('миллилитры'), short: tr('мл') },
+  { key: 'drop', label: tr('капли'), short: tr('кап.') },
+  { key: 'puff', label: tr('вдохи'), short: tr('вд.') },
+  { key: 'pc', label: tr('штуки'), short: tr('шт.') },
+];
+export const MED_UNIT = Object.fromEntries(MED_UNITS.map((u) => [u.key, u]));
+
+/** Подпись количества: «150 г», «200 мл», «2 порции», у лекарств — «4 ед.», «1 табл.». */
 export function amountLabel(e) {
   const a = Number.isFinite(e?.amount) ? e.amount : 0;
-  if (e?.unit === 'portion') return a === 1 ? '1 порция' : `${fmt(a, 'x')} порц.`;
-  return `${fmt(a, 'x')} ${e?.unit === 'ml' ? 'мл' : 'г'}`;
+  if (e?.unit === 'portion') return a === 1 ? tr('1 порция') : tr('{p0} порц.', { p0: fmt(a, 'x') });
+  if (MED_UNIT[e?.unit]) return `${fmt(a, 'x')} ${MED_UNIT[e.unit].short}`;
+  return `${fmt(a, 'x')} ${e?.unit === 'ml' ? tr('мл') : tr('г')}`;
 }
 
 // ---------- Цели: калории и БЖУ (0.12) ----------
@@ -242,18 +257,18 @@ export function dayGoals(settings) {
 export function checkGoals({ kcal, mode, pct = {}, grams = {} }) {
   const k = int(kcal);
   const res = (error, total = 0) => ({ ok: !error, error, total, kcal: k });
-  if (!k || k < KCAL_RANGE[0] || k > KCAL_RANGE[1]) return res(`Лимит калорий — от ${KCAL_RANGE[0]} до ${KCAL_RANGE[1]} ккал`);
+  if (!k || k < KCAL_RANGE[0] || k > KCAL_RANGE[1]) return res(tr('Лимит калорий — от {p0} до {p1} ккал', { p0: KCAL_RANGE[0], p1: KCAL_RANGE[1] }));
   if (mode === 'pct') {
     const vals = MACROS.map((m) => pct[m]);
-    if (vals.some((v) => !Number.isFinite(v) || v < 0 || v > 100)) return res('Каждая доля — от 0 до 100 %');
+    if (vals.some((v) => !Number.isFinite(v) || v < 0 || v > 100)) return res(tr('Каждая доля — от 0 до 100 %'));
     const total = vals.reduce((s, v) => s + v, 0);
-    if (Math.abs(total - 100) > 0.001) return res(`Доли БЖУ в сумме должны быть 100 % — сейчас ${total} %`, total);
+    if (Math.abs(total - 100) > 0.001) return res(tr('Доли БЖУ в сумме должны быть 100 % — сейчас {total} %', { total }), total);
     return res(null, total);
   }
   const vals = MACROS.map((m) => grams[m]);
-  if (vals.some((v) => !Number.isFinite(v) || v < 0 || v > MACRO_GRAMS_MAX)) return res(`Граммы — от 0 до ${MACRO_GRAMS_MAX}`);
+  if (vals.some((v) => !Number.isFinite(v) || v < 0 || v > MACRO_GRAMS_MAX)) return res(tr('Граммы — от 0 до {MACRO_GRAMS_MAX}', { MACRO_GRAMS_MAX }));
   const total = macrosKcal(grams);
-  if (total > k) return res(`Белки, жиры и углеводы дают ${total} ккал — больше лимита ${k} на ${total - k}`, total);
+  if (total > k) return res(tr('Белки, жиры и углеводы дают {total} ккал — больше лимита {k} на {p2}', { total, k, p2: total - k }), total);
   return res(null, total);
 }
 

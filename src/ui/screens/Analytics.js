@@ -7,9 +7,10 @@ import * as AN from '../../core/analytics.js';
 import { addDays, daysBetween, dayLabel, longDate, WEEKDAY_SHORT } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { readLocal, writeLocal } from '../hooks.js';
+import { tr } from '../../core/i18n.js';
 
 const TASKS = ['задача', 'задачи', 'задач'];
-const MONTHS = ['янв', 'фев', 'мар', 'апр', 'май', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+const MONTHS = [tr('янв'), tr('фев'), tr('мар'), tr('апр'), tr('май'), tr('июн'), tr('июл'), tr('авг'), tr('сен'), tr('окт'), tr('ноя'), tr('дек')];
 const fmt1 = (x) => (Math.round(x * 10) / 10).toLocaleString('ru-RU');
 const short = (d) => `${+d.slice(8, 10)} ${MONTHS[+d.slice(5, 7) - 1]}`;
 
@@ -31,10 +32,10 @@ function BarChart({ map, from, to, color, unitName }) {
   const gap = Math.min(4, bw * 0.25);
   const ticks = items.length <= 8 ? items.map((_, i) => i) : [0, Math.floor(items.length / 2), items.length - 1];
   const picked = sel != null ? items[sel] : null;
-  const per = unit === 'day' ? '' : unit === 'week' ? ' (по неделям)' : ' (по месяцам)';
+  const per = unit === 'day' ? '' : unit === 'week' ? tr(' (по неделям)') : tr(' (по месяцам)');
   return html`
     <figure class="chart">
-      <svg viewBox=${`0 0 ${W} ${H + 22}`} class="chart-svg" role="img" aria-label=${'График' + per}>
+      <svg viewBox=${`0 0 ${W} ${H + 22}`} class="chart-svg" role="img" aria-label=${tr('График') + per}>
         <line x1="0" x2=${W} y1=${H} y2=${H} class="chart-axis"/>
         <line x1="0" x2=${W} y1=${top} y2=${top} class="chart-grid"/>
         <text x="2" y="10" class="chart-max">${max}</text>
@@ -49,7 +50,7 @@ function BarChart({ map, from, to, color, unitName }) {
         ${ticks.map((i) => html`<text key=${'t' + i} x=${Math.min(W - 2, Math.max(2, i * bw + bw / 2))} y=${H + 16}
           text-anchor=${i === 0 ? 'start' : i === items.length - 1 ? 'end' : 'middle'} class="chart-tick">${unit === 'month' ? MONTHS[+items[i].key.slice(5, 7) - 1] : short(items[i].from)}</text>`)}
       </svg>
-      <figcaption class="chart-cap">${picked ? `${bucketLabel(picked, unit)}: ${picked.value} ${unitName(picked.value)}` : `Нажми на столбик, чтобы увидеть число${per}`}</figcaption>
+      <figcaption class="chart-cap">${picked ? `${bucketLabel(picked, unit)}: ${picked.value} ${unitName(picked.value)}` : tr('Нажми на столбик, чтобы увидеть число{per}', { per })}</figcaption>
     </figure>`;
 }
 
@@ -108,7 +109,7 @@ function Heatmap({ done, from, to }) {
       </svg>
     </div>
     <div class="heatmap-foot">
-      <span class="chart-cap">${sel ? `${dayLabel(sel)} ${sel.slice(0, 4)}: ${countLabel(n, TASKS)}` : 'Нажми на клетку, чтобы увидеть день'}</span>
+      <span class="chart-cap">${sel ? `${dayLabel(sel)} ${sel.slice(0, 4)}: ${countLabel(n, TASKS)}` : tr('Нажми на клетку, чтобы увидеть день')}</span>
       <span class="hm-legend">меньше ${[0, 1, 2, 3, 4].map((l) => html`<i class=${'hm-' + l}></i>`)} больше</span>
     </div>`;
 }
@@ -153,8 +154,8 @@ export function AnalyticsScreen() {
         <${Stat} label="Выполнено" value=${a.total}/>
         <${Stat} label="Среднее в день" value=${fmt1(a.average)}/>
         <${Stat} label="Лучший день" value=${a.best ? a.best.n : '—'} sub=${a.best ? dayLabel(a.best.date) : null}/>
-        <${Stat} label="Серия" value=${a.streak.current} sub=${'лучшая: ' + a.streak.best}/>
-        ${game ? html`<${Stat} label="Монеты" value=${'+' + a.totalCoins + ' 🪙'} sub=${a.spent ? `потрачено ${a.spent}` : null}/>` : null}
+        <${Stat} label="Серия" value=${a.streak.current} sub=${tr('лучшая: ') + a.streak.best}/>
+        ${game ? html`<${Stat} label="Монеты" value=${'+' + a.totalCoins + ' 🪙'} sub=${a.spent ? tr('потрачено {spent}', { spent: a.spent }) : null}/>` : null}
       </div>
 
       <section class="card-block">

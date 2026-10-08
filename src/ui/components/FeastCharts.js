@@ -6,6 +6,7 @@
 import { html, useState, useRef } from '../html.js';
 import { addDays, daysBetween, longDate } from '../../core/dates.js';
 import { fmt } from '../../core/nutrition.js';
+import { tr } from '../../core/i18n.js';
 
 const W = 640;
 const PAD = { l: 44, r: 12, t: 12, b: 26 };
@@ -58,7 +59,7 @@ export function CalorieChart({ series, from, to, goal, height = 200 }) {
       const days = Array.from({ length: 7 }, (_, k) => addDays(start, k)).filter((d) => d <= to);
       const logged = days.map((d) => byDate.get(d)).filter((d) => d?.count);
       const kcal = logged.length ? logged.reduce((s, d) => s + (d.totals.kcal || 0), 0) / logged.length : 0;
-      buckets.push({ key: start, label: shortDate(start), title: `${longDate(start)} — ${longDate(days.at(-1))}, в среднем`, kcal, logged: logged.length > 0, n: logged.length });
+      buckets.push({ key: start, label: shortDate(start), title: tr('{p0} — {p1}, в среднем', { p0: longDate(start), p1: longDate(days.at(-1)) }), kcal, logged: logged.length > 0, n: logged.length });
     }
   }
   const max = Math.max(goal * 1.15, ...buckets.map((b) => b.kcal), 100);
@@ -77,8 +78,8 @@ export function CalorieChart({ series, from, to, goal, height = 200 }) {
     const over = b.kcal > goal;
     setTip({
       x: px, y: (y(b.kcal) / height) * rect.height,
-      body: html`<b>${b.title}</b><span>${b.logged ? `${num(b.kcal)} ккал` : 'нет записей'}</span>
-        ${b.logged ? html`<span class="muted">${over ? `⚠ на ${num(b.kcal - goal)} больше лимита` : `до лимита ${num(goal - b.kcal)}`}</span>` : null}`,
+      body: html`<b>${b.title}</b><span>${b.logged ? tr('{p0} ккал', { p0: num(b.kcal) }) : tr('нет записей')}</span>
+        ${b.logged ? html`<span class="muted">${over ? tr('⚠ на {p0} больше лимита', { p0: num(b.kcal - goal) }) : tr('до лимита {p0}', { p0: num(goal - b.kcal) })}</span>` : null}`,
     });
     e?.stopPropagation?.();
   };
@@ -87,14 +88,14 @@ export function CalorieChart({ series, from, to, goal, height = 200 }) {
       <span><i class="swatch" style=${{ background: 'var(--series-1)' }}></i>в пределах лимита</span>
       <span><i class="swatch" style=${{ background: 'var(--danger)' }}></i>⚠ сверх лимита</span>
       <span><i class="line-key ref-key"></i>лимит ${num(goal)}</span>
-      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? 'График' : 'Таблицей'}</button>
+      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? tr('График') : tr('Таблицей')}</button>
     </div>
-    ${table ? html`<div class="fchart-table"><table><thead><tr><th>${weekly ? 'Неделя' : 'День'}</th><th class="num">ккал</th><th></th></tr></thead><tbody>
-      ${buckets.filter((b) => b.logged).reverse().map((b) => html`<tr key=${b.key}><td>${b.title}</td><td class="num">${num(b.kcal)}</td><td>${b.kcal > goal ? '⚠ сверх лимита' : ''}</td></tr>`)}
+    ${table ? html`<div class="fchart-table"><table><thead><tr><th>${weekly ? tr('Неделя') : tr('День')}</th><th class="num">ккал</th><th></th></tr></thead><tbody>
+      ${buckets.filter((b) => b.logged).reverse().map((b) => html`<tr key=${b.key}><td>${b.title}</td><td class="num">${num(b.kcal)}</td><td>${b.kcal > goal ? tr('⚠ сверх лимита') : ''}</td></tr>`)}
     </tbody></table></div>` : html`
     <div class="fchart-box" ref=${box} onPointerLeave=${() => setTip(null)}>
       <svg viewBox=${`0 0 ${W} ${height}`} preserveAspectRatio="none" class="fchart-svg" role="img"
-        aria-label=${`Калории по ${weekly ? 'неделям' : 'дням'}, лимит ${goal}`}>
+        aria-label=${tr('Калории по {p0}, лимит {goal}', { p0: weekly ? tr('неделям') : tr('дням'), goal })}>
         ${tk.map((t) => html`<line key=${'g' + t} class="grid" x1=${PAD.l} x2=${W - PAD.r} y1=${y(t)} y2=${y(t)}/>`)}
         ${buckets.map((b, i) => (b.logged ? html`<path key=${b.key} class="bar" d=${barPath(PAD.l + slot * i + (slot - bw) / 2, y(b.kcal), bw, PAD.t + ih - y(b.kcal))}
           fill=${b.kcal > goal ? 'var(--danger)' : 'var(--series-1)'}/>` : null))}
@@ -113,7 +114,7 @@ export function CalorieChart({ series, from, to, goal, height = 200 }) {
  * Линейный график по датам: lines — [{ key, label, color, points: [{ date, y }], dots?: bool, line?: bool }],
  * refs — [{ y, label }] (цель), unit — подпись значений, digits — знаков после запятой.
  */
-export function LineChart({ lines, from, to, refs = [], unit = '', digits = 1, height = 200, label = 'График' }) {
+export function LineChart({ lines, from, to, refs = [], unit = '', digits = 1, height = 200, label = tr('График') }) {
   const box = useRef(null);
   const [tip, setTip] = useState(null);
   const [table, setTable] = useState(false);
@@ -157,7 +158,7 @@ export function LineChart({ lines, from, to, refs = [], unit = '', digits = 1, h
     <div class="fchart-legend">
       ${lines.length > 1 ? lines.map((l) => html`<span key=${l.key}><i class=${l.line === false ? 'swatch dot' : 'line-key'} style=${{ background: l.color }}></i>${l.label}</span>`) : null}
       ${refs.map((r) => html`<span key=${'r' + r.y}><i class="line-key ref-key"></i>${r.label}</span>`)}
-      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? 'График' : 'Таблицей'}</button>
+      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? tr('График') : tr('Таблицей')}</button>
     </div>
     ${table ? html`<div class="fchart-table"><table><thead><tr><th>Дата</th>${lines.map((l) => html`<th class="num" key=${l.key}>${l.label}</th>`)}</tr></thead><tbody>
       ${[...main.points].reverse().map((p) => html`<tr key=${p.date}><td>${longDate(p.date)} ${p.date.slice(0, 4)}</td>
@@ -193,5 +194,65 @@ export function MacroSplitBar({ values, colors, labels }) {
     <div class="fchart-legend">
       ${keys.map((k) => html`<span key=${k}><i class="swatch" style=${{ background: colors[k] }}></i>${labels[k]} · ${fmt(values[k] || 0, k)} г · ${sum ? Math.round((e[k] / sum) * 100) : 0} %</span>`)}
     </div>
+  </div>`;
+}
+
+/**
+ * Столбики по дням (0.12.5, приёмы лекарств): points — [{ date, value }], from..to — период; больше 92 дней — по неделям
+ * (сумма за неделю). unit — подпись в подсказке («приёма»), label — для чтения с экрана.
+ */
+export function DayBars({ points, from, to, unitLabel = (v) => String(v), label = tr('По дням'), height = 160 }) {
+  const box = useRef(null);
+  const [tip, setTip] = useState(null);
+  const [table, setTable] = useState(false);
+  const span = daysBetween(from, to) + 1;
+  const weekly = span > 92;
+  const byDate = new Map(points.map((p) => [p.date, p.value]));
+  const buckets = [];
+  if (!weekly) {
+    for (let i = 0; i < span; i++) {
+      const date = addDays(from, i);
+      buckets.push({ key: date, label: shortDate(date), title: longDate(date), value: byDate.get(date) || 0 });
+    }
+  } else {
+    for (let start = from; start <= to; start = addDays(start, 7)) {
+      const days = Array.from({ length: 7 }, (_, k) => addDays(start, k)).filter((d) => d <= to);
+      buckets.push({ key: start, label: shortDate(start), title: `${longDate(start)} — ${longDate(days.at(-1))}`, value: days.reduce((s, d) => s + (byDate.get(d) || 0), 0) });
+    }
+  }
+  const tk = ticks(Math.max(1, ...buckets.map((b) => b.value)), 3);
+  const top = tk.at(-1) || 1;
+  const ih = height - PAD.t - PAD.b;
+  const iw = W - PAD.l - PAD.r;
+  const slot = iw / buckets.length;
+  const bw = Math.max(1, Math.min(24, slot - 2));
+  const y = (v) => PAD.t + ih - (v / top) * ih;
+  const labelEvery = Math.ceil(buckets.length / 8);
+  const show = (i, e) => {
+    const b = buckets[i];
+    const rect = box.current.getBoundingClientRect();
+    setTip({ x: ((PAD.l + slot * i + slot / 2) / W) * rect.width, y: (y(b.value) / height) * rect.height,
+      body: html`<b>${b.title}</b><span>${b.value ? unitLabel(b.value) : tr('нет приёмов')}</span>` });
+    e?.stopPropagation?.();
+  };
+  return html`<div class="fchart">
+    <div class="fchart-legend">
+      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? tr('График') : tr('Таблицей')}</button>
+    </div>
+    ${table ? html`<div class="fchart-table"><table><thead><tr><th>${weekly ? tr('Неделя') : tr('День')}</th><th class="num">Сколько</th></tr></thead><tbody>
+      ${buckets.filter((b) => b.value).reverse().map((b) => html`<tr key=${b.key}><td>${b.title}</td><td class="num">${unitLabel(b.value)}</td></tr>`)}
+    </tbody></table></div>` : html`
+    <div class="fchart-box" ref=${box} onPointerLeave=${() => setTip(null)}>
+      <svg viewBox=${`0 0 ${W} ${height}`} preserveAspectRatio="none" class="fchart-svg" style=${{ height: height + 'px' }} role="img" aria-label=${label}>
+        ${tk.map((t) => html`<line key=${'g' + t} class="grid" x1=${PAD.l} x2=${W - PAD.r} y1=${y(t)} y2=${y(t)}/>`)}
+        ${buckets.map((b, i) => (b.value ? html`<path key=${b.key} class="bar" d=${barPath(PAD.l + slot * i + (slot - bw) / 2, y(b.value), bw, PAD.t + ih - y(b.value))}
+          fill="var(--series-2)"/>` : null))}
+        ${buckets.map((b, i) => html`<rect key=${'h' + b.key} class="hit" x=${PAD.l + slot * i} y=${PAD.t} width=${slot} height=${ih}
+          onPointerEnter=${(e) => show(i, e)} onPointerDown=${(e) => show(i, e)}/>`)}
+      </svg>
+      <div class="fchart-axis-y">${tk.map((t) => html`<span key=${t} style=${{ top: (y(t) / height) * 100 + '%' }}>${t.toLocaleString('ru-RU')}</span>`)}</div>
+      <div class="fchart-axis-x">${buckets.map((b, i) => (i % labelEvery === 0 ? html`<span key=${b.key} style=${{ left: ((PAD.l + slot * i + slot / 2) / W) * 100 + '%' }}>${b.label}</span>` : null))}</div>
+      <${Tip} tip=${tip}/>
+    </div>`}
   </div>`;
 }

@@ -5,6 +5,7 @@
 import { html, useState, useEffect, useRef } from '../html.js';
 import { Icon } from '../icons.js';
 import { decodeImage, normalizeBarcode, barcodeWarning } from '../../core/barcode.js';
+import { tr } from '../../core/i18n.js';
 
 const FORMATS = ['ean_13', 'ean_8', 'upc_a', 'upc_e', 'code_128'];
 const FRAME_MS = 140;
@@ -52,7 +53,7 @@ async function detectIn(source, canvas, w, h, { strict = true } = {}) {
 /**
  * onCode(code) — код найден или введён; onCancel — закрыть. hint — подпись над видео.
  */
-export function BarcodeScanner({ onCode, onCancel = null, hint = 'Наведи камеру на штрихкод' }) {
+export function BarcodeScanner({ onCode, onCancel = null, hint = tr('Наведи камеру на штрихкод') }) {
   const video = useRef(null);
   const canvas = useRef(null);
   const [status, setStatus] = useState('starting');
@@ -119,25 +120,25 @@ export function BarcodeScanner({ onCode, onCancel = null, hint = 'Наведи �
 
   const fromPhoto = async (file) => {
     if (!file) return;
-    setPhotoMsg('Ищу штрихкод на фото…');
+    setPhotoMsg(tr('Ищу штрихкод на фото…'));
     try {
       const bmp = await createImageBitmap(file);
       const code = await detectIn(bmp, canvas.current, bmp.width, bmp.height, { strict: false });
       bmp.close?.();
       if (code) finish(code);
-      else setPhotoMsg('Штрихкод на фото не найден. Сфотографируй ближе и ровнее или введи цифры.');
+      else setPhotoMsg(tr('Штрихкод на фото не найден. Сфотографируй ближе и ровнее или введи цифры.'));
     } catch {
-      setPhotoMsg('Не удалось открыть фото');
+      setPhotoMsg(tr('Не удалось открыть фото'));
     }
   };
 
   const typed = normalizeBarcode(manual);
   const warn = typed ? barcodeWarning(typed) : '';
   const STATUS = {
-    starting: 'Включаю камеру…',
+    starting: tr('Включаю камеру…'),
     scanning: hint,
-    denied: 'Браузер не дал доступ к камере. Разреши камеру для сайта (значок слева от адреса) или введи код вручную.',
-    nocamera: 'Камера недоступна. Введи цифры под штрихкодом или распознай фото.',
+    denied: tr('Браузер не дал доступ к камере. Разреши камеру для сайта (значок слева от адреса) или введи код вручную.'),
+    nocamera: tr('Камера недоступна. Введи цифры под штрихкодом или распознай фото.'),
   };
 
   return html`

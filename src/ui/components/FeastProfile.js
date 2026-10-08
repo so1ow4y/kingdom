@@ -8,6 +8,7 @@ import { NumField, OptNumField } from './FeastParts.js';
 import { store } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
 import * as B from '../../core/body.js';
+import { tr } from '../../core/i18n.js';
 
 const parseNum = (v) => parseFloat(String(v).replace(',', '.')) || null;
 
@@ -51,7 +52,7 @@ function CustomActivities({ s, ro, base }) {
   return html`<div class="custom-activities">
     ${list.length ? html`<ul class="activity-list">${list.map((a) => html`<li key=${a.id}>
       <span><b>${a.name}</b>${a.hint ? html` <span class="muted">— ${a.hint}</span>` : null} <span class="muted">· +${a.kcal} ккал в день</span></span>
-      <button type="button" class="icon-btn small" disabled=${ro} aria-label=${'Удалить активность ' + a.name} data-hint="Удалить"
+      <button type="button" class="icon-btn small" disabled=${ro} aria-label=${tr('Удалить активность ') + a.name} data-hint="Удалить"
         onClick=${() => FA.removeActivity(a.id)}><${Icon} name="close" size=${16}/></button></li>`)}</ul>` : null}
     ${open ? html`<form class="activity-form" onSubmit=${add}>
       <div class="field-row">
@@ -62,7 +63,7 @@ function CustomActivities({ s, ro, base }) {
       </div>
       <label class="field"><span>Описание</span><input value=${hint} maxlength="80" placeholder="необязательно: что за нагрузка"
         onInput=${(e) => setHint(e.target.value)}/></label>
-      <p class="muted small">Сколько калорий в день уходит на движение помимо базового обмена${base ? ` (${base} ккал в покое)` : ''}: например,
+      <p class="muted small">Сколько калорий в день уходит на движение помимо базового обмена${base ? tr(' ({base} ккал в покое)', { base }) : ''}: например,
         «Лёгкая активность» сейчас — +${base ? B.activityBurn(B.ACTIVITY[1], base) : '…'} ккал. Значение — от 0 до ${B.ACTIVITY_KCAL_MAX}.</p>
       <div class="form-actions">
         <button type="button" class="btn ghost" onClick=${() => setOpen(false)}>Отмена</button>
@@ -102,8 +103,8 @@ export function ProfileCard({ st, ro, withWeight = false }) {
         ${acts.map((a) => html`<option key=${a.key} value=${a.key}>${B.activityLabel(a, base)}</option>`)}
       </select></label>
     <p class="muted small">${base
-      ? `Базовый обмен — ${base} ккал в покое; активность добавляет к нему столько, сколько указано в пункте. Сейчас: ${base} + ${B.activityBurn(cur, base)} = ${base + B.activityBurn(cur, base)} ккал в день.`
-      : 'Калории у активностей появятся, когда будут известны пол, дата рождения, рост и вес (базовый обмен).'}</p>
+      ? tr('Базовый обмен — {base} ккал в покое; активность добавляет к нему столько, сколько указано в пункте. Сейчас: {base} + {p2} = {p3} ккал в день.', { base, p2: B.activityBurn(cur, base), p3: base + B.activityBurn(cur, base) })
+      : tr('Калории у активностей появятся, когда будут известны пол, дата рождения, рост и вес (базовый обмен).')}</p>
     <${CustomActivities} s=${s} ro=${ro} base=${base}/>
     <div class="chip-row wrap" role="radiogroup" aria-label="Цель">
       ${B.GOALS.map((g) => html`<button type="button" role="radio" aria-checked=${s.goal === g.key} key=${g.key} disabled=${ro}
@@ -125,20 +126,20 @@ export function EnergyCard({ st, ro, limitButton = true }) {
   const tuned = r.own != null || s.loseKcal != null || s.gainKcal != null || s.minKcal != null;
   const [open, setOpen] = useState(false);
   const set = (k) => (v) => FA.updateFeastSettings({ [k]: v });
-  const goal = B.GOALS.find((g) => g.key === s.goal)?.label.toLowerCase() || 'держать вес';
+  const goal = B.GOALS.find((g) => g.key === s.goal)?.label.toLowerCase() || tr('держать вес');
   return html`<section class="set-section">
     <h2>Калории</h2>
     ${base || r.own ? html`<div class="stat-tiles">
       ${base ? html`<div class="stat-tile"><span>Базовый обмен</span><b>${base}</b><small>ккал в покое</small></div>
       <div class="stat-tile"><span>Расход с активностью</span><b>${t}</b><small>обмен + ${t - base} ккал на движение</small></div>` : null}
-      <div class="stat-tile"><span>${r.own ? 'Своя рекомендация' : `Под цель «${goal}»`}</span><b>${rec ?? '—'}</b>
-        <small>${r.own && r.auto ? `по расчёту — ${r.auto}` : 'ккал в день'}</small></div>
+      <div class="stat-tile"><span>${r.own ? tr('Своя рекомендация') : tr('Под цель «{goal}»', { goal })}</span><b>${rec ?? '—'}</b>
+        <small>${r.own && r.auto ? tr('по расчёту — {auto}', { auto: r.auto }) : tr('ккал в день')}</small></div>
     </div>
     <div class="form-actions wrap">
       <span class="muted">Сейчас лимит: <b>${s.kcalGoal}</b> ккал</span>
       ${limitButton && rec && rec !== s.kcalGoal ? html`<button type="button" class="btn primary" disabled=${ro} onClick=${() => FA.setKcalGoal(rec)}>Сделать лимитом ${rec}</button>` : null}
       <button type="button" class="btn ghost" aria-expanded=${open} onClick=${() => setOpen(!open)}>
-        <${Icon} name=${open ? 'chevronDown' : 'chevron'} size=${16}/> Настроить рекомендацию${tuned ? ' · изменена' : ''}</button>
+        <${Icon} name=${open ? 'chevronDown' : 'chevron'} size=${16}/> Настроить рекомендацию${tuned ? tr(' · изменена') : ''}</button>
     </div>` : html`<p class="muted">Укажи пол, дату рождения, рост и вес — посчитаю обмен веществ и лимит калорий под цель.
       Или задай свою рекомендацию: <button type="button" class="link-btn" onClick=${() => setOpen(!open)}>настроить</button>.</p>`}
     ${open ? html`<div class="rec-tune">
@@ -146,7 +147,7 @@ export function EnergyCard({ st, ro, limitButton = true }) {
         <${OptNumField} label="Дефицит для «Похудеть»" unit="ккал" placeholder="500" value=${s.loseKcal} disabled=${ro} max=${2000} onCommit=${set('loseKcal')}/>
         <${OptNumField} label="Профицит для «Набрать»" unit="ккал" placeholder="300" value=${s.gainKcal} disabled=${ro} max=${2000} onCommit=${set('gainKcal')}/>
         <${OptNumField} label="Не ниже" unit="ккал" placeholder=${String(B.defaultFloor(s.sex))} value=${s.minKcal} disabled=${ro} max=${10000} onCommit=${(v) => set('minKcal')(v || null)}/>
-        <${OptNumField} label="Своя рекомендация" unit="ккал" placeholder=${r.auto ? String(r.auto) : 'нет расчёта'} value=${s.recKcal} disabled=${ro} max=${10000} onCommit=${(v) => set('recKcal')(v || null)}/>
+        <${OptNumField} label="Своя рекомендация" unit="ккал" placeholder=${r.auto ? String(r.auto) : tr('нет расчёта')} value=${s.recKcal} disabled=${ro} max=${10000} onCommit=${(v) => set('recKcal')(v || null)}/>
       </div>
       <p class="muted small">Пустое поле — по умолчанию (−500 для похудения, +300 для набора, не ниже 1500 у мужчин и 1200 у женщин).
         «Своя рекомендация» заменяет расчёт целиком — например, по совету врача или тренера. Лимит в дневнике меняется только кнопкой

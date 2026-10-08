@@ -22,6 +22,7 @@ import { describeRule } from '../../core/repeat.js';
 import { ShortcutsSheet } from './Shortcuts.js';
 import { AddFoodSheet, EntrySheet, ScanSheet } from './AddFood.js';
 import { MealSheet, MealNoteSheet } from './Meals.js';
+import { tr } from '../../core/i18n.js';
 
 function WhenSheet({ taskId, mode }) {
   const t = A.getTask(taskId);
@@ -43,11 +44,11 @@ function WhenSheet({ taskId, mode }) {
     </button>`;
   const warn = t.deadlineDate && t.scheduledDate && t.deadlineDate < t.scheduledDate;
   return html`
-    <${Sheet} title=${deadline ? 'Дедлайн' : 'Когда'} onClose=${closeSheet}>
+    <${Sheet} title=${deadline ? tr('Дедлайн') : tr('Когда')} onClose=${closeSheet}>
       <div class="chip-row">
         <button class=${'chip' + (cur === today ? ' selected' : '')} onClick=${() => apply(today)}>Сегодня</button>
         <button class=${'chip' + (cur === addDays(today, 1) ? ' selected' : '')} onClick=${() => apply(addDays(today, 1))}>Завтра</button>
-        <button class=${'chip' + (!cur ? ' selected' : '')} onClick=${() => apply(null)}>${deadline ? 'Без дедлайна' : 'Без даты'}</button>
+        <button class=${'chip' + (!cur ? ' selected' : '')} onClick=${() => apply(null)}>${deadline ? tr('Без дедлайна') : tr('Без даты')}</button>
       </div>
       <div class="week-pick">
         <div class="wp-label">Эта неделя</div>
@@ -120,7 +121,7 @@ function PrioritySheet({ taskId, anchor, onPick = null, current = undefined }) {
   const game = store.data.settings.gameEnabled;
   const item = (p) => html`
     <${MenuItem} key=${p.id} icon=${html`<i class="dot big" style=${{ background: p.color }}></i>`}
-      label=${p.name} hint=${game ? `+${p.coins} 🪙 за выполнение` : null} checked=${cur === p.id} onClick=${() => pick(p.id)}/>`;
+      label=${p.name} hint=${game ? tr('+{coins} 🪙 за выполнение', { coins: p.coins }) : null} checked=${cur === p.id} onClick=${() => pick(p.id)}/>`;
   return html`
     <${Sheet} title="Приоритет" onClose=${closeSheet} anchor=${anchor}>
       ${list.map(item)}
@@ -135,7 +136,7 @@ function ParentPickerSheet({ taskId }) {
   const t = A.getTask(taskId);
   const [q, setQ] = useState('');
   if (!t) return null;
-  const norm = (s) => s.toLowerCase().replace(/ё/g, 'е');
+  const norm = (s) => s.toLowerCase().replace(/ё/g, tr('е'));
   const nq = norm(q.trim());
   const options = [...store.data.tasks.values()]
     .filter((x) => S.isActive(x) && x.id !== taskId && !S.nestError(store.data, taskId, x.id))
@@ -181,7 +182,7 @@ function TaskMenuSheet({ taskId, date }) {
         : html`
           <${MenuItem} icon="focus" label="Взяться за задачу" hint="фокус-таймер" onClick=${() => openSheet('focus', { taskId })}/>
           ${!parent || focused ? html`<${MenuItem} icon=${html`<${Icon} name="star" filled=${focused} size=${20}/>`}
-            label=${focused ? 'Убрать из главного' : 'Главное на ' + humanDate(focusDate, today).toLowerCase()} onClick=${run(() => A.toggleFocus(taskId, focusDate))}/>` : null}
+            label=${focused ? tr('Убрать из главного') : tr('Главное на ') + humanDate(focusDate, today).toLowerCase()} onClick=${run(() => A.toggleFocus(taskId, focusDate))}/>` : null}
           ${t.repeat ? html`
             <${MenuItem} icon="up" label="Пропустить этот раз" hint="без монет и опыта" onClick=${run(() => A.skipOccurrence(taskId))}/>` : html`
             <${MenuItem} icon="calendar" label="Когда…" hint=${t.scheduledDate ? humanDate(t.scheduledDate, today) : null}
@@ -195,7 +196,7 @@ function TaskMenuSheet({ taskId, date }) {
       <${MenuItem} icon="flag" label="Приоритет…" hint=${prio && prio.id !== PRIORITY_NONE_ID ? prio.name : null}
         onClick=${() => openSheet('priority', { taskId })}/>
       <${MenuItem} icon="list" label="Сделать подзадачей…" onClick=${() => openSheet('parentPicker', { taskId })}/>
-      ${parent ? html`<${MenuItem} icon="up" label="Вынести на верхний уровень" hint=${'сейчас внутри «' + parent.title + '»'}
+      ${parent ? html`<${MenuItem} icon="up" label="Вынести на верхний уровень" hint=${tr('сейчас внутри «') + parent.title + '»'}
         onClick=${run(() => A.setParent(taskId, null))}/>` : null}
       <${MenuItem} icon="plus" label="Дублировать" onClick=${run(async () => {
         const c = await A.duplicateTask(taskId);
@@ -205,12 +206,12 @@ function TaskMenuSheet({ taskId, date }) {
         try {
           const notes = liveNotes(t).map((n) => n.text).filter(Boolean);
           await navigator.clipboard.writeText([t.title, ...notes].join('\n\n'));
-          showSnackbar('Скопировано');
+          showSnackbar(tr('Скопировано'));
         } catch {
-          showSnackbar('Не удалось скопировать');
+          showSnackbar(tr('Не удалось скопировать'));
         }
       })}/>
-      <${MenuItem} icon="trash" label=${t.repeat ? 'Удалить повторяющуюся задачу' : 'В корзину'} danger onClick=${run(() => A.trashTask(taskId))}/>
+      <${MenuItem} icon="trash" label=${t.repeat ? tr('Удалить повторяющуюся задачу') : tr('В корзину')} danger onClick=${run(() => A.trashTask(taskId))}/>
     <//>`;
 }
 
@@ -222,9 +223,9 @@ function FocusPickerSheet({ date }) {
   const focusCount = S.focusTasks(store.data, today).length;
   const seen = new Set();
   const groups = [
-    ['На выбранный день', [...v.today, ...v.chores.filter((t) => !S.isOverdue(t, today, store.now.time))]],
-    ['Просрочено', [...v.overdue, ...v.chores.filter((t) => S.isOverdue(t, today, store.now.time))]],
-    ['Входящие', S.inboxView(store.data)],
+    [tr('На выбранный день'), [...v.today, ...v.chores.filter((t) => !S.isOverdue(t, today, store.now.time))]],
+    [tr('Просрочено'), [...v.overdue, ...v.chores.filter((t) => S.isOverdue(t, today, store.now.time))]],
+    [tr('Входящие'), S.inboxView(store.data)],
   ].map(([title, list]) => [title, list.filter((t) => t.focusDate !== today && !S.parentOf(store.data, t) && !seen.has(t.id) && seen.add(t.id))]);
   const pick = async (id) => {
     await A.toggleFocus(id, today);
@@ -232,7 +233,7 @@ function FocusPickerSheet({ date }) {
   };
   const total = groups.reduce((n, [, l]) => n + l.length, 0);
   return html`
-    <${Sheet} title=${`Главное: ${humanDate(today, store.now.today)} · ${focusCount}/${LIMITS.focusMax}`} onClose=${closeSheet}>
+    <${Sheet} title=${tr('Главное: {p0} · {focusCount}/{focusMax}', { p0: humanDate(today, store.now.today), focusCount, focusMax: LIMITS.focusMax })} onClose=${closeSheet}>
       ${total === 0 ? html`<p class="empty">Нет задач на выбранный день и во «Входящих». Отметь ★ у любой задачи в её списке.</p>` : null}
       ${groups.filter(([, l]) => l.length).map(([title, list]) => html`
         <div class="picker-group">

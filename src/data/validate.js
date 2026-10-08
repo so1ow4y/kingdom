@@ -3,6 +3,7 @@
 
 import { SyncError } from '../core/errors.js';
 import { COLLECTIONS } from './envelope.js';
+import { tr } from '../core/i18n.js';
 
 export function validateDb(db) {
   for (const c of COLLECTIONS) {
@@ -11,10 +12,10 @@ export function validateDb(db) {
       db.data[c] = [];
       continue;
     }
-    if (!Array.isArray(arr)) throw new SyncError('E-DB-CORRUPT', `Раздел data.${c} не массив`);
+    if (!Array.isArray(arr)) throw new SyncError('E-DB-CORRUPT', tr('Раздел data.{c} не массив', { c }));
     for (const e of arr) {
       if (!e || typeof e !== 'object' || typeof e.id !== 'string' || !e.id) {
-        throw new SyncError('E-DB-CORRUPT', `В data.${c} есть запись без id`);
+        throw new SyncError('E-DB-CORRUPT', tr('В data.{c} есть запись без id', { c }));
       }
       if (!e.fieldTimes || typeof e.fieldTimes !== 'object') e.fieldTimes = {};
     }
@@ -29,7 +30,7 @@ export function validateDb(db) {
     for (const n of t.notes) if (!n.deletedAt && n.attachments !== undefined && !Array.isArray(n.attachments)) n.attachments = [];
   }
   if (db.data.settings.length > 1) {
-    throw new SyncError('E-DB-CORRUPT', 'В базе больше одной записи настроек');
+    throw new SyncError('E-DB-CORRUPT', tr('В базе больше одной записи настроек'));
   }
   return db;
 }

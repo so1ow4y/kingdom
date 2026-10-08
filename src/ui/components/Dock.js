@@ -26,6 +26,7 @@ import { shortcutText } from '../keys.js';
 import { tokenValid, startLogin } from '../../google/auth.js';
 import { confirmLogout } from '../account.js';
 import { APPS, otherApp, letterColors } from '../apps.js';
+import { tr } from '../../core/i18n.js';
 
 /** Отступ плашки от края экрана — padding обёртки. */
 export const DOCK_EDGE_GAP = 12;
@@ -152,25 +153,25 @@ function DockMenu({ item, ctx }) {
 function UserMenu({ ctx, app, onSwitch }) {
   const email = store.auth?.email || '';
   const valid = tokenValid();
-  const name = email || 'Аккаунт';
+  const name = email || tr('Аккаунт');
   const go = (to) => () => { ctx.onNavigate(); navigate(to); };
   const show = (e) => openMenu({
     anchor: e.currentTarget,
     side: ctx.side,
     align: 'center',
-    title: email || 'Вход не выполнен',
+    title: email || tr('Вход не выполнен'),
     className: 'dock-menu user-menu',
     viaKeyboard: e.detail === 0,
     items: [
-      { label: 'Настройки', icon: 'settings', onSelect: go('/settings'), kbd: shortcutText('goSettings') },
-      { label: 'Внешний вид', icon: 'palette', onSelect: go('/settings?section=appearance') },
-      { label: 'Горячие клавиши', icon: 'keyboard', onSelect: go('/settings?section=shortcuts'), kbd: shortcutText('help') },
-      { label: 'Синхронизация', icon: 'sync', onSelect: () => { ctx.onNavigate(); openSheet('sync'); } },
-      { label: `Перейти в ${APPS[otherApp(app)].name}`, icon: 'swap', onSelect: () => { ctx.onNavigate(); onSwitch(); }, kbd: shortcutText('switchApp') },
+      { label: tr('Настройки'), icon: 'settings', onSelect: go('/settings'), kbd: shortcutText('goSettings') },
+      { label: tr('Внешний вид'), icon: 'palette', onSelect: go('/settings?section=appearance') },
+      { label: tr('Горячие клавиши'), icon: 'keyboard', onSelect: go('/settings?section=shortcuts'), kbd: shortcutText('help') },
+      { label: tr('Синхронизация'), icon: 'sync', onSelect: () => { ctx.onNavigate(); openSheet('sync'); } },
+      { label: tr('Перейти в {p0}', { p0: APPS[otherApp(app)].name }), icon: 'swap', onSelect: () => { ctx.onNavigate(); onSwitch(); }, kbd: shortcutText('switchApp') },
       { separator: true },
       email || valid
-        ? { label: 'Выйти из Google', icon: 'logout', danger: true, onSelect: () => { ctx.onNavigate(); confirmLogout(); } }
-        : { label: 'Войти через Google', icon: 'user', disabled: store.sync.offline, onSelect: () => startLogin({ action: 'pull' }) },
+        ? { label: tr('Выйти из Google'), icon: 'logout', danger: true, onSelect: () => { ctx.onNavigate(); confirmLogout(); } }
+        : { label: tr('Войти через Google'), icon: 'user', disabled: store.sync.offline, onSelect: () => startLogin({ action: 'pull' }) },
     ],
   });
   return html`
@@ -225,7 +226,7 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
     }, AUTO_HIDE_DELAY_MS);
   };
 
-  const letterLabel = hidden ? 'Показать панель' : 'Спрятать панель';
+  const letterLabel = hidden ? tr('Показать панель') : tr('Спрятать панель');
   const letter = html`
     <button type="button" class="dock-item dock-brand" onClick=${onToggleHidden} aria-label=${letterLabel} aria-pressed=${hidden}
       ...${hintOf(ctx, letterLabel, 'dockHide')}>
@@ -239,17 +240,17 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
       <nav ref=${panel} class="dock dock-hidden mode-icon" aria-label="Навигация">
         ${letter}
         <button type="button" class="dock-item dock-brand dock-switch" key=${other} onClick=${onSwitch}
-          aria-label=${'Перейти в ' + switchLabel} ...${hintOf(ctx, 'Перейти в ' + switchLabel, 'switchApp')}>
+          aria-label=${tr('Перейти в ') + switchLabel} ...${hintOf(ctx, tr('Перейти в ') + switchLabel, 'switchApp')}>
           <${AppLetter} size=${36} app=${other} other/>
         </button>
       </nav></div>`;
   }
 
   const groups = buildMenu(counts, app);
-  const addLabel = app === 'feast' ? 'Записать еду' : 'Новая задача';
+  const addLabel = app === 'feast' ? tr('Записать еду') : tr('Новая задача');
   const ind = indicator(syncState());
   const dirty = totalDirty();
-  const toggleLabel = expanded ? 'Свернуть панель' : 'Развернуть панель';
+  const toggleLabel = expanded ? tr('Свернуть панель') : tr('Развернуть панель');
   const busy = ind.key === 'busy';
   const items = (g) => g.items.filter((it) => !compact || (it.to !== '/tasks' && it.to !== '/settings'));
 
@@ -263,7 +264,7 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
         ${letter}
         <button type="button" class="dock-item dock-add" onClick=${() => { onNavigate(); onAdd(); }} disabled=${!!store.ui.readOnly}
           aria-label=${addLabel} ...${hintOf(ctx, addLabel, 'newTask')}>
-          <${Icon} name="plus" size=${ICON_SIZE[mode]}/><span class="dock-label">${compact ? (app === 'feast' ? 'Еда' : 'Задача') : addLabel}</span>
+          <${Icon} name="plus" size=${ICON_SIZE[mode]}/><span class="dock-label">${compact ? (app === 'feast' ? tr('Еда') : tr('Задача')) : addLabel}</span>
         </button>
 
         ${groups.map((g) => html`
@@ -276,13 +277,13 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
 
         ${compact ? null : html`<${Divider}/>
         <button type="button" class=${'dock-item dock-sync tone-' + ind.tone} onClick=${() => { onNavigate(); openSheet('sync'); }}
-          aria-label=${'Синхронизация: ' + ind.text} ...${hintOf(ctx, ind.text)}>
+          aria-label=${tr('Синхронизация: ') + ind.text} ...${hintOf(ctx, ind.text)}>
           <${Icon} name=${ind.icon} size=${ICON_SIZE[mode] - 2} className=${busy ? 'spin' : ''}/>
           <span class="dock-label">${mode === 'row' ? ind.text : ind.short}</span>
         </button>`}
         <button type="button" class=${'dock-item dock-push' + (compact ? ' tone-' + ind.tone : '')} onClick=${() => push()}
           disabled=${!!store.sync.phase || !!store.ui.readOnly} aria-label="Пуш"
-          ...${hintOf(ctx, compact ? 'Пуш · ' + ind.text : 'Пуш — отправить изменения на Google Диск', 'push')}>
+          ...${hintOf(ctx, compact ? tr('Пуш · ') + ind.text : tr('Пуш — отправить изменения на Google Диск'), 'push')}>
           <${Icon} name=${compact && busy ? ind.icon : 'upload'} size=${ICON_SIZE[mode] - 2} className=${compact && busy ? 'spin' : ''}/>
           <span class="dock-label">Пуш</span>${dirty ? html`<span class="dock-count">${dirty}</span>` : null}
         </button>

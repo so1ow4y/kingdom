@@ -11,6 +11,7 @@ import { push, pull } from '../../sync/syncEngine.js';
 import { tokenValid, startLogin } from '../../google/auth.js';
 import { formatMoment } from '../../core/dates.js';
 import { entryTitle } from '../../core/feast.js';
+import { tr } from '../../core/i18n.js';
 
 export function syncState() {
   return {
@@ -28,7 +29,7 @@ export function syncState() {
 export function SyncIndicator() {
   const ind = indicator(syncState());
   return html`
-    <button class=${'sync-indicator tone-' + ind.tone} onClick=${() => openSheet('sync')} title=${ind.text} aria-label=${'Синхронизация: ' + ind.text}>
+    <button class=${'sync-indicator tone-' + ind.tone} onClick=${() => openSheet('sync')} title=${ind.text} aria-label=${tr('Синхронизация: ') + ind.text}>
       <${Icon} name=${ind.icon} size=${16} className=${ind.key === 'busy' ? 'spin' : ''}/>
       <span class="sync-long">${ind.text}</span><span class="sync-short">${ind.short}</span>
     </button>`;
@@ -43,44 +44,44 @@ export function PushButton() {
     </button>`;
 }
 
-const when = (iso) => (iso ? formatMoment(iso, store.data.settings.timeZone) : 'ещё не было');
+const when = (iso) => (iso ? formatMoment(iso, store.data.settings.timeZone) : tr('ещё не было'));
 
 /** Непушнутое в Feast (0.11). */
 function feastName(key) {
   const [coll, id] = key.split('/');
   const d = store.feast;
-  if (coll === 'settings') return 'Crimson Harvest: цели и «Обо мне»';
+  if (coll === 'settings') return tr('Crimson Harvest: цели и «Обо мне»');
   if (coll === 'foods') {
     const f = d.foods.get(id);
-    return f ? (f.deletedAt ? 'Crimson Harvest: удалённый продукт' : `Crimson Harvest: продукт «${f.name}»`) : 'Crimson Harvest: продукт';
+    return f ? (f.deletedAt ? tr('Crimson Harvest: удалённый продукт') : tr('Crimson Harvest: продукт «{name}»', { name: f.name })) : tr('Crimson Harvest: продукт');
   }
   if (coll === 'entries') {
     const e = d.entries.get(id);
-    return e ? (e.deletedAt ? 'Crimson Harvest: удалённая запись' : `Crimson Harvest: ${entryTitle(e)}, ${e.date}`) : 'Crimson Harvest: запись';
+    return e ? (e.deletedAt ? tr('Crimson Harvest: удалённая запись') : `Crimson Harvest: ${entryTitle(e)}, ${e.date}`) : tr('Crimson Harvest: запись');
   }
   if (coll === 'meals') {
     const m = d.meals.get(id);
-    return m ? (m.deletedAt ? 'Crimson Harvest: удалённый рацион' : `Crimson Harvest: рацион «${m.name}»`) : 'Crimson Harvest: рацион';
+    return m ? (m.deletedAt ? tr('Crimson Harvest: удалённый рацион') : tr('Crimson Harvest: рацион «{name}»', { name: m.name })) : tr('Crimson Harvest: рацион');
   }
-  if (coll === 'mealNotes') return 'Crimson Harvest: заметка к рациону';
-  if (coll === 'body') return 'Crimson Harvest: замер';
-  if (coll === 'dayArchive') return 'Crimson Harvest: итоги дня';
+  if (coll === 'mealNotes') return tr('Crimson Harvest: заметка к рациону');
+  if (coll === 'body') return tr('Crimson Harvest: замер');
+  if (coll === 'dayArchive') return tr('Crimson Harvest: итоги дня');
   return 'Crimson Harvest: ' + key;
 }
 
 function entityName(key) {
   const [coll, id] = key.split('/');
   const d = store.data;
-  if (coll === 'settings') return 'Настройки';
+  if (coll === 'settings') return tr('Настройки');
   if (coll === 'tasks') {
     const t = d.tasks.get(id);
-    return t ? (t.deletedAt ? 'Удалённая задача' : t.title) : 'Задача';
+    return t ? (t.deletedAt ? tr('Удалённая задача') : t.title) : tr('Задача');
   }
   if (coll === 'lists') {
     const l = d.lists.get(id);
-    return l ? (l.deletedAt ? 'Удалённый список' : `Список «${l.name}»`) : 'Список';
+    return l ? (l.deletedAt ? tr('Удалённый список') : tr('Список «{name}»', { name: l.name })) : tr('Список');
   }
-  if (coll === 'devices') return `Устройство «${d.devices.get(id)?.name || '?'}»`;
+  if (coll === 'devices') return tr('Устройство «{p0}»', { p0: d.devices.get(id)?.name || '?' });
   return key;
 }
 
@@ -106,7 +107,7 @@ export function SyncPanel() {
       ${s.lastError ? html`<p class="hint warn">${s.lastError.text}<br/><small>${when(s.lastError.at)}</small></p>` : null}
       ${s.needAuth && store.sync.authError ? html`<p class="hint warn">${store.sync.authError.text}</p>` : null}
       <div class="set-row"><div class="set-label">Google</div>
-        <div class="set-control">${tokenValid() ? email || 'вход выполнен' : html`
+        <div class="set-control">${tokenValid() ? email || tr('вход выполнен') : html`
           <button class="btn small primary" onClick=${() => startLogin({ action: 'pull' })} disabled=${s.offline}>Войти</button>`}</div></div>
       <div class="set-row"><div class="set-label">Непушнутых изменений</div>
         <div class="set-control">${s.dirty

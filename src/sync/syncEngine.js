@@ -19,6 +19,7 @@ import { countLabel } from '../core/plural.js';
 import { SCHEMA_VERSION } from '../version.js';
 import { TOMBSTONE_TTL_DAYS } from '../config.js';
 import { feastPush, feastPull, feastRemoteNewer, feastSoftError, resetFeastSync, recreateFeastDb } from './feastSync.js';
+import { tr } from '../core/i18n.js';
 
 export const drive = createDrive();
 const POLL_MS = 5 * 60000;
@@ -185,11 +186,11 @@ async function ensure() {
 
 async function run(kind, fn, { silent = false } = {}) {
   if (busy) {
-    if (!silent) showSnackbar('Синхронизация уже идёт');
+    if (!silent) showSnackbar(tr('Синхронизация уже идёт'));
     return false;
   }
   if (kind === 'push' && store.ui.readOnly) {
-    showSnackbar('Только чтение: сначала обнови приложение');
+    showSnackbar(tr('Только чтение: сначала обнови приложение'));
     return false;
   }
   if (!navigator.onLine) {
@@ -204,7 +205,7 @@ async function run(kind, fn, { silent = false } = {}) {
   }
   const exec = async () => {
     busy = true;
-    setSync({ phase: kind, step: 'Проверка Диска', lastError: null, offline: false });
+    setSync({ phase: kind, step: tr('Проверка Диска'), lastError: null, offline: false });
     try {
       await fn();
       return true;
@@ -219,7 +220,7 @@ async function run(kind, fn, { silent = false } = {}) {
   if (navigator.locks?.request) {
     return navigator.locks.request('lifetasks-sync', { ifAvailable: true }, async (lock) => {
       if (!lock) {
-        if (!silent) showSnackbar('Синхронизация идёт в другой вкладке');
+        if (!silent) showSnackbar(tr('Синхронизация идёт в другой вкладке'));
         return false;
       }
       return exec();
@@ -243,7 +244,7 @@ async function handleError(e, kind, silent) {
     }
     notify();
     if (kind === 'push' && !silent) {
-      showSnackbar('Сессия Google истекла — вхожу заново…');
+      showSnackbar(tr('Сессия Google истекла — вхожу заново…'));
       setTimeout(() => startLogin({ action: 'push' }), 1000);
     }
     return;
@@ -252,7 +253,7 @@ async function handleError(e, kind, silent) {
     setUi({
       readOnlySource: 'remote',
       readOnly: code === 'E-READONLY'
-        ? `Данные на Диске записаны более новой версией приложения (формат v${e.remoteVersion}, у тебя v${SCHEMA_VERSION}). Обнови приложение — до этого правки и пуш недоступны.`
+        ? tr('Данные на Диске записаны более новой версией приложения (формат v{remoteVersion}, у тебя v{SCHEMA_VERSION}). Обнови приложение — до этого правки и пуш недоступны.', { remoteVersion: e.remoteVersion, SCHEMA_VERSION })
         : errorText(e),
     });
     return;
@@ -271,10 +272,10 @@ async function handleError(e, kind, silent) {
 
 async function offerRecreate() {
   const v = await ask({
-    title: 'Файл базы на Диске не найден',
-    text: 'Его удалили или переместили в корзину Google Диска. Можно восстановить его из корзины Диска и нажать «Обновить» — '
-      + 'или создать базу заново из данных этого устройства.',
-    buttons: [{ label: 'Отмена', value: null }, { label: 'Создать заново', value: 'yes', kind: 'primary' }],
+    title: tr('Файл базы на Диске не найден'),
+    text: tr('Его удалили или переместили в корзину Google Диска. Можно восстановить его из корзины Диска и нажать «Обновить» — ')
+      + tr('или создать базу заново из данных этого устройства.'),
+    buttons: [{ label: tr('Отмена'), value: null }, { label: tr('Создать заново'), value: 'yes', kind: 'primary' }],
   });
   if (v !== 'yes') return;
   await run('push', async () => {
@@ -291,22 +292,22 @@ async function offerRecreate() {
     await getRepo().setMeta('sync.layout', r.layout);
     setSync({ layout: r.layout, lastError: null });
     await finishWrite(snap, r.dbMeta.headRevisionId);
-    showSnackbar('База на Диске создана заново');
+    showSnackbar(tr('База на Диске создана заново'));
   });
 }
 
 async function offerRecreateFeast() {
   const v = await ask({
-    title: 'Файл базы Crimson Harvest на Диске не найден',
-    text: 'Его удалили или переместили в корзину Google Диска. Можно восстановить его из корзины Диска и нажать «Обновить» — '
-      + 'или создать базу Crimson Harvest заново из данных этого устройства.',
-    buttons: [{ label: 'Отмена', value: null }, { label: 'Создать заново', value: 'yes', kind: 'primary' }],
+    title: tr('Файл базы Crimson Harvest на Диске не найден'),
+    text: tr('Его удалили или переместили в корзину Google Диска. Можно восстановить его из корзины Диска и нажать «Обновить» — ')
+      + tr('или создать базу Crimson Harvest заново из данных этого устройства.'),
+    buttons: [{ label: tr('Отмена'), value: null }, { label: tr('Создать заново'), value: 'yes', kind: 'primary' }],
   });
   if (v !== 'yes') return;
   await run('push', async () => {
     await recreateFeastDb(drive);
     setSync({ lastError: null });
-    showSnackbar('База Crimson Harvest на Диске создана заново');
+    showSnackbar(tr('База Crimson Harvest на Диске создана заново'));
   });
 }
 
@@ -317,10 +318,10 @@ function pushSummary(t, f) {
   const parts = [];
   const folders = [t.created && 'Chronicle', f?.created && 'Crimson Harvest'].filter(Boolean);
   if (t.pushed) parts.push(`Chronicle — ${countLabel(t.pushed, CHANGES)}`);
-  else if (t.migrated) parts.push('Chronicle — формат данных обновлён');
+  else if (t.migrated) parts.push(tr('Chronicle — формат данных обновлён'));
   if (f?.pushed) parts.push(`Crimson Harvest — ${countLabel(f.pushed, CHANGES)}`);
-  if (folders.length) return `На Диске создана папка ${folders.join(' и ')}, данные отправлены`;
-  return parts.length ? `Запушено: ${parts.join(', ')}` : 'Нечего пушить — всё уже на Диске';
+  if (folders.length) return tr('На Диске создана папка {p0}, данные отправлены', { p0: folders.join(tr(' и ')) });
+  return parts.length ? tr('Запушено: {p0}', { p0: parts.join(', ') }) : tr('Нечего пушить — всё уже на Диске');
 }
 
 /** Feast внутри общей операции: мягкие ошибки (база новее приложения) не мешают задачам. */
@@ -351,7 +352,7 @@ async function pushTasks() {
   let expected = store.sync.lastRevisionId;
   let migratedFrom = null;
   if (r.dbMeta.headRevisionId !== expected) {
-    step('Слияние с Диском');
+    step(tr('Слияние с Диском'));
     const parsed = await readRemote(r.layout.dbId);
     migratedFrom = parsed.migratedFrom;
     reportConflicts(await mergeIntoLocal(parsed.db, r.dbMeta.headRevisionId));
@@ -359,7 +360,7 @@ async function pushTasks() {
   }
   if (!migratedFrom && store.ui.dirtyCount === 0) return { pushed: 0 };
   // Медиа (обновление 0.5): новые вложения — на Диск до записи базы, чтобы в базе уже был driveFileId
-  step('Медиа');
+  step(tr('Медиа'));
   const media = await uploadPending(drive, r.layout, (text) => step(text));
   if (media.missing) console.info(`LifeTasks: ${media.missing} медиа нет на этом устройстве — их зальёт устройство, где они есть`);
   try {
@@ -367,7 +368,7 @@ async function pushTasks() {
   } catch (e) {
     console.warn('Сборка мусора медиа не удалась — повторится при следующем пуше', e);
   }
-  step('Бэкап');
+  step(tr('Бэкап'));
   await makeBackup(drive, r.layout, migratedFrom ? `pre-migration-v${SCHEMA_VERSION}` : 'push', store.deviceId);
   try {
     await rotateBackups(drive, r.layout);
@@ -377,7 +378,7 @@ async function pushTasks() {
   await purgeOldTombstones();
   const pushedAt = new Date().toISOString();
   await markDevicePushed(pushedAt);
-  step('Запись базы');
+  step(tr('Запись базы'));
   const { meta, snapshot, verified } = await writeDbChecked({
     drive,
     dbId: r.layout.dbId,
@@ -388,15 +389,15 @@ async function pushTasks() {
       return { bytes, snapshot: data };
     },
     onForeign: async (bytes) => {
-      step('Слияние с параллельной записью');
+      step(tr('Слияние с параллельной записью'));
       const parsed = await parseDbBytes(bytes);
       reportConflicts(await mergeIntoLocal(parsed.db, null));
-      step('Запись базы');
+      step(tr('Запись базы'));
     },
   });
   if (!verified) console.info('LifeTasks: проверка параллельной записи пропущена (ревизия не найдена в списке)');
   checkClock(meta.modifiedTime);
-  step('Манифест');
+  step(tr('Манифест'));
   try {
     await drive.updateContent(r.layout.manifestId, buildManifest({
       layout: r.layout,
@@ -418,9 +419,9 @@ export function pull({ silent = false } = {}) {
     const now = new Date().toISOString();
     let n = 0;
     if (!r.created && r.dbMeta.headRevisionId !== store.sync.lastRevisionId) {
-      step('Загрузка базы');
+      step(tr('Загрузка базы'));
       const parsed = await readRemote(r.layout.dbId);
-      step('Слияние');
+      step(tr('Слияние'));
       const res = await mergeIntoLocal(parsed.db, r.dbMeta.headRevisionId);
       reportConflicts(res);
       n = res.changes.length;
@@ -429,8 +430,8 @@ export function pull({ silent = false } = {}) {
     const f = await withFeast(() => feastPull(drive, step));
     const folders = [r.created && 'Chronicle', f?.created && 'Crimson Harvest'].filter(Boolean);
     const total = n + (f?.changes || 0);
-    if (folders.length) showSnackbar(`На Диске создана папка ${folders.join(' и ')}, данные отправлены`);
-    else if (total || !silent) showSnackbar(total ? `Обновлено с Диска: ${countLabel(total, CHANGES)}` : 'Уже актуально');
+    if (folders.length) showSnackbar(tr('На Диске создана папка {p0}, данные отправлены', { p0: folders.join(tr(' и ')) }));
+    else if (total || !silent) showSnackbar(total ? tr('Обновлено с Диска: {p0}', { p0: countLabel(total, CHANGES) }) : tr('Уже актуально'));
     await getRepo().setMeta('sync.lastPullAt', now);
     setSync({ lastPullAt: now, remoteNewer: false });
   }, { silent });
@@ -465,12 +466,12 @@ async function checkAccount(email) {
     return true;
   }
   const v = await ask({
-    title: 'Другой аккаунт Google',
-    text: `Ты вошёл как ${email}, а данные этого устройства связаны с ${bound}. `
-      + `Если переключиться, данные устройства будут слиты с Диском ${email}.`,
+    title: tr('Другой аккаунт Google'),
+    text: tr('Ты вошёл как {email}, а данные этого устройства связаны с {bound}. ', { email, bound })
+      + tr('Если переключиться, данные устройства будут слиты с Диском {email}.', { email }),
     buttons: [
-      { label: `Войти как ${bound}`, value: 'back' },
-      { label: 'Переключиться', value: 'switch', kind: 'primary' },
+      { label: tr('Войти как {bound}', { bound }), value: 'back' },
+      { label: tr('Переключиться'), value: 'switch', kind: 'primary' },
     ],
   });
   if (v === 'switch') {
@@ -503,7 +504,7 @@ export async function startSync(oauth, { navigate }) {
   });
 
   if (oauth) {
-    setSync({ phase: 'pull', step: 'Вход в Google' });
+    setSync({ phase: 'pull', step: tr('Вход в Google') });
     let r;
     try {
       r = await completeLogin(oauth);

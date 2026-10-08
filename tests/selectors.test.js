@@ -5,7 +5,7 @@ import { makeCtx, makeData, addTask } from './helpers.js';
 import { touch, tombstone, newList } from '../src/core/model.js';
 import {
   todayView, inboxView, listView, archiveView, trashView, expiredTrash, activeCounts, isOverdue, focusTasks,
-  listHasTasks,
+  listHasTasks, dayGroups,
 } from '../src/core/selectors.js';
 import { DEFAULT_LISTS } from '../src/config.js';
 
@@ -194,4 +194,26 @@ test('v2: цикл после слияния (A под B и B под A) — об
   assert.equal(descendants(d, a.id).length, 0);
   assert.equal(depthOf(d, d.tasks.get(a.id)), 1);
   assert.equal(inboxView(d).filter((t) => t.id === a.id || t.id === b.id).length, 2);
+});
+test('0.12.5: дела по дням для разговора — сверху «сегодня» (★, просроченные, на сегодня), дальше по дням, без даты в конце', () => {
+  const d = makeData();
+  const c = makeCtx(Date.parse('2026-10-08T09:00:00Z'));
+  const T = '2026-10-08';
+  const late = addTask(d, c, { title: 'Просрочено', listIds: [UNIVER], scheduledDate: '2026-10-06' });
+  const today = addTask(d, c, { title: 'Сегодня', listIds: [UNIVER], scheduledDate: T, scheduledTime: '10:00' });
+  const star = addTask(d, c, { title: 'Звезда', listIds: [UNIVER] }, { focusDate: T });
+  const later = addTask(d, c, { title: 'Через три дня', listIds: [UNIVER], scheduledDate: '2026-10-11' });
+  const tomorrow = addTask(d, c, { title: 'Завтра', listIds: [UNIVER], deadlineDate: '2026-10-09' });
+  const none = addTask(d, c, { title: 'Без даты', listIds: [UNIVER] });
+  addTask(d, c, { title: 'Дом', listIds: [DOM], scheduledDate: T });
+  addTask(d, c, { title: 'Готово', listIds: [UNIVER], scheduledDate: T }, { status: 'done' });
+  const { groups, total } = dayGroups(d, T, '09:00', { listId: UNIVER });
+  assert.equal(total, 6);
+  assert.deepEqual(groups.map((g) => g.key), ['today', '2026-10-09', '2026-10-11', 'none']);
+  assert.deepEqual(groups[0].tasks.map((x) => x.task.id), [late.id, star.id, today.id], 'просроченные, потом ★, потом по времени');
+  assert.ok(groups[0].tasks[0].overdue && groups[0].tasks[1].star);
+  assert.equal(groups[1].tasks[0].task.id, tomorrow.id, 'дедлайн тоже ставит на день');
+  assert.equal(groups[2].tasks[0].task.id, later.id);
+  assert.equal(groups[3].tasks[0].task.id, none.id);
+  assert.equal(dayGroups(d, T, '09:00').total, 7, 'без списка — все списки');
 });

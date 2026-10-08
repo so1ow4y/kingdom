@@ -29,6 +29,7 @@ import { getFocus, setFocus, claimFocus, focusElapsed } from './focus.js';
 import { bulkSummary } from '../core/explore.js';
 import { buildMap, suggestPlace } from '../village/map.js';
 import { emitVillage } from '../village/bus.js';
+import { tr } from '../core/i18n.js';
 
 let repo = null;
 let clock = null;
@@ -66,7 +67,7 @@ async function commit(changes) {
   const list = changes.filter((c) => c && c.next && c.next !== c.prev);
   if (!list.length) return false;
   if (store.ui.readOnly) {
-    showSnackbar('Только чтение: сначала обнови приложение');
+    showSnackbar(tr('Только чтение: сначала обнови приложение'));
     return false;
   }
   for (const c of list) setEntity(c.coll, c.next);
@@ -104,8 +105,8 @@ export function reportError(e) {
   console.error(e);
   const quota = e && (e.name === 'QuotaExceededError' || /quota/i.test(e.message || ''));
   showSnackbar(quota
-    ? 'На устройстве закончилось место для данных приложения. Правка не сохранена'
-    : `Что-то пошло не так: ${e?.message || e}. Данные на устройстве не пострадали`);
+    ? tr('На устройстве закончилось место для данных приложения. Правка не сохранена')
+    : tr('Что-то пошло не так: {p0}. Данные на устройстве не пострадали', { p0: e?.message || e }));
   repo?.logError({ at: new Date().toISOString(), code: quota ? 'E-LOCAL-QUOTA' : 'E-INTERNAL', message: String(e?.message || e), stack: e?.stack || null });
 }
 
@@ -113,7 +114,7 @@ function offerUndo(text, changes) {
   // Отменяются правки существующих сущностей и новые события монет (их отмена — active=false).
   const done = changes.filter((c) => c && c.next !== c.prev && (c.prev || c.coll === 'coinEvents'));
   if (!done.length) return showSnackbar(text);
-  showSnackbar(text, 'Отменить', () => undo(done));
+  showSnackbar(text, tr('Отменить'), () => undo(done));
 }
 
 async function undo(changes) {
@@ -162,14 +163,14 @@ export async function renameDevice(name) {
 }
 
 export async function removeDevices(ids) {
-  if (!tokenValid()) { showSnackbar('Сначала войди через Google'); return false; }
+  if (!tokenValid()) { showSnackbar(tr('Сначала войди через Google')); return false; }
   const devices = [...new Set(ids)].map(id => store.data.devices.get(id))
     .filter(d => d && !d.deletedAt && d.id !== deviceId);
   if (!devices.length) return false;
-  if (!await confirm({ title: devices.length === 1 ? `Удалить устройство «${devices[0].name}»?` : 'Очистить все сессии, кроме текущей?',
-    text: 'После отправки на Диск эти устройства выйдут из Kingdom при следующей синхронизации. Локальные задачи сохранятся. Старые версии приложения могут не поддерживать выход. Доступ Google не отзывается.',
-    confirmLabel: 'Удалить и отправить', danger: true })) return false;
-  if (!tokenValid()) { showSnackbar('Сессия истекла — войди заново'); return false; }
+  if (!await confirm({ title: devices.length === 1 ? tr('Удалить устройство «{p0}»?', { p0: devices[0].name }) : tr('Очистить все сессии, кроме текущей?'),
+    text: tr('После отправки на Диск эти устройства выйдут из Kingdom при следующей синхронизации. Локальные задачи сохранятся. Старые версии приложения могут не поддерживать выход. Доступ Google не отзывается.'),
+    confirmLabel: tr('Удалить и отправить'), danger: true })) return false;
+  if (!tokenValid()) { showSnackbar(tr('Сессия истекла — войди заново')); return false; }
   return commit(devices.map(d => change('devices', d.id, x => M.tombstone(x, ctx()))));
 }
 
@@ -178,7 +179,7 @@ export async function restoreDeviceSession() {
   if (d?.deletedAt && (store.auth?.authenticatedAt || 0) > Date.parse(d.deletedAt)) {
     const savedName = await repo.getMeta('deviceName');
     await commit([change('devices', deviceId, () => M.newDevice({ id: deviceId,
-      name: d.name || savedName || (navigator.userAgent.includes('Android') ? 'Телефон' : 'Комп'),
+      name: d.name || savedName || (navigator.userAgent.includes('Android') ? tr('Телефон') : tr('Комп')),
       platform: d.platform || 'other', appVersion: APP_VERSION }, ctx()))]);
   }
 }
@@ -190,15 +191,15 @@ export async function restoreConflict(row) {
   if (row.kind === 'field') {
     const e = getEntity(coll, id);
     if (!e || e.deletedAt) {
-      showSnackbar('Эта запись уже удалена');
+      showSnackbar(tr('Эта запись уже удалена'));
     } else {
       ok = await commit([change(coll, id, (x) => M.touch(x, { [row.field]: row.loserValue }, ctx()))]);
-      if (ok) showSnackbar('Вариант восстановлен');
+      if (ok) showSnackbar(tr('Вариант восстановлен'));
     }
   } else if (row.kind === 'deleted' && row.loserValue) {
     const copy = M.cloneAsNew(row.loserValue, ctx());
     ok = await commit([{ coll, prev: undefined, next: copy }]);
-    if (ok) showSnackbar('Восстановлено как новая запись');
+    if (ok) showSnackbar(tr('Восстановлено как новая запись'));
   }
   if (ok) await repo.updateConflict({ ...row, resolved: true });
   return ok;
@@ -223,9 +224,9 @@ function keyAfterSafe(last) {
 }
 
 function listName(listId) {
-  if (!listId) return '«Входящие»';
+  if (!listId) return tr('«Входящие»');
   const l = getList(listId);
-  return l ? `«${l.name}»` : 'список';
+  return l ? `«${l.name}»` : tr('список');
 }
 
 // ---------- Задачи ----------
@@ -305,12 +306,12 @@ export async function toggleComplete(id) {
   let withChildren = false;
   if (open.length) {
     const v = await ask({
-      title: 'Выполнить и подзадачи?',
-      text: `У задачи ${countLabel(open.length, ['невыполненная подзадача', 'невыполненные подзадачи', 'невыполненных подзадач'])}.`,
+      title: tr('Выполнить и подзадачи?'),
+      text: tr('У задачи {p0}.', { p0: countLabel(open.length, ['невыполненная подзадача', 'невыполненные подзадачи', 'невыполненных подзадач']) }),
       buttons: [
-        { label: 'Отмена', value: null },
-        { label: 'Только задачу', value: 'one' },
-        { label: 'Выполнить всё', value: 'all', kind: 'primary' },
+        { label: tr('Отмена'), value: null },
+        { label: tr('Только задачу'), value: 'one' },
+        { label: tr('Выполнить всё'), value: 'all', kind: 'primary' },
       ],
     });
     if (!v) return;
@@ -327,7 +328,7 @@ export async function toggleComplete(id) {
     // опыт навыков (0.8): каждому списку задачи — по приоритету
     const xp = targets.reduce((s, x) => s + SK.xpOfPriority(store.data.priorities.get(x.priorityId)) * M.taskListIds(x).length, 0);
     const game = store.data.settings.gameEnabled;
-    offerUndo(game ? ['Выполнено', coins ? `+${coins} 🪙` : '', xp ? `+${xp} опыта` : ''].filter(Boolean).join(' · ') : 'Выполнено', changes);
+    offerUndo(game ? [tr('Выполнено'), coins ? `+${coins} 🪙` : '', xp ? tr('+{xp} опыта', { xp }) : ''].filter(Boolean).join(' · ') : tr('Выполнено'), changes);
   }
 }
 
@@ -356,10 +357,10 @@ async function closeRepeat(t, state) {
   if (!(await commit(changes))) return;
   const coins = changes.filter((c) => c.coll === 'coinEvents').reduce((s, c) => s + (c.next.amount | 0), 0);
   const xp = state === 'done' ? SK.xpOfPriority(store.data.priorities.get(t.priorityId)) * M.taskListIds(t).length : 0;
-  const nextText = after ? `дальше — ${humanDate(RP.effDate(next, after), today).toLowerCase()}` : 'повтор закончился';
+  const nextText = after ? tr('дальше — {p0}', { p0: humanDate(RP.effDate(next, after), today).toLowerCase() }) : tr('повтор закончился');
   const game = store.data.settings.gameEnabled;
-  const head = state === 'done' ? 'Выполнено' : 'Пропущено';
-  offerUndo([head, game && coins ? `+${coins} 🪙` : '', game && xp ? `+${xp} опыта` : '', nextText].filter(Boolean).join(' · '), changes);
+  const head = state === 'done' ? tr('Выполнено') : tr('Пропущено');
+  offerUndo([head, game && coins ? `+${coins} 🪙` : '', game && xp ? tr('+{xp} опыта', { xp }) : '', nextText].filter(Boolean).join(' · '), changes);
 }
 
 /** Пропустить текущий экземпляр повтора (без монет и опыта). */
@@ -387,7 +388,7 @@ export async function setRepeat(id, rule, time = undefined) {
     changes = { repeat: null, scheduledDate: due, scheduledTime: due ? (time === undefined ? t.scheduledTime : time) : null };
   }
   const ok = await commit([change('tasks', id, (x) => M.touch(x, changes, c0))]);
-  if (ok) showSnackbar(rule ? `Повтор: ${RP.describeRule(rule)}` : 'Повтор снят');
+  if (ok) showSnackbar(rule ? tr('Повтор: {p0}', { p0: RP.describeRule(rule) }) : tr('Повтор снят'));
   return ok;
 }
 
@@ -396,7 +397,7 @@ export async function reopenTask(id) {
   if (!t) return;
   const c0 = ctx();
   const changes = [change('tasks', id, (x) => M.reopenTask(x, c0)), ...coinChanges(t, false, c0)];
-  if (await commit(changes)) offerUndo('Задача снова активна', changes);
+  if (await commit(changes)) offerUndo(tr('Задача снова активна'), changes);
 }
 
 /** В корзину — вместе с подзадачами (одинаковый trashedAt: по нему они восстановятся вместе). */
@@ -405,7 +406,7 @@ export async function trashTask(id) {
   const at = new Date(c0.now).toISOString();
   const ids = [id, ...S.descendants(store.data, id).map((d) => d.id)];
   const changes = ids.map((x) => change('tasks', x, (y) => M.trashTask(y, c0, at)));
-  if (await commit(changes)) offerUndo(ids.length > 1 ? `В корзине вместе с подзадачами (${ids.length - 1})` : 'Перемещено в корзину', changes);
+  if (await commit(changes)) offerUndo(ids.length > 1 ? tr('В корзине вместе с подзадачами ({p0})', { p0: ids.length - 1 }) : tr('Перемещено в корзину'), changes);
 }
 
 export async function restoreTask(id) {
@@ -414,7 +415,7 @@ export async function restoreTask(id) {
   const c0 = ctx();
   const kids = S.descendants(store.data, id, { includeTrash: true }).filter((d) => d.trashedAt && d.trashedAt === t.trashedAt);
   const changes = [t, ...kids].map((x) => change('tasks', x.id, (y) => M.restoreTask(y, c0)));
-  if (await commit(changes)) offerUndo('Восстановлено', changes);
+  if (await commit(changes)) offerUndo(tr('Восстановлено'), changes);
 }
 
 function withDescendantsForPurge(list) {
@@ -431,15 +432,15 @@ export async function deleteForever(id) {
   if (!t) return false;
   const all = withDescendantsForPurge([t]);
   const ok = await confirm({
-    title: 'Удалить задачу навсегда?',
-    text: `«${t.title}»${all.length > 1 ? ` и ${countLabel(all.length - 1, ['подзадача', 'подзадачи', 'подзадач'])}` : ''} будут удалены без возможности восстановления.`,
-    confirmLabel: 'Удалить навсегда',
+    title: tr('Удалить задачу навсегда?'),
+    text: tr('«{title}»{p1} будут удалены без возможности восстановления.', { title: t.title, p1: all.length > 1 ? tr(' и {p0}', { p0: countLabel(all.length - 1, ['подзадача', 'подзадачи', 'подзадач']) }) : '' }),
+    confirmLabel: tr('Удалить навсегда'),
     danger: true,
   });
   if (!ok) return false;
   const c0 = ctx();
   await commit(all.map((x) => ({ coll: 'tasks', prev: x, next: M.tombstone(x, c0) })));
-  showSnackbar('Удалено навсегда');
+  showSnackbar(tr('Удалено навсегда'));
   return true;
 }
 
@@ -447,20 +448,20 @@ export async function emptyTrash() {
   const list = S.trashView(store.data);
   if (!list.length) return;
   const ok = await confirm({
-    title: 'Очистить корзину?',
-    text: `Удалить навсегда ${countLabel(list.length, ['задачу', 'задачи', 'задач'])}? Это нельзя отменить.`,
-    confirmLabel: 'Удалить навсегда',
+    title: tr('Очистить корзину?'),
+    text: tr('Удалить навсегда {p0}? Это нельзя отменить.', { p0: countLabel(list.length, ['задачу', 'задачи', 'задач']) }),
+    confirmLabel: tr('Удалить навсегда'),
     danger: true,
   });
   if (!ok) return;
   const c0 = ctx();
   await commit(withDescendantsForPurge(list).map((t) => ({ coll: 'tasks', prev: t, next: M.tombstone(t, c0) })));
-  showSnackbar('Корзина очищена');
+  showSnackbar(tr('Корзина очищена'));
 }
 
 const BULK_VERB = {
-  complete: 'Выполнено', reopen: 'Возвращено в работу', trash: 'В корзине', restore: 'Восстановлено',
-  purge: 'Удалено навсегда', move: 'Перенесено', priority: 'Приоритет изменён',
+  complete: tr('Выполнено'), reopen: tr('Возвращено в работу'), trash: tr('В корзине'), restore: tr('Восстановлено'),
+  purge: tr('Удалено навсегда'), move: tr('Перенесено'), priority: tr('Приоритет изменён'),
 };
 
 /**
@@ -526,7 +527,7 @@ export async function bulkTasks(action, ids, arg = null) {
     result.succeeded++;
   }
   if (changes.length && !(await commit(changes))) return null;
-  const text = bulkSummary(result, BULK_VERB[action] || 'Готово');
+  const text = bulkSummary(result, BULK_VERB[action] || tr('Готово'));
   if (action === 'purge' || !result.succeeded) showSnackbar(text);
   else offerUndo(text, changes);
   return result;
@@ -568,7 +569,7 @@ export async function setSchedule(id, date, time) {  const t = getTask(id);
   };
   const c = change('tasks', id, (x) => withDefaultReminders(x, M.touch(x, changes, ctx()), ctx()));
   if (await commit([c])) {
-    offerUndo(date ? `Запланировано: ${humanDate(date, store.now.today)}${changes.scheduledTime ? ' ' + changes.scheduledTime : ''}` : 'Дата убрана', [c]);
+    offerUndo(date ? tr('Запланировано: {p0}{p1}', { p0: humanDate(date, store.now.today), p1: changes.scheduledTime ? ' ' + changes.scheduledTime : '' }) : tr('Дата убрана'), [c]);
   }
 }
 
@@ -581,7 +582,7 @@ export async function setDeadline(id, date, time) {
   };
   const c = change('tasks', id, (x) => withDefaultReminders(x, M.touch(x, changes, ctx()), ctx()));
   if (await commit([c])) {
-    offerUndo(date ? `Дедлайн: ${humanDate(date, store.now.today)}${changes.deadlineTime ? ' ' + changes.deadlineTime : ''}` : 'Дедлайн убран', [c]);
+    offerUndo(date ? tr('Дедлайн: {p0}{p1}', { p0: humanDate(date, store.now.today), p1: changes.deadlineTime ? ' ' + changes.deadlineTime : '' }) : tr('Дедлайн убран'), [c]);
   }
 }
 
@@ -591,7 +592,7 @@ export async function toggleListMembership(id, listId) {
   if (!t) return;
   const now = S.inList(t, listId);
   const c = change('tasks', id, (x) => M.setListMembership(x, listId, !now, ctx()));
-  if (await commit([c])) offerUndo(`${now ? 'Убрано из' : 'Добавлено в'} ${listName(listId)}`, [c]);
+  if (await commit([c])) offerUndo(`${now ? tr('Убрано из') : tr('Добавлено в')} ${listName(listId)}`, [c]);
 }
 
 /** Убрать из всех списков — задача уходит во «Входящие». */
@@ -600,7 +601,7 @@ export async function clearLists(id) {
   if (!t) return;
   const c0 = ctx();
   const c = change('tasks', id, (x) => M.taskListIds(x).reduce((y, l) => M.setListMembership(y, l, false, c0), x));
-  if (await commit([c])) offerUndo('Перемещено в «Входящие»', [c]);
+  if (await commit([c])) offerUndo(tr('Перемещено в «Входящие»'), [c]);
 }
 
 /** Совместимость: «перенести в список» = только этот список (меню строки, быстрые действия «Входящих»). */
@@ -613,7 +614,7 @@ export async function moveToList(id, listId) {
     for (const l of M.taskListIds(x)) if (l !== listId) y = M.setListMembership(y, l, false, c0);
     return listId ? M.setListMembership(y, listId, true, c0) : y;
   });
-  if (await commit([c])) offerUndo(`Перемещено в ${listName(listId)}`, [c]);
+  if (await commit([c])) offerUndo(tr('Перемещено в {p0}', { p0: listName(listId) }), [c]);
 }
 
 /** Смена приоритета. У уже выполненной задачи с начислением — пересчитываем монеты по новому приоритету. */
@@ -632,14 +633,14 @@ export async function addReminder(id, r) {
   const t = getTask(id);
   if (!t) return;
   const cur = (t.reminders || []).filter((x) => !x.deletedAt);
-  if (cur.some((x) => R.sameReminder(x, r))) return showSnackbar('Такое напоминание уже есть');
-  if (cur.length >= R.MAX_REMINDERS) return showSnackbar(`Не больше ${R.MAX_REMINDERS} напоминаний у задачи`);
+  if (cur.some((x) => R.sameReminder(x, r))) return showSnackbar(tr('Такое напоминание уже есть'));
+  if (cur.length >= R.MAX_REMINDERS) return showSnackbar(tr('Не больше {MAX_REMINDERS} напоминаний у задачи', { MAX_REMINDERS: R.MAX_REMINDERS }));
   await commit([change('tasks', id, (x) => M.addReminder(x, r, ctx()))]);
 }
 
 export async function removeReminder(id, remId) {
   const c = change('tasks', id, (x) => M.removeNested(x, 'reminders', remId, ctx()));
-  if (await commit([c])) offerUndo('Напоминание удалено', [c]);
+  if (await commit([c])) offerUndo(tr('Напоминание удалено'), [c]);
 }
 
 /** «Напоминать, пока не отмечу»: { enabled, intervalMinutes }. */
@@ -667,7 +668,7 @@ export async function updateNote(id, noteId, text) {
 
 export async function deleteNote(id, noteId) {
   const c = change('tasks', id, (x) => M.removeNested(x, 'notes', noteId, ctx()));
-  if (await commit([c])) offerUndo('Заметка удалена', [c]);
+  if (await commit([c])) offerUndo(tr('Заметка удалена'), [c]);
 }
 
 export async function reorderNote(id, noteId, index) {
@@ -707,28 +708,28 @@ async function attachPrepared(taskId, noteId, { blob, meta, name }) {
 
 /** Фото, видео, файлы → вложения заметки. original — фото без сжатия (у JPEG вырезается EXIF). → сколько добавлено. */
 export async function attachFiles(taskId, noteId, files, { original = false } = {}) {
-  if (store.ui.readOnly) return showSnackbar('Только чтение: сначала обнови приложение');
+  if (store.ui.readOnly) return showSnackbar(tr('Только чтение: сначала обнови приложение'));
   const s = store.data.settings;
   const max = (s.attachmentMaxMB || 100) * MB;
   let added = 0;
   for (const file of files) {
     if (file.size > max && !/^image\//.test(file.type)) {
-      showSnackbar(`«${file.name}» больше ${s.attachmentMaxMB} МБ — не добавлен`);
+      showSnackbar(tr('«{name}» больше {attachmentMaxMB} МБ — не добавлен', { name: file.name, attachmentMaxMB: s.attachmentMaxMB }));
       continue;
     }
     if (file.size > MEDIA.bigFileWarnMB * MB && !/^image\//.test(file.type)) {
       const ok = await confirm({
-        title: 'Большой файл',
-        text: `«${file.name}» — ${formatBytes(file.size)}. Он займёт столько же на Google Диске (общие 15 ГБ) и будет залит при «Пуш». Добавить?`,
-        confirmLabel: 'Добавить',
+        title: tr('Большой файл'),
+        text: tr('«{name}» — {p1}. Он займёт столько же на Google Диске (общие 15 ГБ) и будет залит при «Пуш». Добавить?', { name: file.name, p1: formatBytes(file.size) }),
+        confirmLabel: tr('Добавить'),
       });
       if (!ok) continue;
     }
     try {
-      setUi({ busyText: `Обработка: ${file.name}` });
+      setUi({ busyText: tr('Обработка: {name}', { name: file.name }) });
       const p = await prepareFile(file, { photoMaxSide: s.photoMaxSide, photoQuality: s.photoQuality, photoFormat: s.photoFormat, original });
       if (p.blob.size > max) {
-        showSnackbar(`«${file.name}» больше ${s.attachmentMaxMB} МБ — не добавлен`);
+        showSnackbar(tr('«{name}» больше {attachmentMaxMB} МБ — не добавлен', { name: file.name, attachmentMaxMB: s.attachmentMaxMB }));
         continue;
       }
       if (await attachPrepared(taskId, noteId, p)) added++;
@@ -746,7 +747,7 @@ export async function attachFiles(taskId, noteId, files, { original = false } = 
 export async function attachRecording(taskId, noteId, rec) {
   const id = await sha256Hex(rec.blob);
   const meta = { id, kind: 'audio', mime: rec.mime, ext: rec.ext, codec: rec.codec, size: rec.blob.size, durationMs: rec.durationMs, original: true };
-  return attachPrepared(taskId, noteId, { blob: rec.blob, meta, name: stampName('Голосовое', rec.ext) });
+  return attachPrepared(taskId, noteId, { blob: rec.blob, meta, name: stampName(tr('Голосовое'), rec.ext) });
 }
 
 /** «+ Голосовая заметка»: пустая заметка, к которой сразу пишется голос. → id заметки */
@@ -764,7 +765,7 @@ export async function dropEmptyNote(taskId, noteId) {
 
 export async function deleteAttachment(taskId, noteId, attId) {
   const c = change('tasks', taskId, (x) => M.removeAttachment(x, noteId, attId, ctx()));
-  if (await commit([c])) offerUndo('Вложение удалено', [c]);
+  if (await commit([c])) offerUndo(tr('Вложение удалено'), [c]);
 }
 
 export async function reorderAttachment(taskId, noteId, attId, index) {
@@ -807,7 +808,7 @@ export async function purgeCompleted(plan = completedPlan()) {
  * Перемещение в дереве (обновление 0.4) — общий путь для перетаскивания, клавиш и меню: родитель, порядок,
  * списки (и у подзадач), правило ★ — одним действием с «Отменить». Расчёт — core/treeDrop.js.
  */
-export async function moveTask(move, text = 'Перемещено') {
+export async function moveTask(move, text = tr('Перемещено')) {
   if (!move || !getTask(move.id)) return false;
   if (move.parentId) {
     const err = S.nestError(store.data, move.id, move.parentId);
@@ -827,7 +828,7 @@ export async function moveTask(move, text = 'Перемещено') {
 export async function setParent(id, parentId) {
   const move = T.menuMove(store.data, id, parentId);
   if (!move) return false;
-  return moveTask(move, parentId ? `Теперь подзадача «${getTask(parentId)?.title ?? ''}»` : 'Вынесено на верхний уровень');
+  return moveTask(move, parentId ? tr('Теперь подзадача «{p0}»', { p0: getTask(parentId)?.title ?? '' }) : tr('Вынесено на верхний уровень'));
 }
 /** ★ — главное на сегодня, с проверкой лимита и даты (TZ §7.6). */
 export async function toggleFocus(id, today = store.now.today) {
@@ -840,17 +841,17 @@ export async function toggleFocus(id, today = store.now.today) {
   // ★ — только у задач верхнего уровня (обновление 0.4): лимит «Главного» считается по ним
   const parent = S.parentOf(store.data, t);
   if (parent) {
-    showSnackbar(`★ ставится задачам верхнего уровня — отметь «${parent.title}»`);
+    showSnackbar(tr('★ ставится задачам верхнего уровня — отметь «{title}»', { title: parent.title }));
     return;
   }
   const others = S.focusTasks(store.data, today).filter((x) => x.id !== id);
   let replaced = null;
   if (others.length >= LIMITS.focusMax) {
     const v = await ask({
-      title: `Уже ${LIMITS.focusMax} главных`,
-      text: 'Заменить:',
+      title: tr('Уже {focusMax} главных', { focusMax: LIMITS.focusMax }),
+      text: tr('Заменить:'),
       items: others.map((x) => ({ label: x.title, value: x.id })),
-      buttons: [{ label: 'Отмена', value: null }],
+      buttons: [{ label: tr('Отмена'), value: null }],
     });
     if (!v) return;
     replaced = others.find((x) => x.id === v);
@@ -858,11 +859,11 @@ export async function toggleFocus(id, today = store.now.today) {
   let scheduleToday = false;
   if (t.scheduledDate && t.scheduledDate > today) {
     const v = await ask({
-      title: `Задача запланирована на ${humanDate(t.scheduledDate, today)}`,
-      text: 'Перенести на выбранный день?',
+      title: tr('Задача запланирована на {p0}', { p0: humanDate(t.scheduledDate, today) }),
+      text: tr('Перенести на выбранный день?'),
       buttons: [
-        { label: 'Только отметить главной', value: 'focus' },
-        { label: 'Да, перенести', value: 'today', kind: 'primary' },
+        { label: tr('Только отметить главной'), value: 'focus' },
+        { label: tr('Да, перенести'), value: 'today', kind: 'primary' },
       ],
     });
     if (!v) return;
@@ -896,27 +897,27 @@ export async function carryYesterdayFocus(ids) {
       changes.push(change('tasks', id, (x) => M.touch(x, { focusDate: null, focusOrder: null }, c0)));
     }
   }
-  if (await commit(changes)) offerUndo('Главные перенесены на сегодня', changes);
+  if (await commit(changes)) offerUndo(tr('Главные перенесены на сегодня'), changes);
 }
 
 export async function clearFocus(ids) {
   const c0 = ctx();
   const changes = ids.map((id) => change('tasks', id, (x) => M.touch(x, { focusDate: null, focusOrder: null }, c0)));
-  if (await commit(changes)) offerUndo('Убрано из главного', changes);
+  if (await commit(changes)) offerUndo(tr('Убрано из главного'), changes);
 }
 
 export async function moveOverdueToToday(ids) {
   if (!ids.length) return;
   const ok = await confirm({
-    title: 'Перенести на сегодня?',
-    text: `${countLabel(ids.length, ['просроченная задача', 'просроченные задачи', 'просроченных задач'])} получат дату «сегодня».`,
-    confirmLabel: 'Перенести',
+    title: tr('Перенести на сегодня?'),
+    text: tr('{p0} получат дату «сегодня».', { p0: countLabel(ids.length, ['просроченная задача', 'просроченные задачи', 'просроченных задач']) }),
+    confirmLabel: tr('Перенести'),
   });
   if (!ok) return;
   const today = store.now.today;
   const c0 = ctx();
   const changes = ids.map((id) => change('tasks', id, (x) => M.touch(x, { scheduledDate: today }, c0)));
-  if (await commit(changes)) offerUndo('Перенесено на сегодня', changes);
+  if (await commit(changes)) offerUndo(tr('Перенесено на сегодня'), changes);
 }
 
 export async function duplicateTask(id) {
@@ -932,7 +933,7 @@ export async function duplicateTask(id) {
   }
   const copy = M.duplicateTask(t, order, ctx());
   if (await commit([{ coll: 'tasks', prev: undefined, next: copy }])) {
-    showSnackbar('Создана копия');
+    showSnackbar(tr('Создана копия'));
     return copy;
   }
   return null;
@@ -983,11 +984,11 @@ export async function reorderPriority(id, siblings, index) {
 /** Удалить можно только неиспользуемый приоритет; используемый — только в архив. */
 export async function deletePriority(id) {
   if (S.priorityInUse(store.data, id)) {
-    showSnackbar('Приоритет используется задачами — его можно только архивировать');
+    showSnackbar(tr('Приоритет используется задачами — его можно только архивировать'));
     return false;
   }
   const p = store.data.priorities.get(id);
-  const ok = await confirm({ title: `Удалить приоритет «${p?.name}»?`, text: 'Он не используется ни одной задачей.', confirmLabel: 'Удалить', danger: true });
+  const ok = await confirm({ title: tr('Удалить приоритет «{name}»?', { name: p?.name }), text: tr('Он не используется ни одной задачей.'), confirmLabel: tr('Удалить'), danger: true });
   if (!ok) return false;
   return commit([change('priorities', id, (x) => M.tombstone(x, ctx()))]);
 }
@@ -1005,21 +1006,21 @@ export async function prestigeList(id) {
   if (!l || l.deletedAt) return false;
   const s = SK.skillOf(store.data, l);
   if (!s.max) {
-    showSnackbar(`Престиж — на ${SK.MAX_LEVEL}-м уровне навыка`);
+    showSnackbar(tr('Престиж — на {MAX_LEVEL}-м уровне навыка', { MAX_LEVEL: SK.MAX_LEVEL }));
     return false;
   }
   const next = s.prestige + 1;
   const ok = await confirm({
-    title: `Повысить престиж «${l.name}»?`,
-    text: `Навык станет ${SK.roman(next)} · 1: уровень начнётся заново, а престиж останется навсегда. Хранитель списка в деревне повзрослеет.`,
-    confirmLabel: `Престиж ${SK.roman(next)}`,
+    title: tr('Повысить престиж «{name}»?', { name: l.name }),
+    text: tr('Навык станет {p0} · 1: уровень начнётся заново, а престиж останется навсегда. Хранитель списка в деревне повзрослеет.', { p0: SK.roman(next) }),
+    confirmLabel: tr('Престиж {p0}', { p0: SK.roman(next) }),
   });
   if (!ok) return false;
   const cur = SK.skillOf(store.data, getList(id));
   if (!cur.max) return false;
   const done = await commit([change('lists', id, (x) => M.touch(x, { prestige: next, prestigeXp: cur.total }, ctx()))]);
   if (done) {
-    showSnackbar(`✨ «${l.name}» — престиж ${SK.roman(next)}!`);
+    showSnackbar(tr('✨ «{name}» — престиж {p1}!', { name: l.name, p1: SK.roman(next) }));
     emitVillage('prestige', { listId: id, prestige: next });
   }
   return done;
@@ -1031,33 +1032,33 @@ export async function archiveList(id) {
   const active = S.activeCounts(store.data).get(id) || 0;
   if (active > 0) {
     const ok = await confirm({
-      title: `Архивировать «${l.name}»?`,
-      text: `В списке ${countLabel(active, ['активная задача', 'активные задачи', 'активных задач'])}. Они пропадут из «Сегодня», пока список в архиве.`,
-      confirmLabel: 'Архивировать',
+      title: tr('Архивировать «{name}»?', { name: l.name }),
+      text: tr('В списке {p0}. Они пропадут из «Сегодня», пока список в архиве.', { p0: countLabel(active, ['активная задача', 'активные задачи', 'активных задач']) }),
+      confirmLabel: tr('Архивировать'),
     });
     if (!ok) return false;
   }
   const c = change('lists', id, (x) => M.touch(x, { archived: true }, ctx()));
-  if (await commit([c])) offerUndo(`Список «${l.name}» в архиве`, [c]);
+  if (await commit([c])) offerUndo(tr('Список «{name}» в архиве', { name: l.name }), [c]);
   return true;
 }
 
 export async function unarchiveList(id) {
   const c = change('lists', id, (x) => M.touch(x, { archived: false }, ctx()));
-  if (await commit([c])) showSnackbar('Список возвращён из архива');
+  if (await commit([c])) showSnackbar(tr('Список возвращён из архива'));
 }
 
 export async function deleteList(id) {
   const l = getList(id);
   if (!l) return false;
   if (S.listHasTasks(store.data, id)) {
-    showSnackbar('Сначала перенеси или удали задачи этого списка');
+    showSnackbar(tr('Сначала перенеси или удали задачи этого списка'));
     return false;
   }
-  const ok = await confirm({ title: `Удалить список «${l.name}»?`, text: 'Список пустой. Это нельзя отменить.', confirmLabel: 'Удалить', danger: true });
+  const ok = await confirm({ title: tr('Удалить список «{name}»?', { name: l.name }), text: tr('Список пустой. Это нельзя отменить.'), confirmLabel: tr('Удалить'), danger: true });
   if (!ok) return false;
   await commit([change('lists', id, (x) => M.tombstone(x, ctx()))]);
-  showSnackbar('Список удалён');
+  showSnackbar(tr('Список удалён'));
   return true;
 }
 
@@ -1093,7 +1094,7 @@ export async function updateReward(id, changes) {
 export async function deleteReward(id) {
   if (G.purchasedCount(store.data, id) > 0) return updateReward(id, { archived: true });
   const c = change('rewards', id, (r) => M.tombstone(r, ctx()));
-  if (await commit([c])) offerUndo('Награда удалена', [c]);
+  if (await commit([c])) offerUndo(tr('Награда удалена'), [c]);
   return true;
 }
 
@@ -1101,15 +1102,15 @@ export async function deleteReward(id) {
 async function buy({ price, title, rewardId = null, itemId = null }) {
   const bal = G.balance(store.data);
   if (price > bal) {
-    showSnackbar(`Не хватает ${price - bal} 🪙`);
+    showSnackbar(tr('Не хватает {p0} 🪙', { p0: price - bal }));
     return false;
   }
-  const ok = await confirm({ title: `Купить «${title}»?`, text: `Спишется ${price} 🪙. Останется ${bal - price} 🪙.`, confirmLabel: 'Купить' });
+  const ok = await confirm({ title: tr('Купить «{title}»?', { title }), text: tr('Спишется {price} 🪙. Останется {p1} 🪙.', { price, p1: bal - price }), confirmLabel: tr('Купить') });
   if (!ok) return false;
   if (price > G.balance(store.data)) return false; // пока думали, баланс мог измениться (пулл)
   const e = G.purchaseEvent({ price, title, rewardId, itemId }, ctx());
   if (!(await commit([{ coll: 'coinEvents', prev: undefined, next: e }]))) return false;
-  showSnackbar(`Куплено: ${title} · −${price} 🪙`);
+  showSnackbar(tr('Куплено: {title} · −{price} 🪙', { title, price }));
   return true;
 }
 
@@ -1117,7 +1118,7 @@ export async function buyReward(id) {
   const r = getEntity('rewards', id);
   if (!r || r.deletedAt || r.archived) return false;
   if (!r.repeatable && G.purchasedCount(store.data, id) > 0) {
-    showSnackbar('Эта награда одноразовая и уже куплена');
+    showSnackbar(tr('Эта награда одноразовая и уже куплена'));
     return false;
   }
   return buy({ price: r.price, title: (r.emoji ? r.emoji + ' ' : '') + r.name, rewardId: id });
@@ -1137,27 +1138,27 @@ export async function refundPurchase(eventId) {
   const owned = V.ownedVillage(store.data);
   const dependent = V.VILLAGE_ITEMS.find((it) => it.requires === e.itemId && owned.has(it.id));
   if (dependent) {
-    showSnackbar(`Сначала верни «${dependent.name}»`);
+    showSnackbar(tr('Сначала верни «{name}»', { name: dependent.name }));
     return false;
   }
   // улучшения (0.12.4): нельзя вернуть уровень, над которым стоит следующий, и саму постройку с улучшениями
   const ups = [...store.data.coinEvents.values()].filter((x) => !x.deletedAt && x.active && x.itemId === V.UPGRADE_ITEM);
   if (e.itemId === V.UPGRADE_ITEM && ups.some((x) => x.target === e.target && x.level > e.level)) {
-    showSnackbar('Сначала верни следующий уровень этой постройки');
+    showSnackbar(tr('Сначала верни следующий уровень этой постройки'));
     return false;
   }
   if (e.itemId !== V.UPGRADE_ITEM && ups.some((x) => x.target === eventId)) {
-    showSnackbar('У постройки есть улучшения — продай её в деревне, вернутся и они');
+    showSnackbar(tr('У постройки есть улучшения — продай её в деревне, вернутся и они'));
     return false;
   }
   const test = { ...store.data, coinEvents: new Map(store.data.coinEvents) };
   test.coinEvents.set(eventId, { ...e, active: false });
   if (V.gemBalance(test) < 0) {
-    showSnackbar('Нельзя вернуть: изумруды из этой шахты уже потрачены');
+    showSnackbar(tr('Нельзя вернуть: изумруды из этой шахты уже потрачены'));
     return false;
   }
   const back = e.gems ? `${Math.abs(e.gems)} 💎` : `${Math.abs(e.amount)} 🪙`;
-  const ok = await confirm({ title: `Вернуть «${e.title}»?`, text: `Вернётся ${back}.`, confirmLabel: 'Вернуть' });
+  const ok = await confirm({ title: tr('Вернуть «{title}»?', { title: e.title }), text: tr('Вернётся {back}.', { back }), confirmLabel: tr('Вернуть') });
   if (!ok) return false;
   return commit([change('coinEvents', eventId, (x) => M.touch(x, { active: false, at: new Date(Date.now()).toISOString() }, ctx()))]);
 }
@@ -1195,7 +1196,7 @@ export async function buyVillageItem(itemId, pos = null) {
   const gems = p.gems || 0;
   const cost = gems ? `${gems} 💎` : `${price} 🪙`;
   const left = gems ? `${V.gemBalance(store.data) - gems} 💎` : `${G.balance(store.data) - price} 🪙`;
-  const ok = await confirm({ title: `Купить «${item.name}»?`, text: `Спишется ${cost}. Останется ${left}.`, confirmLabel: 'Купить' });
+  const ok = await confirm({ title: tr('Купить «{name}»?', { name: item.name }), text: tr('Спишется {cost}. Останется {left}.', { cost, left }), confirmLabel: tr('Купить') });
   if (!ok || !V.canBuy(store.data, item, G.balance(store.data)).ok) return false;
   const c0 = ctx();
   const changes = [];
@@ -1208,7 +1209,7 @@ export async function buyVillageItem(itemId, pos = null) {
   const e = G.purchaseEvent({ price, gems, title: item.name, itemId, x: at?.x, y: at?.y }, c0);
   changes.push({ coll: 'coinEvents', prev: undefined, next: e });
   if (!(await commit(changes))) return false;
-  showSnackbar(`Куплено: ${item.emoji} ${item.name} · −${cost}`);
+  showSnackbar(tr('Куплено: {emoji} {name} · −{cost}', { emoji: item.emoji, name: item.name, cost }));
   emitVillage('bought', { itemId, key: e.id });
   return true;
 }
@@ -1221,7 +1222,7 @@ export async function upgradeVillageObject(key) {
   const obj = V.villageObjects(store.data).find((o) => o.key === key);
   const nu = V.nextUpgrade(obj);
   if (!obj || !nu) {
-    showSnackbar(obj && V.isUpgradable(obj.place) ? 'Это уже максимальный уровень' : 'Эта постройка не улучшается');
+    showSnackbar(obj && V.isUpgradable(obj.place) ? tr('Это уже максимальный уровень') : tr('Эта постройка не улучшается'));
     return false;
   }
   const check = V.canUpgrade(store.data, obj, G.balance(store.data));
@@ -1230,24 +1231,24 @@ export async function upgradeVillageObject(key) {
     return false;
   }
   const item = V.villageItem(obj.itemId);
-  const name = (item?.name || 'Постройка').replace(/ · ур\. \d$/, '');
+  const name = (item?.name || tr('Постройка')).replace(/ · ур\. \d$/, '');
   const gems = nu.price.gems || 0;
   const price = nu.price.coins || 0;
   const cost = gems ? `${gems} 💎` : `${price} 🪙`;
   const ok = await confirm({
-    title: `Улучшить «${name}» до ${nu.level}-го уровня?`,
-    text: `Спишется ${cost}. Бонус: ${V.bonusText(obj.place, obj.level)} → ${V.bonusText(obj.place, nu.level)}.`,
-    confirmLabel: 'Улучшить',
+    title: tr('Улучшить «{name}» до {level}-го уровня?', { name, level: nu.level }),
+    text: tr('Спишется {cost}. Бонус: {p1} → {p2}.', { cost, p1: V.bonusText(obj.place, obj.level), p2: V.bonusText(obj.place, nu.level) }),
+    confirmLabel: tr('Улучшить'),
   });
   if (!ok) return false;
   const again = V.villageObjects(store.data).find((o) => o.key === key);
   if (!again || again.level !== obj.level || !V.canUpgrade(store.data, again, G.balance(store.data)).ok) return false;
-  const title = `${name} · ур. ${nu.level}`;
+  const title = tr('{name} · ур. {level}', { name, level: nu.level });
   const e = nu.itemId
     ? G.purchaseEvent({ price, gems, title, itemId: nu.itemId }, ctx())
     : G.purchaseEvent({ price, gems, title, itemId: V.UPGRADE_ITEM, target: key, level: nu.level }, ctx());
   if (!(await commit([{ coll: 'coinEvents', prev: undefined, next: e }]))) return false;
-  showSnackbar(`${item?.emoji || '⬆'} ${name} — уровень ${nu.level} · −${cost}`);
+  showSnackbar(tr('{p0} {name} — уровень {level} · −{cost}', { p0: item?.emoji || '⬆', name, level: nu.level, cost }));
   emitVillage('upgraded', { key, level: nu.level });
   return true;
 }
@@ -1269,9 +1270,9 @@ export async function sellVillageObject(key) {
     return false;
   }
   const item = V.villageItem(plan.obj.itemId);
-  const name = item?.name.replace(/ · ур\. \d$/, '') || 'объект';
-  const back = [plan.coins ? `${plan.coins} 🪙` : '', plan.gems ? `${plan.gems} 💎` : ''].filter(Boolean).join(' и ') || 'ничего';
-  const ok = await confirm({ title: `Продать «${name}»?`, text: `Вернётся ${back}.`, confirmLabel: 'Продать' });
+  const name = item?.name.replace(/ · ур\. \d$/, '') || tr('объект');
+  const back = [plan.coins ? `${plan.coins} 🪙` : '', plan.gems ? `${plan.gems} 💎` : ''].filter(Boolean).join(tr(' и ')) || tr('ничего');
+  const ok = await confirm({ title: tr('Продать «{name}»?', { name }), text: tr('Вернётся {back}.', { back }), confirmLabel: tr('Продать') });
   if (!ok) return false;
   const again = V.sellPlan(store.data, key);
   if (again.error) return false;
@@ -1282,7 +1283,7 @@ export async function sellVillageObject(key) {
     ...again.events.map((id) => change('coinEvents', id, (x) => M.touch(x, { active: false, at }, c0))),
   ].filter(Boolean);
   if (!(await commit(changes))) return false;
-  showSnackbar(`Продано: ${name} · +${back}`);
+  showSnackbar(tr('Продано: {name} · +{back}', { name, back }));
   return true;
 }
 
@@ -1291,17 +1292,17 @@ export async function sellVillageObject(key) {
 export async function startFocus({ taskId = null, minutes = 25, title = '' } = {}) {
   const cur = getFocus();
   if (cur) {
-    const ok = await confirm({ title: 'Уже идёт фокус', text: `«${cur.title}». Начать новый? Текущий не засчитается.`, confirmLabel: 'Начать новый' });
+    const ok = await confirm({ title: tr('Уже идёт фокус'), text: tr('«{title}». Начать новый? Текущий не засчитается.', { title: cur.title }), confirmLabel: tr('Начать новый') });
     if (!ok) return false;
     emitVillage('focus-fail');
   }
   const t = taskId ? getTask(taskId) : null;
   const now = Date.now();
   const m = Math.max(1, Math.min(240, Math.round(minutes)));
-  const label = t?.title || M.normalizeTitle(title) || 'Фокус';
+  const label = t?.title || M.normalizeTitle(title) || tr('Фокус');
   setFocus({ taskId: t ? t.id : null, title: label, minutes: m, startedAt: now, endsAt: now + m * 60000, pausedAt: null, pausedMs: 0 });
   emitVillage('focus-start');
-  showSnackbar(`Фокус на ${m} мин. Деревня работает вместе с тобой`);
+  showSnackbar(tr('Фокус на {m} мин. Деревня работает вместе с тобой', { m }));
   return true;
 }
 
@@ -1315,7 +1316,7 @@ export async function finishFocus({ early = false } = {}) {
   const minutes = early ? Math.min(f.minutes, Math.floor(focusElapsed(f) / 60000)) : f.minutes;
   if (minutes < 1) {
     emitVillage('focus-fail');
-    showSnackbar('Фокус отменён');
+    showSnackbar(tr('Фокус отменён'));
     return;
   }
   // Сессия по задаче пишется в саму задачу (focusSessions — всегда, и без игры), изумруды — в журнал монет.
@@ -1333,13 +1334,13 @@ export async function finishFocus({ early = false } = {}) {
   const saved = changes.length ? await commit(changes) : false;
   const gems = saved && e ? e.gems | 0 : 0;
   emitVillage('focus-done', { gems, minutes });
-  const summary = `Фокус ${minutes} мин${gems ? ` · +${gems} 💎` : ''}`;
+  const summary = tr('Фокус {minutes} мин{p1}', { minutes, p1: gems ? ` · +${gems} 💎` : '' });
   const t = f.taskId ? getTask(f.taskId) : null;
   if (t && t.status === 'active' && !t.deletedAt && !t.trashedAt) {
     const v = await ask({
       title: summary,
-      text: `Задача «${t.title}» выполнена?`,
-      buttons: [{ label: 'Ещё нет', value: false }, { label: 'Выполнена', value: true, kind: 'primary' }],
+      text: tr('Задача «{title}» выполнена?', { title: t.title }),
+      buttons: [{ label: tr('Ещё нет'), value: false }, { label: tr('Выполнена'), value: true, kind: 'primary' }],
     });
     if (v === true) await toggleComplete(t.id);
   } else showSnackbar(summary);
@@ -1363,7 +1364,7 @@ export function resumeFocus() {
 }
 
 /** Прервать фокус без зачёта (как засохшее дерево в Forest — жители немного расстроятся). */
-export function cancelFocus(reason = 'Фокус прерван') {
+export function cancelFocus(reason = tr('Фокус прерван')) {
   if (!getFocus()) return;
   setFocus(null);
   emitVillage('focus-fail');

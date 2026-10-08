@@ -11,6 +11,7 @@ import {
   SETTINGS_ID, DEFAULT_LISTS, DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, CHORES_LIST_ID, LIMITS, RETENTION,
 } from '../config.js';
 import { DEFAULT_PRIORITIES, PRIORITY_NONE_ID } from './priorities.js';
+import { tr } from './i18n.js';
 
 export const SERVICE_FIELDS = new Set(['id', 'createdAt', 'updatedAt', 'updatedBy', 'fieldTimes']);
 // Вложенные массивы и словари с метками на уровне элементов — через touch не меняются.
@@ -349,7 +350,7 @@ function safeKeyAfter(last) {
 export function addAttachment(task, noteId, att, ctx) {
   return updateNote(task, noteId, (note) => {
     const order = safeKeyAfter(liveAttachments(note).at(-1)?.order);
-    const item = nestedNew({ mediaId: att.mediaId, name: String(att.name || 'файл').slice(0, 255), order }, ATTACHMENT_FIELDS, ctx);
+    const item = nestedNew({ mediaId: att.mediaId, name: String(att.name || tr('файл')).slice(0, 255), order }, ATTACHMENT_FIELDS, ctx);
     delete item.updatedBy;
     return { ...note, attachments: [...(note.attachments || []), item].sort((a, b) => (a.id < b.id ? -1 : 1)) };
   }, ctx);
@@ -422,7 +423,7 @@ export function focusTotal(task) {
 
 export function duplicateTask(task, order, ctx) {
   const copy = newTask({
-    title: normalizeTitle(task.title.slice(0, LIMITS.titleMax - 8) + ' (копия)'),
+    title: normalizeTitle(task.title.slice(0, LIMITS.titleMax - 8) + tr(' (копия)')),
     listIds: taskListIds(task),
     parentId: task.parentId ?? null,
     priorityId: task.priorityId,

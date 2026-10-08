@@ -5,14 +5,15 @@ import { localDateOf, addDays, daysBetween, mondayOf } from './dates.js';
 import { doneByDay, streaks } from './game.js';
 import { doneEntries } from './retention.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
+import { tr } from './i18n.js';
 
 export const PERIODS = [
-  { id: '7d', label: '7 дней', days: 7 },
-  { id: '30d', label: '30 дней', days: 30 },
-  { id: '3m', label: '3 месяца', days: 91 },
-  { id: '1y', label: 'Год', days: 365 },
-  { id: 'all', label: 'Всё время' },
-  { id: 'custom', label: 'Свой' },
+  { id: '7d', label: tr('7 дней'), days: 7 },
+  { id: '30d', label: tr('30 дней'), days: 30 },
+  { id: '3m', label: tr('3 месяца'), days: 91 },
+  { id: '1y', label: tr('Год'), days: 365 },
+  { id: 'all', label: tr('Всё время') },
+  { id: 'custom', label: tr('Свой') },
 ];
 
 /** Первый день с выполненной задачей или начислением (для «Всё время»). */
@@ -92,11 +93,11 @@ export function analyze(data, tz, today, from, to) {
   }
   const byList = [...lists].map(([id, n]) => {
     const l = id ? data.lists.get(id) : null;
-    return { id, name: l ? (l.emoji ? l.emoji + ' ' : '') + l.name : 'Входящие', color: l?.color || '#9E9E9E', n };
+    return { id, name: l ? (l.emoji ? l.emoji + ' ' : '') + l.name : tr('Входящие'), color: l?.color || '#9E9E9E', n };
   }).sort((a, b) => b.n - a.n || a.name.localeCompare(b.name, 'ru'));
   const byPriority = [...pri].map(([id, n]) => {
     const p = data.priorities.get(id);
-    return { id, name: p?.name || 'Без приоритета', color: p?.color || '#9E9E9E', n, order: p?.order || '' };
+    return { id, name: p?.name || tr('Без приоритета'), color: p?.color || '#9E9E9E', n, order: p?.order || '' };
   }).sort((a, b) => (a.order < b.order ? 1 : -1));
 
   return {

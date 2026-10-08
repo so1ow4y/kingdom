@@ -14,8 +14,9 @@ import { openTask, Link } from '../router.js';
 import {
   permission, requestPermission, notifyEnabled, setNotifyEnabled, missedReminders, clearMissed, testNotification,
 } from '../notifier.js';
+import { tr } from '../../core/i18n.js';
 
-const UNITS = [['m', 'мин', 1], ['h', 'ч', 60], ['d', 'дн.', 1440]];
+const UNITS = [['m', tr('мин'), 1], ['h', tr('ч'), 60], ['d', tr('дн.'), 1440]];
 
 /**
  * Выбор напоминания. Для задачи (taskId) — добавляет сразу; для черновика (draft + onPick) — отдаёт выбранное.
@@ -59,13 +60,13 @@ export function ReminderSheet({ taskId = null, draft = null, onPick = null, onSe
   const custom = (e) => {
     e.preventDefault();
     const min = customMinutes();
-    if (!(min >= 0) || min > R.MAX_OFFSET_MINUTES) return showSnackbar('От 0 минут до 7 дней');
+    if (!(min >= 0) || min > R.MAX_OFFSET_MINUTES) return showSnackbar(tr('От 0 минут до 7 дней'));
     pick({ kind: 'relative', anchor: anchorKind, offsetMinutes: min });
   };
   const chips = (anc, enabled) => html`<div class="chip-row wrap">
     ${presets.map((m) => html`<button type="button" class="chip" disabled=${!enabled} onClick=${() => pick({ kind: 'relative', anchor: anc, offsetMinutes: m })}>
       за ${R.durationLabel(m)}</button>`)}
-    <button type="button" class="chip" disabled=${!enabled} onClick=${() => pick({ kind: 'relative', anchor: anc, offsetMinutes: 0 })}>в момент ${anc === 'deadline' ? 'дедлайна' : 'начала'}</button>
+    <button type="button" class="chip" disabled=${!enabled} onClick=${() => pick({ kind: 'relative', anchor: anc, offsetMinutes: 0 })}>в момент ${anc === 'deadline' ? tr('дедлайна') : tr('начала')}</button>
   </div>`;
 
   return html`
@@ -111,8 +112,8 @@ export function ReminderSheet({ taskId = null, draft = null, onPick = null, onSe
 function DeviceHint() {
   const p = permission();
   if (p === 'granted' && notifyEnabled()) return null;
-  const text = p === 'unsupported' ? 'Этот браузер не умеет показывать уведомления.'
-    : p === 'denied' ? 'Уведомления запрещены в браузере.' : 'Уведомления на этом устройстве не включены.';
+  const text = p === 'unsupported' ? tr('Этот браузер не умеет показывать уведомления.')
+    : p === 'denied' ? tr('Уведомления запрещены в браузере.') : tr('Уведомления на этом устройстве не включены.');
   return html`<p class="hint">${text} <${Link} to="/settings?section=notifications">Настроить<//></p>`;
 }
 
@@ -127,13 +128,13 @@ function ReminderRow({ r, task, onRemove, locked, isDefault = false }) {
       <div class="item-main">
         <span>${R.reminderLabel(r, today)}${isDefault ? html` <small class="muted">· по умолчанию</small>` : null}</span>
         ${problem ? html`<small class="hint warn">${problem}</small>`
-          : at != null ? html`<small class="muted">${past ? 'было ' : ''}${formatMoment(new Date(at).toISOString(), store.data.settings.timeZone)}</small>` : null}
+          : at != null ? html`<small class="muted">${past ? tr('было ') : ''}${formatMoment(new Date(at).toISOString(), store.data.settings.timeZone)}</small>` : null}
       </div>
       ${locked ? null : html`<button type="button" class="icon-btn small" onClick=${onRemove} aria-label="Удалить напоминание" title="Удалить"><${Icon} name="close" size=${16}/></button>`}
     </div>`;
 }
 
-const everyLabel = (m) => (m === 1 ? 'каждую минуту' : `каждые ${R.durationLabel(m)}`);
+const everyLabel = (m) => (m === 1 ? tr('каждую минуту') : tr('каждые {p0}', { p0: R.durationLabel(m) }));
 
 /** «Каждые …»: варианты из настроек (settings.nagPresets) и своё значение. */
 function NagInterval({ value, onChange, disabled }) {
@@ -146,7 +147,7 @@ function NagInterval({ value, onChange, disabled }) {
     const apply = (e) => {
       e.preventDefault();
       const m = Math.round(+num * (unit === 'h' ? 60 : 1));
-      if (!(m >= LIMITS.nagMin && m <= LIMITS.nagMax)) return showSnackbar(`От ${LIMITS.nagMin} минуты до ${LIMITS.nagMax / 60} часов`);
+      if (!(m >= LIMITS.nagMin && m <= LIMITS.nagMax)) return showSnackbar(tr('От {nagMin} минуты до {p1} часов', { nagMin: LIMITS.nagMin, p1: LIMITS.nagMax / 60 }));
       onChange(m);
       setCustom(false);
     };
@@ -186,7 +187,7 @@ export function RemindersEditor({ taskId, locked }) {
       <div class="rem-sub">Повторять, пока не отмечу</div>
       <div class="nag-row">
         <label class="switch"><input type="checkbox" checked=${nag.enabled} disabled=${locked}
-          onChange=${(e) => A.setNag(taskId, { ...nag, enabled: e.target.checked })}/> ${nag.enabled ? 'Включено:' : 'Выключено'}</label>
+          onChange=${(e) => A.setNag(taskId, { ...nag, enabled: e.target.checked })}/> ${nag.enabled ? tr('Включено:') : tr('Выключено')}</label>
         ${nag.enabled ? html`<${NagInterval} value=${nag.intervalMinutes} disabled=${locked} onChange=${(m) => A.setNag(taskId, { ...nag, intervalMinutes: m })}/>` : null}
       </div>
       ${nag.enabled && !list.length ? html`<p class="hint">Повтор начинается после первого напоминания — добавь его выше.</p>` : null}
@@ -210,7 +211,7 @@ export function DraftReminders({ draft, value, setValue, onSetTime = null }) {
     <div class="item-list">
       ${shown.map((r, i) => html`<${ReminderRow} key=${i} r=${r} task=${{ ...draft, status: 'active' }} isDefault=${isDefault}
         onRemove=${() => setValue(shown.filter((_, j) => j !== i))}/>`)}
-      ${shown.length ? null : html`<p class="muted small">${R.taskDay(draft) ? 'Без напоминаний' : 'Выбери день — и появится напоминание по умолчанию'}</p>`}
+      ${shown.length ? null : html`<p class="muted small">${R.taskDay(draft) ? tr('Без напоминаний') : tr('Выбери день — и появится напоминание по умолчанию')}</p>`}
     </div>
     <button type="button" class="item-add" onClick=${(e) => openSheet('reminder', { draft, onPick: add, onSetTime, anchor: e.currentTarget.getBoundingClientRect() })}>
       <${Icon} name="plus" size=${16}/> Напоминание</button>`;
@@ -243,10 +244,10 @@ export function MissedSheet() {
 }
 
 const PERM_TEXT = {
-  granted: ['ok', 'Разрешены в браузере'],
-  denied: ['danger', 'Запрещены в браузере'],
-  default: ['muted', 'Ещё не включены'],
-  unsupported: ['muted', 'Этот браузер не поддерживает уведомления'],
+  granted: ['ok', tr('Разрешены в браузере')],
+  denied: ['danger', tr('Запрещены в браузере')],
+  default: ['muted', tr('Ещё не включены')],
+  unsupported: ['muted', tr('Этот браузер не поддерживает уведомления')],
 };
 
 /** Раздел «Уведомления» в настройках. */
@@ -260,16 +261,16 @@ export function NotificationsSection({ focus = false }) {
 
   const enable = async () => {
     const v = await ask({
-      title: 'Включить уведомления?',
-      text: 'Chronicle будет напоминать о задачах: за 5 минут до начала (или как настроишь), а у задач без времени — в выбранное время дня. '
-        + 'Важно: сервера у нас нет, поэтому уведомления приходят, только пока приложение открыто — вкладка или установленное приложение, можно свёрнутое. '
-        + 'Сейчас браузер спросит разрешение.',
-      buttons: [{ label: 'Не сейчас', value: null }, { label: 'Включить', value: 'yes', kind: 'primary' }],
+      title: tr('Включить уведомления?'),
+      text: tr('Chronicle будет напоминать о задачах: за 5 минут до начала (или как настроишь), а у задач без времени — в выбранное время дня. ')
+        + tr('Важно: сервера у нас нет, поэтому уведомления приходят, только пока приложение открыто — вкладка или установленное приложение, можно свёрнутое. ')
+        + tr('Сейчас браузер спросит разрешение.'),
+      buttons: [{ label: tr('Не сейчас'), value: null }, { label: tr('Включить'), value: 'yes', kind: 'primary' }],
     });
     if (v !== 'yes') return;
     const r = await requestPermission();
-    if (r === 'granted') showSnackbar('Уведомления включены');
-    else if (r === 'denied') showSnackbar('Браузер запретил уведомления');
+    if (r === 'granted') showSnackbar(tr('Уведомления включены'));
+    else if (r === 'denied') showSnackbar(tr('Браузер запретил уведомления'));
     rerender((n) => n + 1);
   };
 
@@ -281,7 +282,7 @@ export function NotificationsSection({ focus = false }) {
         <div class="set-control">
           ${p === 'default' ? html`<button class="btn primary" onClick=${enable}>Включить уведомления</button>` : null}
           ${p === 'granted' ? html`<label class="switch"><input type="checkbox" checked=${notifyEnabled()}
-            onChange=${(e) => { setNotifyEnabled(e.target.checked); rerender((n) => n + 1); }}/> ${notifyEnabled() ? 'Включены' : 'Выключены'}</label>` : null}
+            onChange=${(e) => { setNotifyEnabled(e.target.checked); rerender((n) => n + 1); }}/> ${notifyEnabled() ? tr('Включены') : tr('Выключены')}</label>` : null}
         </div>
       </div>
       ${p === 'denied' ? html`<p class="hint">Чтобы включить обратно: нажми на значок слева от адреса сайта (замок или «настройки сайта») → «Уведомления» → «Разрешить», затем перезагрузи страницу. В установленном приложении на Android: Настройки телефона → Приложения → Kingdom (или Chrome) → Уведомления.</p>` : null}
@@ -296,7 +297,7 @@ export function NotificationsSection({ focus = false }) {
             onChange=${(e) => A.updateSettings({ defaultReminderMinutes: e.target.value === '' ? null : +e.target.value })}>
             <option value="">Не напоминать</option>
             ${[...new Set([0, ...presets, ...(s.defaultReminderMinutes == null ? [] : [s.defaultReminderMinutes])])].sort((a, b) => a - b)
-              .map((m) => html`<option value=${String(m)}>${m ? 'за ' + R.durationLabel(m) : 'в момент начала'}</option>`)}
+              .map((m) => html`<option value=${String(m)}>${m ? tr('за ') + R.durationLabel(m) : tr('в момент начала')}</option>`)}
           </select>
         </div>
       </div>
@@ -312,7 +313,7 @@ export function NotificationsSection({ focus = false }) {
         rangeText="От 1 минуты до 7 дней" onChange=${(v) => A.updateSettings({ reminderPresets: v })}/>
       <div class="field-label">Варианты «Повторять, пока не отмечу: каждые …»</div>
       <${PresetsEditor} values=${[...(s.nagPresets || [])].sort((a, b) => a - b)} prefix="каждые" units=${UNITS.slice(0, 2)} max=${LIMITS.nagMax}
-        readOnly=${readOnly} rangeText=${`От ${LIMITS.nagMin} минуты до ${LIMITS.nagMax / 60} часов`} onChange=${(v) => A.updateSettings({ nagPresets: v })}/>
+        readOnly=${readOnly} rangeText=${tr('От {nagMin} минуты до {p1} часов', { nagMin: LIMITS.nagMin, p1: LIMITS.nagMax / 60 })} onChange=${(v) => A.updateSettings({ nagPresets: v })}/>
     </section>`;
 }
 
@@ -326,7 +327,7 @@ function PresetsEditor({ values, prefix, units, max, readOnly, rangeText, onChan
     if (!(m >= 1) || m > max) return showSnackbar(rangeText);
     setNum('');
     if (values.includes(m)) return;
-    if (values.length >= LIMITS.presetsMax) return showSnackbar(`Не больше ${LIMITS.presetsMax} вариантов`);
+    if (values.length >= LIMITS.presetsMax) return showSnackbar(tr('Не больше {presetsMax} вариантов', { presetsMax: LIMITS.presetsMax }));
     onChange([...values, m].sort((a, b) => a - b));
   };
   return html`

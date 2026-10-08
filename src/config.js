@@ -1,4 +1,5 @@
 // Единственное место для настроек, которые не зависят от пользователя.
+import { tr } from './core/i18n.js';
 
 // Google (используется с этапа 2). Client ID не секретный.
 export const GOOGLE_CLIENT_ID = '296129493975-miqcedk33ufcll0dshtm34hrssttktdm.apps.googleusercontent.com';
@@ -71,27 +72,27 @@ export const SETTINGS_ID = '00000000-0000-7000-8000-000000000001';
 export const DEFAULTS_DEVICE_ID = '00000000-0000-7000-8000-000000000000';
 export const DEFAULTS_CREATED_AT = '2026-01-01T00:00:00.000Z';
 export const DEFAULT_LISTS = [
-  { id: '00000000-0000-7000-8000-000000000101', name: 'Пересдача', emoji: '📚', color: '#E53935', order: 'a0' },
-  { id: '00000000-0000-7000-8000-000000000102', name: 'Универ', emoji: '🎓', color: '#1E88E5', order: 'a1' },
+  { id: '00000000-0000-7000-8000-000000000101', name: tr('Пересдача'), emoji: '📚', color: '#E53935', order: 'a0' },
+  { id: '00000000-0000-7000-8000-000000000102', name: tr('Универ'), emoji: '🎓', color: '#1E88E5', order: 'a1' },
   { id: '00000000-0000-7000-8000-000000000103', name: 'YouTube', emoji: '🎬', color: '#D81B60', order: 'a2' },
-  { id: '00000000-0000-7000-8000-000000000104', name: 'Игра', emoji: '🎮', color: '#8E24AA', order: 'a3' },
-  { id: '00000000-0000-7000-8000-000000000105', name: 'Дом', emoji: '🏠', color: '#43A047', order: 'a4' },
+  { id: '00000000-0000-7000-8000-000000000104', name: tr('Игра'), emoji: '🎮', color: '#8E24AA', order: 'a3' },
+  { id: '00000000-0000-7000-8000-000000000105', name: tr('Дом'), emoji: '🏠', color: '#43A047', order: 'a4' },
 ];
 export const CHORES_LIST_ID = '00000000-0000-7000-8000-000000000105';
 
 export const LIST_COLORS = [
-  { hex: '#E53935', name: 'Красный' },
-  { hex: '#FB8C00', name: 'Оранжевый' },
-  { hex: '#FDD835', name: 'Жёлтый' },
-  { hex: '#43A047', name: 'Зелёный' },
-  { hex: '#00897B', name: 'Бирюзовый' },
-  { hex: '#1E88E5', name: 'Синий' },
-  { hex: '#3949AB', name: 'Индиго' },
-  { hex: '#8E24AA', name: 'Фиолетовый' },
-  { hex: '#D81B60', name: 'Розовый' },
-  { hex: '#6D4C41', name: 'Коричневый' },
-  { hex: '#757575', name: 'Серый' },
-  { hex: '#546E7A', name: 'Графит' },
+  { hex: '#E53935', name: tr('Красный') },
+  { hex: '#FB8C00', name: tr('Оранжевый') },
+  { hex: '#FDD835', name: tr('Жёлтый') },
+  { hex: '#43A047', name: tr('Зелёный') },
+  { hex: '#00897B', name: tr('Бирюзовый') },
+  { hex: '#1E88E5', name: tr('Синий') },
+  { hex: '#3949AB', name: tr('Индиго') },
+  { hex: '#8E24AA', name: tr('Фиолетовый') },
+  { hex: '#D81B60', name: tr('Розовый') },
+  { hex: '#6D4C41', name: tr('Коричневый') },
+  { hex: '#757575', name: tr('Серый') },
+  { hex: '#546E7A', name: tr('Графит') },
 ];
 
 export const EMOJI_SUGGESTIONS = ['📚', '🎓', '🎬', '🎮', '🏠', '💼', '🛒', '🍳', '🧹', '💪', '🏃', '💰',

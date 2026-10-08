@@ -14,6 +14,7 @@ import { useLocal } from '../hooks.js';
 import { Link } from '../router.js';
 import * as RP from '../../core/repeat.js';
 import { foldYo } from '../../core/query.js';
+import { tr } from '../../core/i18n.js';
 
 export const INBOX_ZONE = { manual: true, listId: 'inbox' };
 
@@ -47,15 +48,15 @@ function RepeatingTab() {
   const filtered = group !== 'all' || !!needle;
   const removeAll = async () => {
     const ok = await confirm({
-      title: filtered ? 'Удалить показанные повторяющиеся задачи?' : 'Удалить все повторяющиеся задачи?',
-      text: `${shown.length} шт. уйдут в корзину — оттуда их можно вернуть.`, confirmLabel: 'Удалить', danger: true,
+      title: filtered ? tr('Удалить показанные повторяющиеся задачи?') : tr('Удалить все повторяющиеся задачи?'),
+      text: tr('{length} шт. уйдут в корзину — оттуда их можно вернуть.', { length: shown.length }), confirmLabel: tr('Удалить'), danger: true,
     });
     if (ok) for (const t of shown) await A.trashTask(t.id);
   };
   if (!tasks.length) {
     return html`<${Empty}>Повторяющихся задач нет. Создай задачу с «↻ Повтор»: каждый день, по дням недели, раз в месяц или раз в год.<//>`;
   }
-  const searchQ = group === 'all' ? 'повтор:есть' : 'повтор:' + RP.CATEGORIES.find((c) => c.key === group).aliases[0];
+  const searchQ = group === 'all' ? tr('повтор:есть') : tr('повтор:') + RP.CATEGORIES.find((c) => c.key === group).aliases[0];
   return html`
     <p class="screen-hint">Повторяющиеся задачи из всех списков. Отметка закрывает только текущий раз; удалить — всю серию (в корзину).</p>
     <div class="chip-row wrap repeat-cats" role="radiogroup" aria-label="Группа повторов">
@@ -71,9 +72,9 @@ function RepeatingTab() {
         <input type="search" value=${q} placeholder="Найти: название, «март», «будни»" aria-label="Найти среди повторяющихся"
           onInput=${(e) => setQ(e.target.value)}/>
       </div>
-      <${Link} to=${'/tasks?q=' + encodeURIComponent(searchQ)} className="link-btn" title=${"Открыть в «Поиске»: " + searchQ}>В «Поиске» →<//>
+      <${Link} to=${'/tasks?q=' + encodeURIComponent(searchQ)} className="link-btn" title=${tr("Открыть в «Поиске»: ") + searchQ}>В «Поиске» →<//>
     </div>
-    ${!shown.length ? html`<${Empty}>Ничего не нашлось${needle ? ` по «${q.trim()}»` : ''}.<//>`
+    ${!shown.length ? html`<${Empty}>Ничего не нашлось${needle ? tr(' по «{p0}»', { p0: q.trim() }) : ''}.<//>`
       : group === 'all' && !needle ? RP.CATEGORIES.filter((c) => counts[c.key]).map((c) => html`
         <section class="repeat-group" key=${c.key}>
           <h3 class="repeat-group-title">${c.label} <small class="muted">· ${c.hint} · ${counts[c.key]}</small></h3>
@@ -83,7 +84,7 @@ function RepeatingTab() {
         </section>`)
       : html`<div class="task-list repeating-list">${shown.map((t) => html`<${RepeatItem} key=${t.id} t=${t} readOnly=${readOnly}/>`)}</div>`}
     ${shown.length > 1 ? html`<button class="link-btn danger-link" disabled=${readOnly} onClick=${removeAll}>
-      ${filtered ? `Удалить показанные (${shown.length})` : `Удалить все повторяющиеся (${shown.length})`}</button>` : null}`;
+      ${filtered ? tr('Удалить показанные ({length})', { length: shown.length }) : tr('Удалить все повторяющиеся ({length})', { length: shown.length })}</button>` : null}`;
 }
 
 export function InboxScreen() {

@@ -17,6 +17,7 @@ import { readLocal, writeLocal } from '../hooks.js';
 import { LIMITS } from '../../config.js';
 import { RepeatEditor } from './Repeat.js';
 import { describeRule } from '../../core/repeat.js';
+import { tr } from '../../core/i18n.js';
 
 function QuickAddSheet({ ctx }) {
   const today = store.now.today;
@@ -61,7 +62,7 @@ function QuickAddSheet({ ctx }) {
       setReminders(null);
       setOpen({ ...open, subtasks: false, notes: false });
       setAdded((n) => n + 1);
-      if (r.focusRejected) showSnackbar(`Уже ${LIMITS.focusMax} главных — задача добавлена без ★`);
+      if (r.focusRejected) showSnackbar(tr('Уже {focusMax} главных — задача добавлена без ★', { focusMax: LIMITS.focusMax }));
     }
     input.current?.focus();
   };
@@ -93,11 +94,11 @@ function QuickAddSheet({ ctx }) {
   const prio = store.data.priorities.get(priorityId);
   const lists = sortedLists(store.data);
   const dayChips = [today, addDays(today, 1), ...[2, 3, 4, 5, 6, 7].map((n) => addDays(today, n))];
-  const dayLabel = (d, i) => (i === 0 ? 'Сегодня' : i === 1 ? 'Завтра' : WEEKDAY_SHORT[isoWeekday(d) - 1]);
+  const dayLabel = (d, i) => (i === 0 ? tr('Сегодня') : i === 1 ? tr('Завтра') : WEEKDAY_SHORT[isoWeekday(d) - 1]);
   const flip = (k) => setOpen({ ...open, [k]: !open[k] });
   const listsLabel = listIds.length
     ? listIds.map((id) => store.data.lists.get(id)?.name).filter(Boolean).slice(0, 2).join(', ') + (listIds.length > 2 ? ` +${listIds.length - 2}` : '')
-    : 'Входящие';
+    : tr('Входящие');
 
   return html`
     <${Sheet} title="Новая задача" onClose=${closeQuickAdd} className="quick-add">
@@ -120,7 +121,7 @@ function QuickAddSheet({ ctx }) {
           <span class=${'chip chip-timebox' + (time ? ' selected' : '')}><${Icon} name="clock" size=${16}/>
             <${TimeInput} value=${time} onChange=${setTime} label="Время"/></span>
           <button type="button" class=${'chip' + (open.reminders ? ' selected' : '')} onClick=${() => flip('reminders')} aria-expanded=${open.reminders}>
-            <${Icon} name="bell" size=${16}/> Напоминание${reminders && !reminders.length ? ': нет' : ''}</button>
+            <${Icon} name="bell" size=${16}/> Напоминание${reminders && !reminders.length ? tr(': нет') : ''}</button>
         </div>` : null}
         <div class="chip-row wrap">
           <button type="button" class=${'chip' + (focus ? ' selected' : '')} onClick=${() => setFocus(!focus)}
@@ -129,9 +130,9 @@ function QuickAddSheet({ ctx }) {
             aria-expanded=${open.lists}><${Icon} name=${listIds.length ? 'lists' : 'inbox'} size=${16}/> ${listsLabel}</button>
           <button type="button" class=${'chip' + (priorityId !== PRIORITY_NONE_ID ? ' selected' : '')}
             onClick=${(e) => openSheet('priority', { anchor: e.currentTarget.getBoundingClientRect(), current: priorityId, onPick: setPriorityId })}>
-            <i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i> ${priorityId !== PRIORITY_NONE_ID ? prio?.name : 'Приоритет'}</button>
+            <i class="dot big" style=${{ background: prio?.color || '#9E9E9E' }}></i> ${priorityId !== PRIORITY_NONE_ID ? prio?.name : tr('Приоритет')}</button>
           <button type="button" class=${'chip' + (open.repeat || repeat ? ' selected' : '')} onClick=${() => flip('repeat')}
-            aria-expanded=${!!open.repeat}><${Icon} name="repeat" size=${16}/> ${repeat ? describeRule(repeat) : 'Повтор'}</button>
+            aria-expanded=${!!open.repeat}><${Icon} name="repeat" size=${16}/> ${repeat ? describeRule(repeat) : tr('Повтор')}</button>
           <button type="button" class=${'chip' + (open.subtasks ? ' selected' : '')} onClick=${() => { flip('subtasks'); if (!subtasks.length) setSubtasks(['']); }}
             aria-expanded=${open.subtasks}><${Icon} name="list" size=${16}/> Подзадачи${subtasks.filter((s) => s.trim()).length ? ' · ' + subtasks.filter((s) => s.trim()).length : ''}</button>
           <button type="button" class=${'chip' + (open.notes ? ' selected' : '')} onClick=${() => { flip('notes'); if (!notes.length) setNotes(['']); }}

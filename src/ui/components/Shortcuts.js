@@ -11,13 +11,14 @@ import {
   SHORTCUTS, SHORTCUT_GROUPS, FIXED, bindingOf, comboParts, formatCombo, ruLetter, comboFromEvent, conflictOf, isReserved,
   assign, resetShortcut, resetAllShortcuts, recorder, shortcutsOn, IS_MAC,
 } from '../keys.js';
+import { tr } from '../../core/i18n.js';
 
 /** Сочетание клавишами-«колпачками»: Ctrl + S. */
-export function Keys({ combo, empty = 'не назначено' }) {
+export function Keys({ combo, empty = tr('не назначено') }) {
   if (!combo) return html`<span class="keys none">${empty}</span>`;
   const parts = comboParts(combo);
   const ru = ruLetter(combo);
-  return html`<span class="keys" title=${ru ? `В русской раскладке — та же кнопка «${ru}»` : undefined}>
+  return html`<span class="keys" title=${ru ? tr('В русской раскладке — та же кнопка «{ru}»', { ru }) : undefined}>
     ${parts.map((p, i) => html`${i && !IS_MAC ? html`<span class="keys-plus">+</span>` : null}<kbd class="keycap">${p}</kbd>`)}
     ${ru ? html`<small class="keys-ru">${ru}</small>` : null}
   </span>`;
@@ -37,12 +38,12 @@ function Recorder({ id, onDone }) {
       const combo = comboFromEvent(e);
       if (!combo) return; // пока только модификаторы — ждём основную кнопку
       if (isReserved(combo)) {
-        setMsg({ text: `«${formatCombo(combo)}» занято браузером или системой — выбери другое сочетание.` });
+        setMsg({ text: tr('«{p0}» занято браузером или системой — выбери другое сочетание.', { p0: formatCombo(combo) }) });
         return;
       }
       const other = conflictOf(combo, id);
       if (other) {
-        setMsg({ text: `«${formatCombo(combo)}» уже у действия «${other.label}».`, combo, other });
+        setMsg({ text: tr('«{p0}» уже у действия «{label}».', { p0: formatCombo(combo), label: other.label }), combo, other });
         return;
       }
       assign(id, combo);
@@ -108,19 +109,19 @@ export function ShortcutsSection() {
                     ${editing === s.id ? html`<${Recorder} id=${s.id} onDone=${() => setEditing(null)}/>` : html`
                       <div class="sc-keys"><${Keys} combo=${combo}/>${custom ? html`<span class="sc-custom" title="Изменено">•</span>` : null}</div>
                       <div class="sc-buttons">
-                        <button type="button" class="icon-btn" title="Изменить" aria-label=${'Изменить: ' + s.label} onClick=${() => setEditing(s.id)}>
+                        <button type="button" class="icon-btn" title="Изменить" aria-label=${tr('Изменить: ') + s.label} onClick=${() => setEditing(s.id)}>
                           <${Icon} name="edit" size=${17}/></button>
-                        <button type="button" class="icon-btn" title="Отключить" aria-label=${'Отключить: ' + s.label} disabled=${!combo}
+                        <button type="button" class="icon-btn" title="Отключить" aria-label=${tr('Отключить: ') + s.label} disabled=${!combo}
                           onClick=${() => assign(s.id, null)}><${Icon} name="close" size=${17}/></button>
-                        <button type="button" class="icon-btn" title=${s.def ? 'По умолчанию: ' + formatCombo(s.def) : 'По умолчанию не назначено'}
-                          aria-label=${'Вернуть по умолчанию: ' + s.label} disabled=${!custom} onClick=${() => resetShortcut(s.id)}>
+                        <button type="button" class="icon-btn" title=${s.def ? tr('По умолчанию: ') + formatCombo(s.def) : tr('По умолчанию не назначено')}
+                          aria-label=${tr('Вернуть по умолчанию: ') + s.label} disabled=${!custom} onClick=${() => resetShortcut(s.id)}>
                           <${Icon} name="restore" size=${17}/></button>
                       </div>`}
                   </div>`;
               })}
             </div>`;
         })}
-        ${!needle || 'esc закрыть'.includes(needle) ? html`
+        ${!needle || tr('esc закрыть').includes(needle) ? html`
           <div class="sc-group">
             <h3 class="set-sub">Всегда</h3>
             ${FIXED.map((f) => html`<div class="sc-row fixed" key=${f.combo}>

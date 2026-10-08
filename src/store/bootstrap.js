@@ -13,13 +13,14 @@ import { deviceTimeZone } from '../core/dates.js';
 import { buildDb, COLLECTIONS } from '../data/envelope.js';
 import { migrateDb } from '../data/migrations/index.js';
 import { SCHEMA_VERSION, APP_VERSION } from '../version.js';
+import { tr } from '../core/i18n.js';
 
 export function detectPlatform() {
   const ua = navigator.userAgent;
-  if (/Android/i.test(ua)) return { platform: 'android-chrome', name: 'Телефон' };
+  if (/Android/i.test(ua)) return { platform: 'android-chrome', name: tr('Телефон') };
   if (/iPhone|iPad/i.test(ua)) return { platform: 'ios-safari', name: 'iPhone' };
-  if (/Windows/i.test(ua)) return { platform: /Edg\//.test(ua) ? 'windows-edge' : 'windows-chrome', name: 'Комп' };
-  return { platform: 'other', name: 'Устройство' };
+  if (/Windows/i.test(ua)) return { platform: /Edg\//.test(ua) ? 'windows-edge' : 'windows-chrome', name: tr('Комп') };
+  return { platform: 'other', name: tr('Устройство') };
 }
 
 /** Миграция локальной базы при обновлении приложения (docs/TZ.md §12). Снимок до миграции — в сторе snapshots. */
@@ -54,7 +55,7 @@ async function openFeast() {
     return { repo, loaded };
   } catch (e) {
     console.error('Feast', e);
-    setUi({ feastReadOnly: `Не открылась локальная база Crimson Harvest: ${e?.message || e}. Задачи работают как обычно.` });
+    setUi({ feastReadOnly: tr('Не открылась локальная база Crimson Harvest: {p0}. Задачи работают как обычно.', { p0: e?.message || e }) });
     return null;
   }
 }
@@ -101,14 +102,14 @@ export async function bootstrap() {
   if (localSchema > SCHEMA_VERSION) {
     setUi({
       readOnlySource: 'local',
-      readOnly: `Данные на этом устройстве записаны более новой версией приложения (формат v${localSchema}, у тебя v${SCHEMA_VERSION}). Обнови приложение — до этого правки недоступны.`,
+      readOnly: tr('Данные на этом устройстве записаны более новой версией приложения (формат v{localSchema}, у тебя v{SCHEMA_VERSION}). Обнови приложение — до этого правки недоступны.', { localSchema, SCHEMA_VERSION }),
     });
   } else if (localSchema < SCHEMA_VERSION) {
     try {
       await migrateLocal(repo, loaded, localSchema);
       loaded = await repo.loadAll();
     } catch (e) {
-      setUi({ readOnlySource: 'local', readOnly: `Не удалось обновить формат данных (v${localSchema} → v${SCHEMA_VERSION}): ${e.message}. Данные не изменены.` });
+      setUi({ readOnlySource: 'local', readOnly: tr('Не удалось обновить формат данных (v{localSchema} → v{SCHEMA_VERSION}): {message}. Данные не изменены.', { localSchema, SCHEMA_VERSION, message: e.message }) });
     }
   }
 

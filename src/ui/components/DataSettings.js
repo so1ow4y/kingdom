@@ -17,6 +17,7 @@ import { tokenValid } from '../../google/auth.js';
 import { readLocal, writeLocal } from '../hooks.js';
 import { LIMITS, MEDIA, RETENTION, BACKUPS_KEEP, TOMBSTONE_TTL_DAYS, DRIVE_QUOTA_URL, DRIVE_STORAGE_URL } from '../../config.js';
 import { SCHEMA_VERSION } from '../../version.js';
+import { tr } from '../../core/i18n.js';
 
 const TASKS = ['задача', 'задачи', 'задач'];
 
@@ -29,7 +30,7 @@ function dataArrays() {
 
 /** Скачать архив .zip со всеми данными и вложениями (недостающие вложения — с Диска, если можно). */
 export async function exportNow() {
-  setUi({ busyText: 'Готовлю архив…' });
+  setUi({ busyText: tr('Готовлю архив…') });
   try {
     const canDl = navigator.onLine && tokenValid() && !!store.sync.layout;
     const { blob, name, mediaMissing } = await buildExport({
@@ -52,11 +53,11 @@ export async function exportNow() {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 30000);
     showSnackbar(mediaMissing.length
-      ? `Архив скачан без ${countLabel(mediaMissing.length, ['вложения', 'вложений', 'вложений'])} (их нет на устройстве)`
-      : `Архив скачан · ${formatBytes(blob.size)}`);
+      ? tr('Архив скачан без {p0} (их нет на устройстве)', { p0: countLabel(mediaMissing.length, ['вложения', 'вложений', 'вложений']) })
+      : tr('Архив скачан · {p0}', { p0: formatBytes(blob.size) }));
     return true;
   } catch (e) {
-    showSnackbar(`Не удалось собрать архив: ${e?.message || e}`);
+    showSnackbar(tr('Не удалось собрать архив: {p0}', { p0: e?.message || e }));
     return false;
   } finally {
     setUi({ busyText: null });
@@ -71,34 +72,34 @@ export async function runRetention({ interactive = false } = {}) {
   if (store.ui.readOnly) return 0;
   const plan = A.completedPlan();
   if (!plan.count) {
-    if (interactive) showSnackbar(store.data.settings.completedLimit == null ? 'Лимит выключен' : 'Удалять нечего — выполненных не больше лимита');
+    if (interactive) showSnackbar(store.data.settings.completedLimit == null ? tr('Лимит выключен') : tr('Удалять нечего — выполненных не больше лимита'));
     return 0;
   }
   if (!readLocal('retentionConfirmed', false) || interactive) {
     const v = await ask({
-      title: `Будет удалено ${countLabel(plan.count, ['старая выполненная задача', 'старые выполненные задачи', 'старых выполненных задач'])}`,
-      text: `Хранится ${plan.total} выполненных, лимит — ${store.data.settings.completedLimit}. Удаляются самые старые (выполненные за последние ${RETENTION.keepRecentDays} дней остаются). `
-        + 'Статистика, серии, уровни и монеты не изменятся. Задачи удаляются навсегда — можно сначала скачать архив со всеми данными.',
+      title: tr('Будет удалено {p0}', { p0: countLabel(plan.count, ['старая выполненная задача', 'старые выполненные задачи', 'старых выполненных задач']) }),
+      text: tr('Хранится {total} выполненных, лимит — {completedLimit}. Удаляются самые старые (выполненные за последние {keepRecentDays} дней остаются). ', { total: plan.total, completedLimit: store.data.settings.completedLimit, keepRecentDays: RETENTION.keepRecentDays })
+        + tr('Статистика, серии, уровни и монеты не изменятся. Задачи удаляются навсегда — можно сначала скачать архив со всеми данными.'),
       buttons: [
-        { label: 'Не сейчас', value: null },
-        { label: 'Сначала архив (zip)', value: 'export' },
-        { label: 'Удалить', value: 'yes', kind: 'danger' },
+        { label: tr('Не сейчас'), value: null },
+        { label: tr('Сначала архив (zip)'), value: 'export' },
+        { label: tr('Удалить'), value: 'yes', kind: 'danger' },
       ],
     });
     if (!v) return 0;
     if (v === 'export') {
       if (!(await exportNow())) return 0;
       const again = await ask({
-        title: 'Архив скачан',
-        text: `Удалить ${countLabel(plan.count, TASKS)} сейчас?`,
-        buttons: [{ label: 'Не сейчас', value: null }, { label: 'Удалить', value: 'yes', kind: 'danger' }],
+        title: tr('Архив скачан'),
+        text: tr('Удалить {p0} сейчас?', { p0: countLabel(plan.count, TASKS) }),
+        buttons: [{ label: tr('Не сейчас'), value: null }, { label: tr('Удалить'), value: 'yes', kind: 'danger' }],
       });
       if (again !== 'yes') return 0;
     }
     writeLocal('retentionConfirmed', true);
   }
   const n = await A.purgeCompleted(A.completedPlan());
-  if (n) showSnackbar(`Удалено ${countLabel(n, ['старая выполненная', 'старые выполненные', 'старых выполненных'])} · статистика сохранена`);
+  if (n) showSnackbar(tr('Удалено {p0} · статистика сохранена', { p0: countLabel(n, ['старая выполненная', 'старые выполненные', 'старых выполненных']) }));
   return n;
 }
 
@@ -122,7 +123,7 @@ export function DataSection() {
   const saveLimit = (v) => {
     const n = Math.round(+v);
     if (!(n >= RETENTION.completedMin && n <= RETENTION.completedMax)) {
-      showSnackbar(`Лимит — от ${RETENTION.completedMin} до ${RETENTION.completedMax}`);
+      showSnackbar(tr('Лимит — от {completedMin} до {completedMax}', { completedMin: RETENTION.completedMin, completedMax: RETENTION.completedMax }));
       setDraft(String(limit ?? RETENTION.completedDefault));
       return;
     }
@@ -131,9 +132,9 @@ export function DataSection() {
   return html`
     <section class="set-section" id="data">
       <h2>Данные</h2>
-      <${Row} label="Хранить выполненных задач" hint=${`Сейчас: ${done}. Старые сверх лимита удаляются навсегда (кроме выполненных за ${RETENTION.keepRecentDays} дней), статистика сохраняется`}>
+      <${Row} label="Хранить выполненных задач" hint=${tr('Сейчас: {done}. Старые сверх лимита удаляются навсегда (кроме выполненных за {keepRecentDays} дней), статистика сохраняется', { done, keepRecentDays: RETENTION.keepRecentDays })}>
         <label class="switch"><input type="checkbox" checked=${limit != null} disabled=${readOnly}
-          onChange=${(e) => A.updateSettings({ completedLimit: e.target.checked ? +draft || RETENTION.completedDefault : null })}/> ${limit != null ? 'не больше' : 'без лимита'}</label>
+          onChange=${(e) => A.updateSettings({ completedLimit: e.target.checked ? +draft || RETENTION.completedDefault : null })}/> ${limit != null ? tr('не больше') : tr('без лимита')}</label>
         ${limit != null ? html`<input type="number" min=${RETENTION.completedMin} max=${RETENTION.completedMax} step="100" value=${draft} disabled=${readOnly}
           style="width: 96px" aria-label="Лимит выполненных" onInput=${(e) => setDraft(e.target.value)} onChange=${(e) => saveLimit(e.target.value)}/>` : null}
       <//>
@@ -159,15 +160,15 @@ export function DataSection() {
       <//>
       <${Row} label="Неиспользуемые файлы удаляются с Диска через" hint="Вложение удалили или задачу удалили навсегда — файл ждёт этот срок, потом уходит в корзину Google Диска">
         <select value=${String(s.orphanMediaRetentionDays)} disabled=${readOnly} onChange=${(e) => A.updateSettings({ orphanMediaRetentionDays: +e.target.value })}>
-          ${[0, 7, 14, 30, 60, 90].map((n) => html`<option value=${String(n)}>${n ? `${n} дн.` : 'сразу'}</option>`)}
+          ${[0, 7, 14, 30, 60, 90].map((n) => html`<option value=${String(n)}>${n ? tr('{n} дн.', { n }) : tr('сразу')}</option>`)}
         </select>
       <//>
-      <${Row} label="Кэш медиа на этом устройстве" hint=${cache ? `Занято ${formatBytes(cache.total)}${cache.pinnedCount ? `, из них ещё не на Диске: ${formatBytes(cache.pinned)}` : ''}` : '…'}>
+      <${Row} label="Кэш медиа на этом устройстве" hint=${cache ? tr('Занято {p0}{p1}', { p0: formatBytes(cache.total), p1: cache.pinnedCount ? tr(', из них ещё не на Диске: {p0}', { p0: formatBytes(cache.pinned) }) : '' }) : '…'}>
         <select value=${String(cacheMB)} onChange=${(e) => { setCacheLimitMB(+e.target.value); setCacheMB(+e.target.value); }}>
           ${[100, 300, 500, 1000, 2000].map((n) => html`<option value=${String(n)}>до ${n} МБ</option>`)}
         </select>
       <//>
-      <button class="btn small" onClick=${async () => { const n = await clearCache(); setCache(await cacheUsage()); showSnackbar(n ? `Удалено из кэша: ${n}` : 'Кэш пуст (незалитые файлы не трогаются)'); }}>Очистить кэш медиа</button>
+      <button class="btn small" onClick=${async () => { const n = await clearCache(); setCache(await cacheUsage()); showSnackbar(n ? tr('Удалено из кэша: {n}', { n }) : tr('Кэш пуст (незалитые файлы не трогаются)')); }}>Очистить кэш медиа</button>
     </section>`;
 }
 
@@ -199,7 +200,7 @@ export function LimitsSection() {
     try {
       setQuota(await drive.quota());
     } catch (e) {
-      setQuota({ error: e?.code === 'E-AUTH-EXPIRED' ? 'Нужен вход в Google' : e?.code === 'E-OFFLINE' ? 'Нет сети' : String(e?.message || e) });
+      setQuota({ error: e?.code === 'E-AUTH-EXPIRED' ? tr('Нужен вход в Google') : e?.code === 'E-OFFLINE' ? tr('Нет сети') : String(e?.message || e) });
     }
   };
   useEffect(() => {
@@ -218,7 +219,7 @@ export function LimitsSection() {
         <tr><td>«Главных» на день</td><td>${LIMITS.focusMax}</td></tr>
         <tr><td>Вложенность задач</td><td>${LIMITS.maxDepth} уровня</td></tr>
         <tr><td>Напоминаний у задачи</td><td>до ${LIMITS.remindersMax}</td></tr>
-        <tr><td>Хранить выполненных</td><td>${s.completedLimit == null ? 'без лимита' : `до ${s.completedLimit}`} (настраивается: ${RETENTION.completedMin}–${RETENTION.completedMax})</td></tr>
+        <tr><td>Хранить выполненных</td><td>${s.completedLimit == null ? tr('без лимита') : tr('до {completedLimit}', { completedLimit: s.completedLimit })} (настраивается: ${RETENTION.completedMin}–${RETENTION.completedMax})</td></tr>
         <tr><td>Вложение (видео, файл)</td><td>до ${s.attachmentMaxMB} МБ; фото — сжатие до ${s.photoMaxSide} px</td></tr>
         <tr><td>Голосовая запись</td><td>до ${Math.round(s.voiceMaxSeconds / 60)} мин, ${s.voiceBitrate / 1000} кбит/с</td></tr>
         <tr><td>Автозагрузка вложений с Диска</td><td>картинки и голос до ${formatBytes(MEDIA.autoDownloadMaxBytes)}</td></tr>
@@ -230,14 +231,14 @@ export function LimitsSection() {
       <h3 class="set-sub">Использование</h3>
       <table class="kv">
         <tr><td>Задачи</td><td>активных ${active}, выполненных ${done}, в корзине ${trash}; сводок удалённых выполненных — ${[...data.doneArchive.values()].filter((a) => !a.deletedAt).length}</td></tr>
-        <tr><td>Размер базы</td><td>${db ? `${formatBytes(db.raw)} (сжатая на Диске — ${formatBytes(db.gz)})` : '…'}</td></tr>
-        <tr><td>Медиа на Диске</td><td>${formatBytes(media.onDrive)}${media.total > media.onDrive ? ` · ждут «Пуш»: ${formatBytes(media.total - media.onDrive)}` : ''} (файлов: ${media.count})</td></tr>
-        <tr><td>Кэш медиа на устройстве</td><td>${cache ? `${formatBytes(cache.total)} из ${cacheLimitMB()} МБ` : '…'}</td></tr>
-        <tr><td>Google Диск</td><td>${q ? html`занято ${formatBytes(used)}${limit ? ` из ${formatBytes(limit)}, свободно ${formatBytes(Math.max(0, limit - used))}` : ' (без ограничения)'}
+        <tr><td>Размер базы</td><td>${db ? tr('{p0} (сжатая на Диске — {p1})', { p0: formatBytes(db.raw), p1: formatBytes(db.gz) }) : '…'}</td></tr>
+        <tr><td>Медиа на Диске</td><td>${formatBytes(media.onDrive)}${media.total > media.onDrive ? tr(' · ждут «Пуш»: {p0}', { p0: formatBytes(media.total - media.onDrive) }) : ''} (файлов: ${media.count})</td></tr>
+        <tr><td>Кэш медиа на устройстве</td><td>${cache ? tr('{p0} из {p1} МБ', { p0: formatBytes(cache.total), p1: cacheLimitMB() }) : '…'}</td></tr>
+        <tr><td>Google Диск</td><td>${q ? html`занято ${formatBytes(used)}${limit ? tr(' из {p0}, свободно {p1}', { p0: formatBytes(limit), p1: formatBytes(Math.max(0, limit - used)) }) : tr(' (без ограничения)')}
           <div class="quota-bar"><i style=${{ width: limit ? Math.min(100, (used / limit) * 100) + '%' : '0' }}></i></div>
           <small class="muted">Место общее для Диска, Gmail и Google Фото</small>`
-          : quota === 'loading' ? 'загрузка…' : html`${quota?.error || 'не загружено'} <button class="btn small" onClick=${loadQuota}>Узнать</button>`}</td></tr>
-        <tr><td>Хранилище браузера</td><td>${persisted == null ? '…' : persisted ? 'постоянное (браузер не очистит само)' : 'может быть очищено браузером при нехватке места — делай «Пуш» регулярно'}</td></tr>
+          : quota === 'loading' ? tr('загрузка…') : html`${quota?.error || tr('не загружено')} <button class="btn small" onClick=${loadQuota}>Узнать</button>`}</td></tr>
+        <tr><td>Хранилище браузера</td><td>${persisted == null ? '…' : persisted ? tr('постоянное (браузер не очистит само)') : tr('может быть очищено браузером при нехватке места — делай «Пуш» регулярно')}</td></tr>
       </table>
       <p class="hint">Квоты Google Drive API (число запросов) — <a href=${DRIVE_QUOTA_URL} target="_blank" rel="noopener">в Google Cloud Console</a>; место на Диске — <a href=${DRIVE_STORAGE_URL} target="_blank" rel="noopener">в настройках Google Диска</a>.</p>
     </section>`;

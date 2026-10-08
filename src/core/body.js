@@ -6,24 +6,25 @@
 
 import { addDays, daysBetween } from './dates.js';
 import { MACROS, KCAL_PER_G, DEFAULT_MACRO_PCT, gramsFromPct } from './nutrition.js';
+import { tr } from './i18n.js';
 
 export const SEXES = [
-  { key: 'male', label: 'Мужской' },
-  { key: 'female', label: 'Женский' },
+  { key: 'male', label: tr('Мужской') },
+  { key: 'female', label: tr('Женский') },
 ];
 
 export const ACTIVITY = [
-  { key: 'sedentary', label: 'Сидячий образ жизни', hint: 'Почти без движения', factor: 1.2 },
-  { key: 'light', label: 'Лёгкая активность', hint: 'Прогулки, 1–3 тренировки в неделю', factor: 1.375 },
-  { key: 'moderate', label: 'Средняя', hint: '3–5 тренировок в неделю', factor: 1.55 },
-  { key: 'active', label: 'Высокая', hint: '6–7 тренировок в неделю', factor: 1.725 },
-  { key: 'very', label: 'Очень высокая', hint: 'Физическая работа и спорт', factor: 1.9 },
+  { key: 'sedentary', label: tr('Сидячий образ жизни'), hint: tr('Почти без движения'), factor: 1.2 },
+  { key: 'light', label: tr('Лёгкая активность'), hint: tr('Прогулки, 1–3 тренировки в неделю'), factor: 1.375 },
+  { key: 'moderate', label: tr('Средняя'), hint: tr('3–5 тренировок в неделю'), factor: 1.55 },
+  { key: 'active', label: tr('Высокая'), hint: tr('6–7 тренировок в неделю'), factor: 1.725 },
+  { key: 'very', label: tr('Очень высокая'), hint: tr('Физическая работа и спорт'), factor: 1.9 },
 ];
 
 export const GOALS = [
-  { key: 'lose', label: 'Похудеть', delta: -500 },
-  { key: 'keep', label: 'Держать вес', delta: 0 },
-  { key: 'gain', label: 'Набрать', delta: 300 },
+  { key: 'lose', label: tr('Похудеть'), delta: -500 },
+  { key: 'keep', label: tr('Держать вес'), delta: 0 },
+  { key: 'gain', label: tr('Набрать'), delta: 300 },
 ];
 
 const ok = (x) => Number.isFinite(x) && x > 0;
@@ -74,7 +75,7 @@ export function activityBurn(a, base) {
 /** Подпись активности для списка: «… · +620 ккал в день» (или коэффициент, пока обмен не посчитан). */
 export function activityLabel(a, base) {
   const burn = activityBurn(a, base);
-  const tail = burn != null ? `+${burn} ккал в день` : `обмен × ${String(a.factor).replace('.', ',')}`;
+  const tail = burn != null ? tr('+{burn} ккал в день', { burn }) : tr('обмен × {p0}', { p0: String(a.factor).replace('.', ',') });
   return `${a.label}${a.hint ? ' — ' + a.hint : ''} · ${tail}`;
 }
 
@@ -116,10 +117,10 @@ export function recommendation(p, settings = {}) {
 /** Чего не хватает для расчёта обмена: ['пол', 'дата рождения', 'рост', 'вес']. */
 export function missingForBmr(p) {
   const out = [];
-  if (!p.sex) out.push('пол');
-  if (!Number.isFinite(p.age)) out.push('дата рождения');
-  if (!ok(p.heightCm)) out.push('рост');
-  if (!ok(p.weightKg)) out.push('вес');
+  if (!p.sex) out.push(tr('пол'));
+  if (!Number.isFinite(p.age)) out.push(tr('дата рождения'));
+  if (!ok(p.heightCm)) out.push(tr('рост'));
+  if (!ok(p.weightKg)) out.push(tr('вес'));
   return out;
 }
 
@@ -138,7 +139,7 @@ export function calcGoals(p, settings = {}) {
   if (!r.value) return { missing: missingForBmr(p) };
   const kcal = r.value;
   const kg = ok(p.weightKg) ? p.weightKg : null;
-  if (!kg) return { kcal, grams: gramsFromPct(kcal, DEFAULT_MACRO_PCT), why: 'вес не указан — БЖУ по умолчанию: 20 / 30 / 50 %' };
+  if (!kg) return { kcal, grams: gramsFromPct(kcal, DEFAULT_MACRO_PCT), why: tr('вес не указан — БЖУ по умолчанию: 20 / 30 / 50 %') };
   const perKg = PROTEIN_PER_KG[p.goal] ?? PROTEIN_PER_KG.keep;
   let protein = Math.floor(perKg * kg);
   let fat = Math.floor(Math.min(Math.max(FAT_PER_KG * kg, (kcal * 0.2) / 9), (kcal * 0.35) / 9));
@@ -153,7 +154,7 @@ export function calcGoals(p, settings = {}) {
   const grams = { protein, fat, carbs };
   for (const m of MACROS) grams[m] = Math.max(0, grams[m]);
   const n = (v) => String(v).replace('.', ',');
-  return { kcal, grams, why: `белок ${n(perKg)} г на кг (${n(Math.round(kg * 10) / 10)} кг), жир ≈ ${n(FAT_PER_KG)} г на кг, углеводы — остальное` };
+  return { kcal, grams, why: tr('белок {p0} г на кг ({p1} кг), жир ≈ {p2} г на кг, углеводы — остальное', { p0: n(perKg), p1: n(Math.round(kg * 10) / 10), p2: n(FAT_PER_KG) }) };
 }
 
 export function bmi(weightKg, heightCm) {
@@ -163,10 +164,10 @@ export function bmi(weightKg, heightCm) {
 }
 
 export const BMI_CLASSES = [
-  { max: 18.5, label: 'Недостаток веса', tone: 'warn' },
-  { max: 25, label: 'Норма', tone: 'ok' },
-  { max: 30, label: 'Избыточный вес', tone: 'warn' },
-  { max: Infinity, label: 'Ожирение', tone: 'danger' },
+  { max: 18.5, label: tr('Недостаток веса'), tone: 'warn' },
+  { max: 25, label: tr('Норма'), tone: 'ok' },
+  { max: 30, label: tr('Избыточный вес'), tone: 'warn' },
+  { max: Infinity, label: tr('Ожирение'), tone: 'danger' },
 ];
 export const bmiClass = (v) => (Number.isFinite(v) ? BMI_CLASSES.find((c) => v < c.max) : null);
 
@@ -206,23 +207,23 @@ export function estimateBodyFat(p) {
   return v != null ? { pct: v, method: 'bmi' } : null;
 }
 
-export const BF_METHOD = { measured: 'по замеру', navy: 'по обхватам (метод ВМС США)', bmi: 'по росту, весу и возрасту' };
+export const BF_METHOD = { measured: tr('по замеру'), navy: tr('по обхватам (метод ВМС США)'), bmi: tr('по росту, весу и возрасту') };
 
 /** Ступени процента жира (ACE): у мужчин и женщин разные. */
 export const BF_CLASSES = {
   male: [
-    { key: 'essential', label: 'Жизненно необходимый', from: 2, to: 6 },
-    { key: 'athlete', label: 'Спортсмен', from: 6, to: 14 },
-    { key: 'fitness', label: 'Подтянутый', from: 14, to: 18 },
-    { key: 'average', label: 'Средний', from: 18, to: 25 },
-    { key: 'high', label: 'Высокий', from: 25, to: 45 },
+    { key: 'essential', label: tr('Жизненно необходимый'), from: 2, to: 6 },
+    { key: 'athlete', label: tr('Спортсмен'), from: 6, to: 14 },
+    { key: 'fitness', label: tr('Подтянутый'), from: 14, to: 18 },
+    { key: 'average', label: tr('Средний'), from: 18, to: 25 },
+    { key: 'high', label: tr('Высокий'), from: 25, to: 45 },
   ],
   female: [
-    { key: 'essential', label: 'Жизненно необходимый', from: 10, to: 14 },
-    { key: 'athlete', label: 'Спортсменка', from: 14, to: 21 },
-    { key: 'fitness', label: 'Подтянутая', from: 21, to: 25 },
-    { key: 'average', label: 'Средний', from: 25, to: 32 },
-    { key: 'high', label: 'Высокий', from: 32, to: 50 },
+    { key: 'essential', label: tr('Жизненно необходимый'), from: 10, to: 14 },
+    { key: 'athlete', label: tr('Спортсменка'), from: 14, to: 21 },
+    { key: 'fitness', label: tr('Подтянутая'), from: 21, to: 25 },
+    { key: 'average', label: tr('Средний'), from: 25, to: 32 },
+    { key: 'high', label: tr('Высокий'), from: 32, to: 50 },
   ],
 };
 

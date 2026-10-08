@@ -22,6 +22,7 @@ import { skillsNow } from './Skills.js';
 import { openTalk, closeTalk, talk, VillageDialog } from './VillageDialog.js';
 import * as S from '../../core/selectors.js';
 import * as M from '../../core/model.js';
+import { tr } from '../../core/i18n.js';
 
 const LEGACY = G.COSMETICS.filter((c) => c.legacy).map((c) => c.id);
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
@@ -56,6 +57,8 @@ export function interact(h) {
       world.disturb(b);
       const c = world.chimney(b);
       if (c) world.burst(c.x, c.y, c.z, 'smoke', 4, 6);
+    } else if (world.disturb(b)) {
+      // 0.12.5: в здании ночуют — разбудили
     } else if (b.type === 'tavern' || b.type === 'tower' || b.type === 'windmill') {
       if (env.n > 0.3) setPrefs({ villageLightsOff: world.toggleLight(b.id) });
     } else if (b.type === 'fountain') world.burst(b.x + b.w / 2, b.y + b.h * 0.6, 14, 'drop', 22, 34);
@@ -500,7 +503,7 @@ export function VillageBackdrop({ interactive = false, dim = 0 }) {
 
   return html`<div class=${'village-bg' + (interactive ? ' interactive' : '')} ref=${wrap} aria-hidden=${interactive ? 'false' : 'true'}>
     <canvas ref=${cv} role=${interactive ? 'img' : undefined}
-      aria-label=${interactive ? 'Деревня: нажми на жителя, дом или пустую клетку; потяни, чтобы прокрутить; два пальца или Ctrl + колесо — приближение' : undefined}></canvas>
+      aria-label=${interactive ? tr('Деревня: нажми на жителя, дом или пустую клетку; потяни, чтобы прокрутить; два пальца или Ctrl + колесо — приближение') : undefined}></canvas>
     <div class="village-layer" ref=${layer}></div>
     <div class="village-dim" style=${{ opacity: dim }}></div>
   </div>`;

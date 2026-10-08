@@ -4,6 +4,7 @@
 // Без DOM.
 
 import { STAGES } from '../core/skills.js';
+import { tr } from '../core/i18n.js';
 
 export const MAX_KEEPERS = 12;
 
@@ -16,8 +17,8 @@ function hash(s) {
   return h >>> 0;
 }
 
-const NAMES_F = ['Мира', 'Ника', 'Ая', 'Рина', 'Кира', 'Юна', 'Лея', 'Тая', 'Мэй', 'Ива', 'Лина', 'Эми', 'Вета', 'Зоя', 'Аля', 'Сора'];
-const NAMES_M = ['Тим', 'Лёва', 'Сева', 'Рэн', 'Кай', 'Арс', 'Тео', 'Лука', 'Даня', 'Ян', 'Эрик', 'Мио'];
+const NAMES_F = [tr('Мира'), tr('Ника'), tr('Ая'), tr('Рина'), tr('Кира'), tr('Юна'), tr('Лея'), tr('Тая'), tr('Мэй'), tr('Ива'), tr('Лина'), tr('Эми'), tr('Вета'), tr('Зоя'), tr('Аля'), tr('Сора')];
+const NAMES_M = [tr('Тим'), tr('Лёва'), tr('Сева'), tr('Рэн'), tr('Кай'), tr('Арс'), tr('Тео'), tr('Лука'), tr('Даня'), tr('Ян'), tr('Эрик'), tr('Мио')];
 const HAIR = ['#4a2f2a', '#23202e', '#e9b54e', '#cf7a34', '#e07aa8', '#9a7ae0', '#5fa4dc', '#ece6dc', '#4f8a5a', '#c24840', '#3a3f6a', '#f0a0c0'];
 const EYES = ['#3f6fd0', '#c84a72', '#2f9a6e', '#8a52d8', '#d8962a', '#7a4a32', '#3aa8b8', '#d04a3a'];
 const SKIN = ['#ffe3cf', '#fbd6bc', '#f2c7a2', '#e8b58e'];
@@ -48,8 +49,8 @@ export function roleOf(list) {
 }
 
 export const ROLE_NAMES = {
-  scholar: 'учёная душа', home: 'хозяйка уюта', creator: 'создатель роликов', gamer: 'игрок', sport: 'спортсмен', office: 'деловой человек',
-  artist: 'художник', music: 'музыкант', health: 'лекарь', garden: 'садовник', adventurer: 'искатель приключений',
+  scholar: tr('учёная душа'), home: tr('хозяйка уюта'), creator: tr('создатель роликов'), gamer: tr('игрок'), sport: tr('спортсмен'), office: tr('деловой человек'),
+  artist: tr('художник'), music: tr('музыкант'), health: tr('лекарь'), garden: tr('садовник'), adventurer: tr('искатель приключений'),
 };
 
 /** Внешность чиби (village/chibi.js) по списку. stage — «возраст» 0…4. */

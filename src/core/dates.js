@@ -1,6 +1,8 @@
 // Даты без времени — строки 'YYYY-MM-DD' в часовом поясе settings.timeZone («плавающие»).
 // Арифметика идёт в UTC, чтобы переход на летнее время не сдвигал дни.
 
+import { LANG, tr } from './i18n.js';
+
 const DAY_MS = 86400000;
 const fmtCache = new Map();
 
@@ -120,25 +122,29 @@ export function weekDates(monday) {
 export const DATE_RE = /^\d{4}-(0[1-9]|1[0-2])-(0[1-9]|[12]\d|3[01])$/;
 export const TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
 
-export const WEEKDAY_SHORT = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
-export const WEEKDAY_LONG = ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
-const MONTH_SHORT = ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
-export const MONTH_GEN = ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября',
-  'октября', 'ноября', 'декабря'];
+// 0.12.5: названия дней и месяцев — на языке интерфейса (по-английски «Sep 28», а не «28 сен»)
+const EN = LANG === 'en';
+export const WEEKDAY_SHORT = EN ? ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'] : ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+export const WEEKDAY_LONG = EN ? ['monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday', 'sunday']
+  : ['понедельник', 'вторник', 'среда', 'четверг', 'пятница', 'суббота', 'воскресенье'];
+const MONTH_SHORT = EN ? ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+  : ['янв', 'фев', 'мар', 'апр', 'мая', 'июн', 'июл', 'авг', 'сен', 'окт', 'ноя', 'дек'];
+export const MONTH_GEN = EN ? ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  : ['января', 'февраля', 'марта', 'апреля', 'мая', 'июня', 'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря'];
 
-export const MONTH_NOM = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь',
-  'Октябрь', 'Ноябрь', 'Декабрь'];
+export const MONTH_NOM = EN ? ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+  : ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 
 function dm(d, months) {
-  return `${+d.slice(8, 10)} ${months[+d.slice(5, 7) - 1]}`;
+  return EN ? `${months[+d.slice(5, 7) - 1]} ${+d.slice(8, 10)}` : `${+d.slice(8, 10)} ${months[+d.slice(5, 7) - 1]}`;
 }
 
 /** «Сегодня», «Завтра», «Вчера», «Ср» (в пределах 6 дней вперёд), «12 окт», «12 окт 2027». */
 export function humanDate(d, today) {
   const diff = daysBetween(today, d);
-  if (diff === 0) return 'Сегодня';
-  if (diff === 1) return 'Завтра';
-  if (diff === -1) return 'Вчера';
+  if (diff === 0) return tr('Сегодня');
+  if (diff === 1) return tr('Завтра');
+  if (diff === -1) return tr('Вчера');
   if (diff > 1 && diff < 7) return WEEKDAY_SHORT[isoWeekday(d) - 1];
   const s = dm(d, MONTH_SHORT);
   return d.slice(0, 4) === today.slice(0, 4) ? s : `${s} ${d.slice(0, 4)}`;
@@ -152,7 +158,7 @@ export function dayLabel(d) {
 /** «28 сентября» (+ год, если не текущий) */
 export function longDate(d, today) {
   const s = dm(d, MONTH_GEN);
-  return today && d.slice(0, 4) !== today.slice(0, 4) ? `${s} ${d.slice(0, 4)}` : s;
+  return today && d.slice(0, 4) !== today.slice(0, 4) ? `${s}${EN ? ',' : ''} ${d.slice(0, 4)}` : s;
 }
 
 /** «02.10.2026» */

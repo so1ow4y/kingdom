@@ -8,6 +8,7 @@
 import { villageItem } from '../core/village.js';
 import { charHeight } from './puppets.js';
 import { buildMap, findPath, walkable, randomSpot, buildable, TILE } from './map.js';
+import { tr } from '../core/i18n.js';
 
 export const GRAVITY = 260;
 const TAU = Math.PI * 2;
@@ -15,6 +16,11 @@ const TAU = Math.PI * 2;
 // Высота спрайтов построек над нижним краем основания — для попадания кликом и дыма из труб.
 export const SPRITE_H = { house: 60, house4: 78, forge: 52, tavern: 72, tower: 96, windmill: 86, fountain: 34, goldmine: 40, gemmine: 40, field: 40, castle: 132 };
 const CHIMNEY = { house: [0.74, 54], house4: [0.78, 72], tavern: [0.8, 66], forge: [0.82, 54] };
+// ночлег (0.12.5): ночью жители уходят спать в ближайшее здание с дверью и спят до утра
+export const SHELTER = new Set(['house', 'house4', 'tavern', 'forge', 'windmill', 'tower', 'castle']);
+export const SLEEP_NIGHT = 0.68;
+export const WAKE_NIGHT = 0.5;
+const MORNING = [tr('Доброе утро!'), tr('Ох, выспались!'), tr('*зевает*'), tr('Новый день — новые дела!'), tr('Уже утро?')];
 
 export const KINDS = {
   wanderer: { speed: 15, human: true },
@@ -36,26 +42,26 @@ export const KINDS = {
 };
 
 export const PHRASES = {
-  wanderer: ['Хороший денёк!', 'Куда бы сходить…', 'Привет!', 'Ещё одну задачку?'],
-  cat: ['Мяу!', 'Мрр…', 'Мяу?', '*мурчит*'],
-  kitten: ['Мя!', 'Догони!', 'Играем?'],
-  fox: ['Фыр!', 'Тяв!', 'Что там в норке?'],
-  spider: ['Плету-плету…', 'Вишу.', 'Привет сверху!'],
-  neko: ['Ня!', 'Ты молодец!', 'План — сила!', 'Не забудь про задачи~'],
-  shroom: ['Пуф!', 'Боинг!', 'Я гриб.'],
-  slime: ['Плюх!', 'Блоб?', 'Желе-е-е'],
-  miner: ['За работу!', 'Ещё глубже!', 'Нашёл самоцвет!'],
-  builder: ['Тук-тук!', 'Строим!', 'Почти готово!'],
-  archer: ['В яблочко!', 'Тихо…', 'Ветер западный.'],
-  witch: ['Хе-хе!', 'Зелье почти готово.', 'Полетаем?'],
-  knight: ['К службе готов!', 'Деревня под защитой.', 'Ох, тяжёлые латы.'],
-  ghost: ['Бу!', 'У-у-у…', 'Не бойся.'],
-  dragon: ['Ррр!', '*пых*', 'Я грозный. Наверное.'],
-  keeper: ['Сделаем ещё задачку?', 'Я тренируюсь!', 'Уровень растёт!', 'Привет!', 'Как продвигается?'],
+  wanderer: [tr('Хороший денёк!'), tr('Куда бы сходить…'), tr('Привет!'), tr('Ещё одну задачку?')],
+  cat: [tr('Мяу!'), tr('Мрр…'), tr('Мяу?'), tr('*мурчит*')],
+  kitten: [tr('Мя!'), tr('Догони!'), tr('Играем?')],
+  fox: [tr('Фыр!'), tr('Тяв!'), tr('Что там в норке?')],
+  spider: [tr('Плету-плету…'), tr('Вишу.'), tr('Привет сверху!')],
+  neko: [tr('Ня!'), tr('Ты молодец!'), tr('План — сила!'), tr('Не забудь про задачи~')],
+  shroom: [tr('Пуф!'), tr('Боинг!'), tr('Я гриб.')],
+  slime: [tr('Плюх!'), tr('Блоб?'), tr('Желе-е-е')],
+  miner: [tr('За работу!'), tr('Ещё глубже!'), tr('Нашёл самоцвет!')],
+  builder: [tr('Тук-тук!'), tr('Строим!'), tr('Почти готово!')],
+  archer: [tr('В яблочко!'), tr('Тихо…'), tr('Ветер западный.')],
+  witch: [tr('Хе-хе!'), tr('Зелье почти готово.'), tr('Полетаем?')],
+  knight: [tr('К службе готов!'), tr('Деревня под защитой.'), tr('Ох, тяжёлые латы.')],
+  ghost: [tr('Бу!'), tr('У-у-у…'), tr('Не бойся.')],
+  dragon: [tr('Ррр!'), tr('*пых*'), tr('Я грозный. Наверное.')],
+  keeper: [tr('Сделаем ещё задачку?'), tr('Я тренируюсь!'), tr('Уровень растёт!'), tr('Привет!'), tr('Как продвигается?')],
 };
-const SAD = ['Скучновато…', 'Задачи копятся…', 'Эх…', 'Сделаешь что-нибудь?'];
-const HAPPY = ['Ура!', 'Какой день!', 'Мы растём!', 'Спасибо!'];
-const KNOCK = ['Тук-тук!', 'Эй, привет!', 'Как дела?', 'Сделаем задачку?', 'Мы тут!'];
+const SAD = [tr('Скучновато…'), tr('Задачи копятся…'), tr('Эх…'), tr('Сделаешь что-нибудь?')];
+const HAPPY = [tr('Ура!'), tr('Какой день!'), tr('Мы растём!'), tr('Спасибо!')];
+const KNOCK = [tr('Тук-тук!'), tr('Эй, привет!'), tr('Как дела?'), tr('Сделаем задачку?'), tr('Мы тут!')];
 
 let seq = 0;
 
@@ -193,7 +199,7 @@ export class World {
       }
       const [tx, ty] = randomSpot(this.map, this.rand, plaza, 7);
       const a = newActor(r.id, r.kind, (tx + 0.5) * TILE, (ty + 0.5) * TILE, r.big ? 2 : 1);
-      a.name = r.name || 'Странник';
+      a.name = r.name || tr('Странник');
       if (r.look) {
         a.look = r.look;
         a.listId = r.listId;
@@ -345,7 +351,7 @@ export class World {
       b.queue = [];
       b.task = null;
       b.path = null;
-      this.say(b, 'Беремся за дело!', 3);
+      this.say(b, tr('Беремся за дело!'), 3);
     }
   }
 
@@ -364,7 +370,7 @@ export class World {
     if (!a) return;
     if (a.state === 'sleep') {
       this.emote(a, '!');
-      this.say(a, a.kind === 'cat' ? 'Мрр… ещё пять минут' : 'Зе-е-е… а? Что?', 2.5);
+      this.say(a, a.kind === 'cat' ? tr('Мрр… ещё пять минут') : tr('Зе-е-е… а? Что?'), 2.5);
       a.task = { type: 'pose', pose: 'idle', d: 2, t: 0 };
       a.queue = [];
       return;
@@ -392,6 +398,23 @@ export class World {
   }
 
   /** Дом жителя (или null). */
+  /** Где переночевать (0.12.5): ближайшее здание с дверью; свой дом — если он почти так же близко. */
+  shelterFor(a) {
+    const list = this.buildings.filter((b) => SHELTER.has(b.type) && b.door);
+    if (!list.length) return null;
+    const dist = (b) => Math.hypot(b.door.x - a.x, (b.door.y - a.y) * 1.2);
+    let best = list[0];
+    for (const b of list) if (dist(b) < dist(best)) best = b;
+    const home = this.homeOf(a);
+    if (home && dist(home) <= dist(best) + 24) best = home;
+    return best;
+  }
+
+  /** Кто спит внутри постройки. */
+  sleepersIn(b) {
+    return this.actors.filter((a) => a.task?.type === 'inside' && a.task.b === b && a.task.sleep && a.hidden);
+  }
+
   homeOf(a) {
     return (a.homeKey && this.houses().find((h) => h.key === a.homeKey)) || null;
   }
@@ -407,26 +430,29 @@ export class World {
    */
   buildingLit(b) {
     if (!this.lightOn(b.id)) return false;
-    if (!b.type.startsWith('house')) return true;
     const inside = this.actors.some((a) => a.task?.type === 'inside' && a.task.b === b && a.hidden);
+    // таверна, башня, замок… горят как раньше; пока внутри спят — темно (0.12.5)
+    if (!b.type.startsWith('house')) return !(inside && b.sleepAt && this.t >= b.sleepAt);
     if (!inside) return false;
     return !(b.sleepAt && this.t >= b.sleepAt);
   }
 
+  /** Вошёл ночью: когда к зданию больше никто не идёт спать, через пару секунд гаснет свет. */
   onEnter(a, b) {
-    if (!b.type.startsWith('house') || this.night < 0.6) return;
-    const res = this.residentsOf(b).filter((x) => KINDS[x.kind]?.human);
-    const all = res.every((x) => x === a || (x.task?.type === 'inside' && x.task.b === b) || x.hidden);
-    if (all && !b.sleepAt) b.sleepAt = this.t + 2 + this.rand() * 2.5;
+    if (this.night < 0.6 || !(a.task?.sleep || b.type.startsWith('house'))) return;
+    const coming = this.actors.some((x) => x !== a && !x.hidden && (x.task?.b === b || x.queue.some((t) => t.b === b)));
+    if (!coming && !b.sleepAt) b.sleepAt = this.t + 2 + this.rand() * 2.5;
   }
 
-  /** Нажали на дом: жители выбегают — «Что происходит?!», свет снова горит. */
+  /** Нажали на дом (или здание, где ночуют): жители выбегают — «Что происходит?!», свет снова горит. */
   disturb(b) {
-    if (!b?.type?.startsWith('house')) return 0;
+    if (!b || !SHELTER.has(b.type)) return 0;
+    const who = new Set([...(b.type.startsWith('house') ? this.residentsOf(b) : []), ...this.sleepersIn(b)]);
+    if (!who.size) return 0;
     b.sleepAt = null;
     let n = 0;
-    const lines = (x) => ['Что происходит?!', 'Кто там?', x.gender === 'm' ? 'Я же спал…' : x.gender === 'f' ? 'Я же спала…' : 'Я же спал(а)…', 'Землетрясение?!', 'А? Что? Где?', 'Кто стучит?'];
-    for (const x of this.residentsOf(b)) {
+    const lines = (x) => [tr('Что происходит?!'), tr('Кто там?'), x.gender === 'm' ? tr('Я же спал…') : x.gender === 'f' ? tr('Я же спала…') : tr('Я же спал(а)…'), tr('Землетрясение?!'), tr('А? Что? Где?'), tr('Кто стучит?')];
+    for (const x of who) {
       if (x.talking || x.held) continue;
       const inside = x.task?.type === 'inside' && x.task.b === b;
       x.queue = [];
@@ -633,7 +659,7 @@ export class World {
     const a = near[0];
     if (a) {
       a.dir = h.x > a.x ? 1 : -1;
-      this.say(a, this.pick(h.what === 'water' ? ['Не пугай рыбу!', 'Плюх!', 'Вода холодная!'] : h.what === 'tree' ? ['Ой, листья!', 'Шишка упала!', 'Красивое дерево.'] : ['Вода свежая!', 'Отличный колодец.']), 2.2);
+      this.say(a, this.pick(h.what === 'water' ? [tr('Не пугай рыбу!'), tr('Плюх!'), tr('Вода холодная!')] : h.what === 'tree' ? [tr('Ой, листья!'), tr('Шишка упала!'), tr('Красивое дерево.')] : [tr('Вода свежая!'), tr('Отличный колодец.')]), 2.2);
     }
   }
 
@@ -701,6 +727,14 @@ export class World {
       const rate = b.type === 'forge' ? (this.focus ? 3 : 0.9) : this.night > 0.4 ? 0.7 : 0.25;
       if (this.rand() < dt * rate) this.particles.push({ x: c.x + (this.rand() - 0.5) * 2, y: c.y, z: c.z, vx: 2, vy: 0, vz: 7, life: 2.8, kind: 'smoke', c: this.rand() });
     }
+    // «z z z» над зданиями, где спят (0.12.5)
+    if (this.night > 0.6) {
+      for (const b of this.buildings) {
+        if (!b.sleepAt || this.t < b.sleepAt || this.rand() > dt * 0.7 || !this.sleepersIn(b).length) continue;
+        const h = SPRITE_H[b.type] || 50;
+        this.particles.push({ x: b.x + b.w * (0.35 + this.rand() * 0.3), y: b.base, z: h * 0.85, vx: 3 + this.rand() * 2, vy: 0, vz: 6, life: 2.6, kind: 'zzz', c: this.rand(), g: 0 });
+      }
+    }
     const fountain = this.building('fountain');
     if (fountain && this.rand() < dt * 12) this.particles.push({ x: fountain.x + fountain.w / 2, y: fountain.y + fountain.h * 0.55, z: 16, vx: (this.rand() - 0.5) * 18, vy: (this.rand() - 0.5) * 8, vz: 14 + this.rand() * 8, life: 1.2, kind: 'drop', c: 0 });
     for (const d of this.decor) {
@@ -745,7 +779,7 @@ export class World {
       const p = spot(M.spots.plaza, 14);
       return q.push({ type: 'float', tx: p.x, ty: p.y, d: 5 + r * 4 });
     }
-    if (k === 'witch' && night > 0.55 && r < 0.7) return q.push({ type: 'broom', d: 10 + r * 8, cx: M.spots.plaza.x, cy: M.spots.plaza.y - 10 });
+    if (k === 'witch' && night > 0.55 && night <= SLEEP_NIGHT && r < 0.7) return q.push({ type: 'broom', d: 10 + r * 8, cx: M.spots.plaza.x, cy: M.spots.plaza.y - 10 });
     // хранитель навыка иногда «тренирует навык»: читает, рисует, играет — по роли
     if (k === 'keeper' && night < 0.6 && r < 0.2) {
       const p = spot(M.spots.plaza, 10);
@@ -775,8 +809,8 @@ export class World {
       }
       if (tavern && KINDS[k]?.human) return q.push(this.go(tavern.door.x, tavern.door.y), { type: 'inside', b: tavern, d: 10 + r * 10 });
     }
-    // ночь: люди по домам, звери — то дома, то на улице
-    if (night > 0.68) {
+    // ночь: люди спят в ближайшем здании до утра (0.12.5), звери — то дома, то на улице
+    if (night > SLEEP_NIGHT) {
       const home = this.homeOf(a);
       if (KINDS[k]?.beast) {
         if (home && r < 0.5) return q.push(this.go(home.door.x, home.door.y), { type: 'inside', b: home, d: 30 + r * 30 });
@@ -786,13 +820,10 @@ export class World {
         }
         return q.push({ type: 'pose', pose: 'sleep', d: 15 + r * 10 });
       }
-      if (KINDS[k]?.human && homes.length && k !== 'witch' && k !== 'knight') {
-        const h = home || homes[a.n % homes.length];
-        const fire = M.spots.bonfire;
-        if (fire && r < 0.25) return q.push(this.go(fire.x + (a.n % 2 ? 12 : -12), fire.y + a.oy), { type: 'pose', pose: 'sit', d: 12, face: fire.x });
-        return q.push(this.go(h.door.x, h.door.y), { type: 'inside', b: h, d: 25 + r * 30 });
+      if (KINDS[k]?.human) {
+        const bed = this.shelterFor(a);
+        if (bed) return q.push(this.go(bed.door.x, bed.door.y), { type: 'inside', b: bed, d: 20, sleep: true });
       }
-      if (k === 'knight') return q.push(this.go(M.spots.westEnd.x + 20, M.spots.westEnd.y), this.go(M.spots.eastEnd.x - 30, M.spots.eastEnd.y));
       return q.push({ type: 'pose', pose: 'sleep', d: 15 + r * 10 });
     }
     // фокус-сессия: строитель (или странник) работает в мастерской
@@ -832,7 +863,7 @@ export class World {
       }
       if (k === 'dragon' && r < 0.6) return q.push({ type: 'flyhigh', d: 7, cx: a.x, cy: a.y });
       if (k === 'knight') return q.push(this.go(M.spots.westEnd.x + 20, M.spots.westEnd.y), { type: 'pose', pose: 'idle', d: 2 }, this.go(M.spots.eastEnd.x - 30, M.spots.eastEnd.y));
-      if (k === 'neko') return q.push({ type: 'pose', pose: 'wave', d: 2.5, say: 'Привет-привет!' });
+      if (k === 'neko') return q.push({ type: 'pose', pose: 'wave', d: 2.5, say: tr('Привет-привет!') });
     }
     if (pr < 0.4) {
       const other = this.nearest(a, 90);
@@ -970,12 +1001,12 @@ export class World {
         state = T.t < 1.2 ? 'wave' : 'idle';
         if (T.t < dt * 1.5) {
           this.emote(a, this.rand() < 0.5 ? 'heart' : 'note', 2);
-          if (this.rand() < 0.6) this.say(a, this.pick(['Привет!', 'Как ты?', 'Хорошо выглядишь!', 'Пойдём гулять?', ...(this.mood < 30 ? SAD : [])]), 2.4);
+          if (this.rand() < 0.6) this.say(a, this.pick([tr('Привет!'), tr('Как ты?'), tr('Хорошо выглядишь!'), tr('Пойдём гулять?'), ...(this.mood < 30 ? SAD : [])]), 2.4);
           if (!o.task || ['go', 'pose'].includes(o.task.type)) {
             o.queue = [];
             o.path = null;
             o.task = { type: 'pose', pose: 'wave', d: 2.4, face: a.x, t: 0 };
-            setTimeoutSafe(() => this.say(o, this.pick(['Привет!', 'Отлично!', 'Давай!', 'Ага!'])), 900);
+            setTimeoutSafe(() => this.say(o, this.pick([tr('Привет!'), tr('Отлично!'), tr('Давай!'), tr('Ага!')])), 900);
           }
         }
         if (T.t > T.d) done = true;
@@ -1020,15 +1051,23 @@ export class World {
           }
         }
         const home = T.b.type.startsWith('house');
-        if (this.night < 0.6 && home && T.t > 4) T.d = Math.min(T.d, T.t);
-        if (T.t > T.d && !(home && this.night > 0.6 && T.t < 200)) {
+        if (T.sleep) {
+          // спит до утра; просыпаются не все разом
+          if (this.night > WAKE_NIGHT) T.d = Math.max(T.d, T.t + 1);
+          else {
+            if (T.wakeAt == null) T.wakeAt = T.t + 0.5 + this.rand() * 6;
+            T.d = Math.min(T.d, T.wakeAt);
+          }
+        } else if (this.night < 0.6 && home && T.t > 4) T.d = Math.min(T.d, T.t);
+        if (T.t > T.d && !(home && !T.sleep && this.night > 0.6 && T.t < 200)) {
           a.hidden = false;
           a.alpha = 1;
           T.b.sleepAt = null;
+          if (T.sleep && this.night <= WAKE_NIGHT && this.rand() < 0.45) this.say(a, this.pick(MORNING), 2.4);
           if (T.loot) {
             this.burst(a.x, a.y, 10, T.loot, 5, 25);
             this.emote(a, T.loot, 2);
-            this.say(a, T.loot === 'gem' ? 'Изумруд!' : 'Золото!', 2);
+            this.say(a, T.loot === 'gem' ? tr('Изумруд!') : tr('Золото!'), 2);
           }
           done = true;
         }
@@ -1048,7 +1087,7 @@ export class World {
           T.shots++;
           const dist = Math.max(1, Math.hypot(T.tx - a.x, T.ty - a.y));
           this.particles.push({ x: a.x + a.dir * 4, y: a.y, z: 9, vx: ((T.tx - a.x) / dist) * 70, vy: ((T.ty - a.y) / dist) * 70, vz: 5, life: Math.max(0.1, (dist - 4) / 70), kind: 'arrow', c: a.dir, g: 0.04 });
-          if (T.shots === 3) setTimeoutSafe(() => this.say(a, this.pick(['В яблочко!', 'Почти…', 'Ещё разок!'])), 600);
+          if (T.shots === 3) setTimeoutSafe(() => this.say(a, this.pick([tr('В яблочко!'), tr('Почти…'), tr('Ещё разок!')])), 600);
         }
         if (T.t > T.d) done = true;
         break;
@@ -1197,7 +1236,7 @@ export class World {
           this.burst(a.x, a.y, 0, 'dust', 8, 16);
           a.squash = 0.7;
           this.emote(a, this.rand() < 0.5 ? '!' : 'star', 1.4);
-          this.say(a, this.pick(['Ой!', 'Уф!', 'Ещё разок!', 'Голова кружится…', 'Мягкая посадка!', 'Предупреждать надо!']), 2.2);
+          this.say(a, this.pick([tr('Ой!'), tr('Уф!'), tr('Ещё разок!'), tr('Голова кружится…'), tr('Мягкая посадка!'), tr('Предупреждать надо!')]), 2.2);
           a.task = { type: 'pose', pose: 'idle', d: 1.2, t: 0 };
           return;
         }
@@ -1214,14 +1253,14 @@ export class World {
         }
         if (T.act === 'fish' && !T.bite && T.t > T.d * 0.7 && this.rand() < 0.5) {
           T.bite = true;
-          this.say(a, this.pick(['Клюёт!', 'Попалась!', 'Ух ты, рыбка!']), 2);
+          this.say(a, this.pick([tr('Клюёт!'), tr('Попалась!'), tr('Ух ты, рыбка!')]), 2);
           this.burst(a.x + a.dir * 14, a.y - 4, 4, 'drop', 8, 20);
           this.particles.push({ x: a.x + a.dir * 14, y: a.y - 4, z: 4, vx: -a.dir * 10, vy: 0, vz: 60, life: 1.2, kind: 'fish', c: this.rand() });
         }
         if (T.t > T.d) {
           if (T.act === 'gather') {
             this.emote(a, 'star', 2);
-            this.say(a, this.pick(['Грибы!', 'Сколько ягод!', 'Лес сегодня щедрый.', 'Нашла шишку!'].map((s) => (a.gender === 'm' ? s.replace('Нашла', 'Нашёл') : s))), 2.4);
+            this.say(a, this.pick([tr('Грибы!'), tr('Сколько ягод!'), tr('Лес сегодня щедрый.'), tr('Нашла шишку!')].map((s) => (a.gender === 'm' ? s.replace(tr('Нашла'), tr('Нашёл')) : s))), 2.4);
           }
           if (T.act === 'water' && T.field) T.field.watered = this.t;
           if (T.who) T.who.task = null;
@@ -1289,7 +1328,7 @@ export class World {
     a.path = null;
     a.thread = null;
     a.task = { type: 'leave', side, t: 0 };
-    if (this.rand() < 0.5) this.say(a, 'Схожу проведаю!', 2.5);
+    if (this.rand() < 0.5) this.say(a, tr('Схожу проведаю!'), 2.5);
     return true;
   }
 
@@ -1330,7 +1369,7 @@ export class World {
         v.stage = 'knock';
         v.t = 0;
         const n = this.alertOf(v.actor);
-        v.say = n && v.actor.listName ? `Тук-тук! «${v.actor.listName}»: ждут ${n}` : this.pick(this.mood < 30 ? ['Тук-тук… Мы скучаем', 'Эй! Задачки ждут', ...KNOCK] : KNOCK);
+        v.say = n && v.actor.listName ? tr('Тук-тук! «{listName}»: ждут {n}', { listName: v.actor.listName, n }) : this.pick(this.mood < 30 ? [tr('Тук-тук… Мы скучаем'), tr('Эй! Задачки ждут'), ...KNOCK] : KNOCK);
         v.sayT = 3.5;
         v.stay = n ? 7 : 1.6; // с делами — подольше: можно нажать и поговорить
       }
@@ -1378,7 +1417,7 @@ export class World {
     v.vy = 90;
     v.emote = this.rand() < 0.6 ? 'heart' : 'star';
     v.emoteT = 1.8;
-    v.say = this.pick([...(PHRASES[v.kind] || PHRASES.wanderer), 'Хи-хи!', 'Ой!']);
+    v.say = this.pick([...(PHRASES[v.kind] || PHRASES.wanderer), tr('Хи-хи!'), tr('Ой!')]);
     v.sayT = 2.4;
   }
 }

@@ -4,6 +4,7 @@
 
 import { zonedToEpoch, todayIn, humanDate } from './dates.js';
 import { LIMITS } from '../config.js';
+import { tr } from './i18n.js';
 
 export const MAX_REMINDERS = LIMITS.remindersMax;
 export const MAX_OFFSET_MINUTES = LIMITS.reminderOffsetMax; // неделя — ограничение формата
@@ -62,29 +63,29 @@ export function sameReminder(a, b) {
 
 /** «5 мин», «1 ч», «1 ч 30 мин», «2 дн.» */
 export function durationLabel(min) {
-  if (min % 1440 === 0 && min) return `${min / 1440} дн.`;
-  if (min % 60 === 0 && min) return `${min / 60} ч`;
-  if (min > 60) return `${Math.floor(min / 60)} ч ${min % 60} мин`;
-  return `${min} мин`;
+  if (min % 1440 === 0 && min) return tr('{p0} дн.', { p0: min / 1440 });
+  if (min % 60 === 0 && min) return tr('{p0} ч', { p0: min / 60 });
+  if (min > 60) return tr('{p0} ч {p1} мин', { p0: Math.floor(min / 60), p1: min % 60 });
+  return tr('{min} мин', { min });
 }
 
 /** Подпись напоминания в карточке: «за 5 мин до начала», «в день задачи в 09:00», «3 окт, 14:00». */
 export function reminderLabel(r, today) {
   if (r.kind === 'relative') {
-    const what = r.anchor === 'deadline' ? 'дедлайна' : 'начала';
-    return r.offsetMinutes ? `за ${durationLabel(r.offsetMinutes)} до ${what}` : `в момент ${what}`;
+    const what = r.anchor === 'deadline' ? tr('дедлайна') : tr('начала');
+    return r.offsetMinutes ? tr('за {p0} до {what}', { p0: durationLabel(r.offsetMinutes), what }) : tr('в момент {what}', { what });
   }
-  if (r.kind === 'timeOfDay') return `в день задачи в ${r.time}`;
+  if (r.kind === 'timeOfDay') return tr('в день задачи в {time}', { time: r.time });
   if (r.kind === 'absolute' && r.at) return `${humanDate(r.at.slice(0, 10), today)}, ${r.at.slice(11, 16)}`;
-  return 'напоминание';
+  return tr('напоминание');
 }
 
 /** Почему напоминание не сработает (для подсказки в карточке) или null. */
 export function reminderProblem(task, r) {
-  if (task.repeat) return 'у повторяющихся задач напоминания пока не работают';
-  if (r.kind === 'relative' && r.anchor !== 'deadline' && !(task.scheduledDate && task.scheduledTime)) return 'нужно время начала';
-  if (r.kind === 'relative' && r.anchor === 'deadline' && !task.deadlineDate) return 'нужен дедлайн';
-  if (r.kind === 'timeOfDay' && !taskDay(task)) return 'нужна дата';
+  if (task.repeat) return tr('у повторяющихся задач напоминания пока не работают');
+  if (r.kind === 'relative' && r.anchor !== 'deadline' && !(task.scheduledDate && task.scheduledTime)) return tr('нужно время начала');
+  if (r.kind === 'relative' && r.anchor === 'deadline' && !task.deadlineDate) return tr('нужен дедлайн');
+  if (r.kind === 'timeOfDay' && !taskDay(task)) return tr('нужна дата');
   return null;
 }
 
@@ -119,7 +120,7 @@ export function dueBetween(data, from, to) {
 export function notificationBody(task, tz, now = Date.now()) {
   const today = todayIn(tz, new Date(now));
   const parts = [];
-  if (task.scheduledDate) parts.push(humanDate(task.scheduledDate, today) + (task.scheduledTime ? ' в ' + task.scheduledTime : ''));
-  if (task.deadlineDate) parts.push('дедлайн ' + humanDate(task.deadlineDate, today).toLowerCase() + (task.deadlineTime ? ' ' + task.deadlineTime : ''));
-  return parts.join(' · ') || 'Напоминание';
+  if (task.scheduledDate) parts.push(humanDate(task.scheduledDate, today) + (task.scheduledTime ? tr(' в ') + task.scheduledTime : ''));
+  if (task.deadlineDate) parts.push(tr('дедлайн ') + humanDate(task.deadlineDate, today).toLowerCase() + (task.deadlineTime ? ' ' + task.deadlineTime : ''));
+  return parts.join(' · ') || tr('Напоминание');
 }

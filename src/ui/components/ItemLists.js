@@ -11,6 +11,7 @@ import * as S from '../../core/selectors.js';
 import { liveNotes, normalizeTitle } from '../../core/model.js';
 import { formatMoment } from '../../core/dates.js';
 import { LIMITS, TIMINGS } from '../../config.js';
+import { tr } from '../../core/i18n.js';
 
 function autosize(el) {
   if (!el) return;
@@ -71,11 +72,11 @@ function NoteItem({ taskId, note, handle, locked, autoFocus }) {
     <div class="item-row note-item">
       <div class="item-body">
         <textarea ref=${el} class="note-input" rows="2" value=${text} disabled=${locked}
-          placeholder=${(note.attachments || []).some((a) => !a.deletedAt) ? 'Подпись (необязательно)…' : 'Текст заметки…'}
+          placeholder=${(note.attachments || []).some((a) => !a.deletedAt) ? tr('Подпись (необязательно)…') : tr('Текст заметки…')}
           aria-label="Заметка" onInput=${onInput} onFocus=${() => { focused.current = true; }}
           onBlur=${() => { focused.current = false; flush(); }}></textarea>
         <${Links} text=${text}/>
-        <div class="item-meta">Создана ${formatMoment(note.createdAt, tz)}${changed ? ` · изменена ${formatMoment(note.updatedAt, tz)}` : ''}
+        <div class="item-meta">Создана ${formatMoment(note.createdAt, tz)}${changed ? tr(' · изменена {p0}', { p0: formatMoment(note.updatedAt, tz) }) : ''}
           ${text.length >= LIMITS.noteCounterFrom ? ` · ${text.length} / ${LIMITS.noteMax}` : ''}</div>
       </div>
       ${locked ? null : html`

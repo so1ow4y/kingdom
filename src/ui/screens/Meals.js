@@ -15,6 +15,7 @@ import { nv, fmt } from '../../core/nutrition.js';
 import { addDays, humanDate } from '../../core/dates.js';
 import { planningDate } from '../../core/planning.js';
 import { countLabel } from '../../core/plural.js';
+import { tr } from '../../core/i18n.js';
 
 const ENTRIES = ['запись', 'записи', 'записей'];
 
@@ -51,7 +52,7 @@ export function MealScreen({ mealId, query = {} }) {
     const by = new Map(s.days.map((d) => [d.date, d]));
     return new Map(days.map((d) => {
       const x = by.get(d);
-      return [d, x ? { dots: 1, mark: '', title: `${Math.round(x.kcal)} ккал${x.count ? ' · ' + countLabel(x.count, ENTRIES) : ''}` } : { dots: 0, mark: '', title: 'Записей нет' }];
+      return [d, x ? { dots: 1, mark: '', title: tr('{p0} ккал{p1}', { p0: Math.round(x.kcal), p1: x.count ? ' · ' + countLabel(x.count, ENTRIES) : '' }) } : { dots: 0, mark: '', title: tr('Записей нет') }];
     }));
   }, [mealId]);
   if (!live) {

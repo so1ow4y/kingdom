@@ -7,6 +7,7 @@ import * as F from '../../core/feast.js';
 import {
   NUTRIENTS, NUTRIENT, NUTRIENT_GROUPS, MACROS, nv, fmt, dayGoals, remaining, signed, rdiPct, kcalFromMacros, macroSplit,
 } from '../../core/nutrition.js';
+import { tr } from '../../core/i18n.js';
 
 export const feastGoals = () => dayGoals(store.feast.settings);
 
@@ -36,7 +37,7 @@ export function DaySummary({ totals, compact = false }) {
     <section class=${'day-summary card-block' + (over ? ' over' : '')} aria-label="Итоги дня">
       <div class="sum-kcal">
         <div class="sum-left">
-          <span class="sum-left-label">${over ? 'Сверх лимита' : 'Осталось'}</span>
+          <span class="sum-left-label">${over ? tr('Сверх лимита') : tr('Осталось')}</span>
           <b class="sum-left-value">${signed(left)}</b>
           <span class="sum-left-unit">ккал${over ? html` <span class="sum-warn">⚠ лимит превышен</span>` : ''}</span>
         </div>
@@ -113,7 +114,7 @@ export function NutrientEditor({ nutrients, unit = 'g', onChange, disabled = fal
   const [shown, setShown] = useState(open);
   const set = (key, raw) => onChange({ ...nutrients, [key]: raw });
   const auto = kcalFromMacros(nutrients);
-  const base = unit === 'ml' ? '100 мл' : '100 г';
+  const base = unit === 'ml' ? tr('100 мл') : tr('100 г');
   return html`<div class="nutrient-editor">
     <div class="ne-main">
       ${['kcal', ...MACROS].map((k) => html`<${NumField} key=${k} big label=${NUTRIENT[k].label} unit=${NUTRIENT[k].unit}
@@ -156,7 +157,7 @@ function RewardField({ k, value, def, disabled, onCommit }) {
     <span class="nf-label">${F.REWARD_ICONS[k]} ${F.REWARD_LABELS[k]}</span>
     <span class="nf-box">
       <input inputmode="decimal" value=${shown} placeholder=${String(def).replace('.', ',')} disabled=${disabled}
-        aria-label=${F.REWARD_LABELS[k] + ' за запись'} onInput=${(e) => setDraft(e.target.value)} onBlur=${commit}
+        aria-label=${F.REWARD_LABELS[k] + tr(' за запись')} onInput=${(e) => setDraft(e.target.value)} onBlur=${commit}
         onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}/>
     </span>
   </label>`;
