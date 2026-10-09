@@ -9,6 +9,7 @@ import { Banner } from '../components/Overlays.js';
 import { DaySummary, NutrientTable, macroLine, feastGoals, rewardLine } from '../components/FeastParts.js';
 import { openAddFood } from '../components/AddFood.js';
 import { openMealMenu } from '../components/Meals.js';
+import { beginItemDrag, justDropped } from '../components/EntryDrag.js';
 import { navigate, Link } from '../router.js';
 import { store, openSheet } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
@@ -44,8 +45,11 @@ export function noteDisplay(where = 'diary') {
     : { item: on('itemDiary', true), food: on('foodDiary', false) };
 }
 
-/** Запись дневника: время, продукты и лекарства (несколько — списком), заметки; нажатие — изменить. */
-function EntryRow({ e, where = 'diary' }) {
+/**
+ * Запись дневника: время, продукты и лекарства (несколько — списком), заметки; нажатие — изменить.
+ * drag (0.14.1) — у каждого продукта ⋮⋮: перетащить в другую запись или отдельной записью (components/EntryDrag.js).
+ */
+function EntryRow({ e, where = 'diary', drag = false }) {
   const n = entryNutrients(e);
   const items = F.entryItems(e);
   const multi = items.length > 1;
@@ -70,15 +74,19 @@ function EntryRow({ e, where = 'diary' }) {
   const line = (it) => (F.isMeasure(it) ? reading(it) : F.isMed(it) ? html`<small class="muted">${amountLabel(it)}${nv(itemNutrients(it), 'kcal') ? ' · ' + fmt(nv(itemNutrients(it), 'kcal'), 'kcal') : ''}</small>`
     : html`<small class="muted">${amountLabel(it)} · ${fmt(nv(itemNutrients(it), 'kcal'), 'kcal')}</small>`);
   const badge = !items.length ? '📝' : onlyMeds && !kcal ? (items.every(F.isMeasure) ? '📏' : '💊') : fmt(kcal, 'kcal');
-  return html`<button type="button" class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '')} onClick=${() => openSheet('entry', { id: e.id })}>
+  const grip = (it) => (drag ? html`<span class="item-drag" role="button" aria-label=${tr('Перетащить «{name}» в другую запись', { name: it.name })}
+    title=${tr('Перетащить в другую запись или отдельно')} onPointerDown=${(ev) => beginItemDrag(ev, { entryId: e.id, itemId: it.id, name: it.name, meal: e.meal, single: items.length === 1 && !F.entryNoteList(e).length })}
+    onClick=${(ev) => { ev.stopPropagation(); ev.preventDefault(); }}><${Icon} name="grip" size=${14}/></span>` : null);
+  return html`<button type="button" data-entry=${e.id} class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '') + (drag ? ' can-drag' : '')}
+    onClick=${() => !justDropped() && openSheet('entry', { id: e.id })}>
     ${e.time ? html`<span class="er-time">${e.time}</span>` : null}
     <span class="er-main">
       ${!items.length ? null : multi ? html`
         <span class="er-items">${items.map((it) => html`<span class="er-item-wrap" key=${it.id}><span class="er-item">
-          <span class="er-name">${icon(it)}${it.name}</span>${line(it)}</span>
+          <span class="er-name">${grip(it)}${icon(it)}${it.name}</span>${line(it)}</span>
           ${notesOf(it)}</span>`)}</span>
         ${onlyMeds && !kcal ? null : html`<small class="muted">${macroLine(n)}</small>`}` : html`
-        <span class="er-name">${icon(items[0])}${items[0].name}</span>
+        <span class="er-name">${grip(items[0])}${icon(items[0])}${items[0].name}</span>
         ${F.isMeasure(items[0]) ? reading(items[0]) : html`<small class="muted">${amountLabel(items[0])}${onlyMeds && !kcal ? '' : ' · ' + macroLine(n)}</small>`}
         ${notesOf(items[0])}`}
       ${F.entryNoteList(e).map((note) => html`<small class=${'er-note' + (!items.length ? ' er-note-main' : '')} key=${note.id}>${note.text}</small>`)}
@@ -88,13 +96,13 @@ function EntryRow({ e, where = 'diary' }) {
 }
 
 /** Рацион дня: заголовок (значок, название, время, калории, «+», ⋮), заметка к рациону, записи. */
-export function MealBlock({ meal, list, date, readOnly, link = true }) {
+export function MealBlock({ meal, list, date, readOnly, link = true, drag = false }) {
   const kcal = nv(sumNutrients(list.map(entryNutrients)), 'kcal');
   const note = F.mealNoteOf(store.feast, date, meal.id);
   const label = F.mealName(meal).toLowerCase();
   const tomorrow = addDays(date, 1);
   return html`
-    <section class=${'meal card-block' + (meal.date ? ' day-only' : '')} aria-label=${F.mealName(meal)}>
+    <section class=${'meal card-block' + (meal.date ? ' day-only' : '')} aria-label=${F.mealName(meal)} data-meal=${drag ? meal.id : null}>
       <header class="meal-head">
         <span class="meal-icon" aria-hidden="true">${meal.icon}</span>
         <span class="meal-title">
@@ -114,7 +122,7 @@ export function MealBlock({ meal, list, date, readOnly, link = true }) {
       </header>
       ${note ? html`<button type="button" class="meal-note" disabled=${readOnly} onClick=${() => openSheet('mealNote', { date, meal: meal.id })}
         aria-label=${tr('Заметка к рациону: ') + note.text}><${Icon} name="edit" size=${14}/><span>${note.text}</span></button>` : null}
-      ${list.length ? list.map((e) => html`<${EntryRow} key=${e.id} e=${e} where=${link ? 'diary' : 'meals'}/>`)
+      ${list.length ? list.map((e) => html`<${EntryRow} key=${e.id} e=${e} where=${link ? 'diary' : 'meals'} drag=${drag && !readOnly}/>`)
         : html`<button type="button" class="meal-empty" disabled=${readOnly} onClick=${() => openAddFood({ date, meal: meal.id })}>+ Записать</button>`}
     </section>`;
 }
@@ -149,7 +157,7 @@ export function DiaryScreen({ query = {} }) {
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openSheet('meal', { date })}><${Icon} name="plus" size=${16}/> Рацион</button>
       </div>
 
-      ${meals.map((m) => html`<${MealBlock} key=${m.id} meal=${m} list=${day.entries[m.id] || []} date=${date} readOnly=${readOnly}/>`)}
+      ${meals.map((m) => html`<${MealBlock} key=${m.id} meal=${m} list=${day.entries[m.id] || []} date=${date} readOnly=${readOnly} drag/>`)}
 
       ${day.count ? html`<div class="form-actions wrap diary-more">
         <button type="button" class="btn ghost" onClick=${() => setDetails(!details)} aria-expanded=${details}>

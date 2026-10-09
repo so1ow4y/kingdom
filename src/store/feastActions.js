@@ -730,3 +730,31 @@ export async function setHistoryDays(v) {
   }
   return updateFeastSettings({ historyDays: days });
 }
+
+// ---------- Перенос продукта между записями (0.14.1) ----------
+
+/**
+ * Перенести один продукт (лекарство, замер) из записи в другую запись (to.entryId) или отдельной записью в рацион
+ * (to.meal). Время и рацион — у целевой записи; запись, в которой ничего не осталось, удаляется. С «Отменить».
+ */
+export async function moveEntryItem(fromId, itemId, to = {}) {
+  const from = D().entries.get(fromId);
+  if (!from || from.deletedAt) return false;
+  const target = to.entryId ? D().entries.get(to.entryId) : null;
+  if (to.entryId && (!target || target.deletedAt || target.id === fromId)) return false;
+  // единственный продукт без заметок и так отдельной записью в этом рационе — переносить нечего
+  if (!to.entryId && (to.meal || from.meal) === from.meal && F.entryItems(from).length === 1 && !F.entryNoteList(from).length) return false;
+  const c0 = ctx();
+  const fromBase = F.upgradeEntry(from, c0);
+  const toBase = target ? F.upgradeEntry(target, c0) : null;
+  const res = F.moveItem(fromBase, itemId, toBase, c0, { meal: to.meal || null });
+  if (!res) return false;
+  const changes = [
+    F.isEmptyEntry(res.from) ? { coll: 'entries', prev: from, base: fromBase, next: tombstone(res.from, c0) } : { coll: 'entries', prev: from, base: fromBase, next: res.from },
+    target ? { coll: 'entries', prev: target, base: toBase, next: res.to } : { coll: 'entries', prev: undefined, next: res.to },
+  ];
+  if (!(await commit(changes))) return false;
+  const where = target ? tr('в запись {time}', { time: target.time || F.entryTitle(target) }) : tr('отдельной записью');
+  offerUndo(tr('Перенесено: «{name}» — {where}', { name: res.item.name, where }), changes);
+  return true;
+}

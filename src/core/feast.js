@@ -648,6 +648,23 @@ export function removeItem(e, itemId, ctx) {
   return removeNested(upgradeEntry(e, ctx), 'items', itemId, ctx);
 }
 
+/** Пустая запись (0.14.1): ни продуктов, ни лекарств, ни замеров, ни заметок — не хранится. */
+export const isEmptyEntry = (e) => !entryItems(e).length && !entryNoteList(e).length;
+
+/**
+ * Перенос одного элемента записи (0.14.1): из from — убрать, в to — добавить копию в конец (количество, значения,
+ * заметка, награда — те же; время и рацион — у to). to = null — отдельной записью: рацион meal, время from.
+ * → { from, to, item } (from может стать пустой — её удаляет вызывающий) или null.
+ */
+export function moveItem(from, itemId, to, ctx, { meal = null } = {}) {
+  const item = entryItems(from).find((x) => x.id === itemId);
+  if (!item || (to && to.id === from.id)) return null;
+  const nextFrom = removeItem(from, itemId, ctx);
+  const nextTo = to ? addItems(to, [{ snapshot: item }], ctx)
+    : newEntry({ date: from.date, meal: meal || from.meal, time: from.time, items: [{ snapshot: item }] }, ctx);
+  return { from: nextFrom, to: nextTo, item };
+}
+
 // ---------- Заметки записи (0.12.5): первая — поле note, дальше — вложенный массив notes (сколько угодно) ----------
 
 export const MAIN_NOTE = 'main';

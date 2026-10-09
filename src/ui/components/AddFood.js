@@ -578,6 +578,7 @@ export function EntrySheet({ id }) {
   const [notes, setNotes] = useState(() => Object.fromEntries(items.map((it) => [it.id, it.note || ''])));
   const [entryNotes, setEntryNotes] = useState(() => F.entryNoteList(e).map((n) => ({ key: n.id, id: n.id, text: n.text })));
   const [removed, setRemoved] = useState([]);
+  const [moving, setMoving] = useState(null);
   const [meal, setMeal] = useState(e?.meal || 'snack');
   const [time, setTime] = useState(e?.time || null);
   if (!e || e.deletedAt) return null;
@@ -612,6 +613,15 @@ export function EntrySheet({ id }) {
     return f && !f.deletedAt ? f : null;
   };
   const unitOf = (it) => (it.unit === 'portion' ? tr('шт.') : MED_UNIT[it.unit] ? MED_UNIT[it.unit].short : it.unit === 'ml' ? tr('мл') : tr('г'));
+  // 0.14.1: перенести продукт в другую запись этого дня или отдельной записью (без перетаскивания — с телефона)
+  const others = Object.values(F.dayEntries(store.feast, e.date)).flat().filter((x) => x.id !== id && !x.deletedAt)
+    .sort((a, b) => ((a.time || '') < (b.time || '') ? -1 : 1));
+  const moveTo = async (itemId, value) => {
+    if (!value) return;
+    await FA.saveEntry(id, changes());
+    closeSheet();
+    await FA.moveEntryItem(id, itemId, value === 'new' ? { meal } : { entryId: value });
+  };
   return html`
     <${Sheet} title=${F.entryTitle(e)} onClose=${closeSheet} className="entry-sheet">
       <ul class="item-edit-list">
@@ -621,8 +631,16 @@ export function EntrySheet({ id }) {
             values=${vals[it.id] || ['']} setValues=${(v) => setVals({ ...vals, [it.id]: v })}/>` : html`<${NumField} label=${it.unit === 'portion' ? tr('Порций') : F.isMed(it) ? tr('Доза') : tr('Сколько')} value=${amountOf(it)} unit=${unitOf(it)}
             onCommit=${(v) => setAmounts({ ...amounts, [it.id]: num(v) })}/>`}
           <b class="ie-kcal">${F.isMed(it) || F.isMeasure(it) ? '' : fmt(nv(itemNutrients({ ...it, amount: amountOf(it) }), 'kcal'), 'kcal')}</b>
+          <button type="button" class=${'icon-btn small' + (moving === it.id ? ' active' : '')} aria-label=${tr('Перенести в другую запись: ') + it.name} title=${tr('Перенести в другую запись')}
+            aria-expanded=${moving === it.id} disabled=${readOnly() || (!others.length && live.length < 2)} onClick=${() => setMoving(moving === it.id ? null : it.id)}><${Icon} name="move" size=${16}/></button>
           <button type="button" class="icon-btn small" aria-label=${tr('Убрать из записи: ') + it.name} disabled=${readOnly()}
             onClick=${() => setRemoved([...removed, it.id])}><${Icon} name="close" size=${16}/></button>
+          ${moving === it.id ? html`<label class="field ie-move"><span>${tr('Перенести «{name}» в', { name: it.name })}</span>
+            <select onChange=${(ev) => moveTo(it.id, ev.target.value)}>
+              <option value="">${tr('Выбери запись…')}</option>
+              ${others.map((x) => html`<option value=${x.id} key=${x.id}>${[x.time, F.mealName(F.mealInfo(store.feast, x.meal)), F.entryTitle(x)].filter(Boolean).join(' · ')}</option>`)}
+              ${live.length > 1 || F.entryNoteList(e).length ? html`<option value="new">${tr('Отдельной записью')}</option>` : null}
+            </select></label>` : null}
           <input class="item-note-input ie-note" value=${notes[it.id] ?? ''} maxlength=${F.NOTE_MAX} disabled=${readOnly()}
             placeholder=${F.isMed(it) ? tr('Заметка к приёму') : tr('Заметка к продукту: например, 4 ед. инсулина')} aria-label=${tr('Заметка: ') + it.name}
             onInput=${(ev) => setNotes({ ...notes, [it.id]: ev.target.value })}/>

@@ -702,3 +702,43 @@ test('Срок хранения истории (0.14): старые записи
   const plain = F.newFood({ name: 'Вода' }, c);
   assert.equal(F.strippedArchive(TODAY, [F.newEntry({ date: TODAY, meal: 'snack', items: [{ food: plain, amount: 100 }] }, c)], null, c), null, 'без наград сводка не нужна');
 });
+
+test('Перенос продукта между записями (0.14.1): один продукт, время и рацион — у целевой, пустая запись — удаляется', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  const cut = put(d, 'foods', F.newFood({ name: 'Котлеты', nutrients: { kcal: 240 }, rewards: { coins: 1 } }, c));
+  const rice = put(d, 'foods', F.newFood({ name: 'Рис', nutrients: { kcal: 101 }, rewards: { coins: 1 } }, c));
+  const a = put(d, 'entries', F.newEntry({ date: TODAY, meal: 'lunch', time: '15:32', items: [{ food: cut, amount: 200, rewards: F.rewardsOf(cut, d.settings) }] }, c));
+  const b = put(d, 'entries', F.newEntry({ date: TODAY, meal: 'dinner', time: '15:48', items: [{ food: rice, amount: 260, note: 'с маслом', rewards: F.rewardsOf(rice, d.settings) }] }, c));
+  const before = F.feastRewards(d);
+  const [riceItem] = F.entryItems(b);
+  const res = F.moveItem(b, riceItem.id, a, c);
+  assert.deepEqual(F.entryItems(res.to).map((it) => [it.name, it.amount]), [['Котлеты', 200], ['Рис', 260]], 'рис — в конце записи с котлетами');
+  assert.equal(F.entryItems(res.to)[1].note, 'с маслом', 'заметка к продукту переезжает с ним');
+  assert.equal(res.to.time, '15:32');
+  assert.equal(res.to.meal, 'lunch');
+  assert.ok(F.isEmptyEntry(res.from), 'в записи риса ничего не осталось');
+  put(d, 'entries', res.to);
+  put(d, 'entries', tombstone(res.from, c));
+  assert.deepEqual(F.feastRewards(d), before, 'награды не задваиваются и не теряются');
+  assert.equal(Math.round(nv(F.dayTotals(d, TODAY).totals, 'kcal')), 743);
+  // обратно отдельной записью — в другой рацион, со временем исходной записи
+  const [, back] = F.entryItems(res.to);
+  const out = F.moveItem(res.to, back.id, null, c, { meal: 'snack' });
+  assert.deepEqual([out.to.meal, out.to.time, F.entryItems(out.to).length], ['snack', '15:32', 1]);
+  assert.ok(!F.isEmptyEntry(out.from), 'котлеты остались');
+  assert.equal(F.moveItem(res.to, back.id, res.to, c), null, 'в ту же запись — нельзя');
+  assert.equal(F.moveItem(res.to, 'нет такого', a, c), null);
+  // запись с заметкой без продуктов — остаётся
+  const noted = F.newEntry({ date: TODAY, meal: 'lunch', notes: ['после тренировки'], items: [{ food: rice, amount: 100 }] }, c);
+  const left = F.moveItem(noted, F.entryItems(noted)[0].id, a, c);
+  assert.ok(!F.isEmptyEntry(left.from), 'заметка держит запись');
+  // запись 0.11 (продукт в полях самой записи)
+  const legacy = { ...F.newEntry({ date: TODAY, meal: 'lunch', items: [{ food: rice, amount: 50 }] }, c) };
+  delete legacy.items;
+  Object.assign(legacy, { foodId: rice.id, name: 'Рис', amount: 50, unit: 'g', nutrients: { kcal: 101 } });
+  const up = F.upgradeEntry(legacy, c);
+  const moved = F.moveItem(up, legacy.id, a, c);
+  assert.equal(F.entryItems(moved.to).at(-1).amount, 50);
+  assert.ok(F.isEmptyEntry(moved.from));
+});
