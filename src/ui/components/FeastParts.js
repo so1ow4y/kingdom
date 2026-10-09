@@ -3,6 +3,7 @@
 import { html, useState } from '../html.js';
 import { Icon } from '../icons.js';
 import { store } from '../../store/appState.js';
+import { getPrefs } from '../prefs.js';
 import * as F from '../../core/feast.js';
 import {
   NUTRIENTS, NUTRIENT, NUTRIENT_GROUPS, MACROS, nv, fmt, dayGoals, remaining, signed, rdiPct, kcalFromMacros, macroSplit, kcalCheck, num,
@@ -263,4 +264,14 @@ export function IconPicker({ value = '', onChange, disabled = false, fallback = 
         aria-label=${x} onClick=${() => onChange(x)}>${x}</button>`)}
     </div>
   </div>`;
+}
+
+/**
+ * Как показывать продукты в записи (0.14.2, Настройки → Дневник и хранение, только это устройство): grouped — замеры
+ * сверху, еда посередине, лекарства снизу (по умолчанию да); names — длинные названия «clip» (сколько помещается) или
+ * «wrap» (с переносом).
+ */
+export function itemDisplay() {
+  const p = getPrefs().feastItems || {};
+  return { grouped: p.grouped !== false, wrap: p.names === 'wrap' };
 }

@@ -4,7 +4,7 @@
 // не осталось, удаляется (store/feastActions.js → moveEntryItem). Мышь и палец (pointer events), у края — прокрутка,
 // Esc — отмена. Без мыши — «Перенести в…» в листе записи.
 
-import { moveEntryItem } from '../../store/feastActions.js';
+import { moveEntryItem, reorderEntryItem } from '../../store/feastActions.js';
 import * as F from '../../core/feast.js';
 import { store } from '../../store/appState.js';
 import { tr } from '../../core/i18n.js';
@@ -27,13 +27,26 @@ function scrollerOf(el) {
   return window;
 }
 
-/** Куда бросаем: запись (кроме своей) или рацион (отдельной записью). */
+/**
+ * Куда бросаем: на продукт записи — встать перед ним или после (в своей записи — переставить, 0.14.2), на запись — в
+ * конец, на рацион — отдельной записью.
+ */
 function targetAt(x, y) {
   const el = document.elementFromPoint(x, y);
   if (!el) return null;
   const row = el.closest('.entry-row[data-entry]');
-  if (row && row.dataset.entry !== s.entryId) return { el: row, entryId: row.dataset.entry };
-  if (row) return null;
+  if (row) {
+    const entryId = row.dataset.entry;
+    const itemEl = el.closest('[data-item]');
+    if (itemEl && itemEl.dataset.item && itemEl.dataset.item !== s.itemId) {
+      const r = itemEl.getBoundingClientRect();
+      const after = y > r.top + r.height / 2;
+      const all = [...row.querySelectorAll('[data-item]')].filter((n) => n.dataset.item);
+      const next = all[all.indexOf(itemEl) + 1];
+      return { el: itemEl, line: after ? 'after' : 'before', entryId, beforeId: after ? next?.dataset.item || null : itemEl.dataset.item, ref: itemEl.dataset.name };
+    }
+    return entryId !== s.entryId ? { el: row, entryId } : null;
+  }
   const meal = el.closest('.meal[data-meal]');
   if (meal) return { el: meal, meal: meal.dataset.meal };
   return null;
@@ -41,9 +54,11 @@ function targetAt(x, y) {
 
 function label(t) {
   if (!t) return tr('Перенести «{name}»', { name: s.name });
+  const where = t.line ? ' · ' + (t.line === 'before' ? tr('перед «{name}»', { name: t.ref }) : tr('после «{name}»', { name: t.ref })) : '';
+  if (t.entryId === s.entryId) return tr('Переставить') + where;
   if (t.entryId) {
     const e = store.feast.entries.get(t.entryId);
-    return tr('В запись {when}', { when: [e?.time, e ? F.entryTitle(e) : ''].filter(Boolean).join(' · ') });
+    return tr('В запись {when}', { when: [e?.time, e ? F.entryTitle(e) : ''].filter(Boolean).join(' · ') }) + where;
   }
   const m = F.mealInfo(store.feast, t.meal);
   const alone = t.meal === s.meal && s.single;
@@ -54,9 +69,9 @@ function frame() {
   if (!s) return;
   s.raf = 0;
   const t = targetAt(s.x, s.y);
-  if (s.target?.el !== t?.el) {
-    s.target?.el.classList.remove('drop-into');
-    t?.el.classList.add('drop-into');
+  if (s.target?.el !== t?.el || s.target?.line !== t?.line) {
+    s.target?.el.classList.remove('drop-into', 'drop-before', 'drop-after');
+    t?.el.classList.add(t.line ? 'drop-' + t.line : 'drop-into');
   }
   s.target = t;
   const invalid = t && !t.entryId && t.meal === s.meal && s.single;
@@ -102,7 +117,7 @@ function finish(drop) {
   if (!cur) return;
   if (cur.raf) cancelAnimationFrame(cur.raf);
   cur.src?.classList.remove('drag-src');
-  cur.target?.el.classList.remove('drop-into');
+  cur.target?.el.classList.remove('drop-into', 'drop-before', 'drop-after');
   cur.badge?.remove();
   document.body.classList.remove('entry-dragging');
   if (!cur.active) return;
@@ -110,7 +125,8 @@ function finish(drop) {
   if (!drop || !cur.target) return;
   const t = cur.target;
   if (!t.entryId && t.meal === cur.meal && cur.single) return;
-  moveEntryItem(cur.entryId, cur.itemId, t.entryId ? { entryId: t.entryId } : { meal: t.meal });
+  if (t.entryId === cur.entryId) reorderEntryItem(cur.entryId, cur.itemId, t.beforeId);
+  else moveEntryItem(cur.entryId, cur.itemId, t.entryId ? { entryId: t.entryId, beforeId: t.beforeId || null } : { meal: t.meal });
 }
 
 const onUp = (e) => {

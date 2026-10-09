@@ -786,3 +786,40 @@ test('Окно показаний (0.14.1): «Показания» листаю�
   assert.deepEqual(TW.bucketSkeleton('2026-10-01', '2026-10-02', 'day').map((b) => b.key), ['2026-10-01', '2026-10-02']);
   assert.equal(TW.bucketKey('hour', '2026-10-01', null), null);
 });
+
+test('Порядок продуктов в записи (0.14.2): замеры сверху, лекарства снизу; перестановка; место при переносе', () => {
+  const c = makeCtx(NOW);
+  const other = { ...makeCtx(NOW + 5000), deviceId: OTHER };
+  const tea = F.newFood({ name: 'Чай', unit: 'ml', nutrients: { kcal: 19 } }, c);
+  const cut = F.newFood({ name: 'Котлеты', nutrients: { kcal: 240 } }, c);
+  const rice = F.newFood({ name: 'Рис', nutrients: { kcal: 101 } }, c);
+  const ins = F.newFood({ kind: 'med', name: 'Фиасп', unit: 'iu', dose: 4 }, c);
+  const glu = F.newFood({ kind: 'measure', name: 'Глюкоза', unit: 'ммоль/л' }, c);
+  let e = F.newEntry({ date: TODAY, meal: 'lunch', items: [{ food: tea, amount: 1000 }, { med: ins, amount: 10 }, { measure: glu, values: [3] }, { food: cut, amount: 200 }, { food: rice, amount: 260 }] }, c);
+  const names = (list) => list.map((it) => it.name).join(', ');
+  assert.equal(names(F.entryItems(e)), 'Чай, Фиасп, Глюкоза, Котлеты, Рис', 'как добавляли');
+  assert.equal(names(F.displayItems(e)), 'Глюкоза, Чай, Котлеты, Рис, Фиасп', 'замеры, еда, лекарства');
+  assert.equal(names(F.displayItems(e, false)), 'Чай, Фиасп, Глюкоза, Котлеты, Рис', 'без группировки — свой порядок');
+  const id = (n) => F.entryItems(e).find((it) => it.name === n).id;
+  e = F.reorderItem(e, id('Рис'), id('Чай'), c);
+  assert.equal(names(F.entryItems(e)), 'Рис, Чай, Фиасп, Глюкоза, Котлеты');
+  assert.equal(names(F.displayItems(e)), 'Глюкоза, Рис, Чай, Котлеты, Фиасп');
+  e = F.reorderItem(e, id('Чай'), null, c);
+  assert.equal(names(F.entryItems(e)).split(', ').at(-1), 'Чай', 'null — в конец');
+  assert.equal(F.reorderItem(e, id('Чай'), null, c), e, 'уже на месте — без изменений');
+  // слияние: перестановки с двух устройств сходятся поэлементно
+  const a = F.reorderItem(e, id('Котлеты'), id('Рис'), c);
+  const b = F.reorderItem(e, id('Фиасп'), null, other);
+  const m = mergeEntity(a, b);
+  assert.equal(names(F.entryItems(m)), 'Котлеты, Рис, Глюкоза, Чай, Фиасп', 'котлеты — первыми (одно устройство), Фиасп — последним (другое)');
+  // старая запись без ключей порядка
+  const legacy = { ...e, items: e.items.map((it) => ({ ...it, order: undefined })) };
+  const fixed = F.reorderItem(legacy, legacy.items[0].id, null, c);
+  assert.ok(F.entryItems(fixed).every((it) => it.order), 'ключи порядка появились у всех');
+  // перенос в другую запись — на место
+  const dest = F.newEntry({ date: TODAY, meal: 'lunch', items: [{ food: cut, amount: 100 }, { food: rice, amount: 100 }] }, c);
+  const src = F.newEntry({ date: TODAY, meal: 'lunch', items: [{ food: tea, amount: 250 }] }, c);
+  const res = F.moveItem(src, F.entryItems(src)[0].id, dest, c, { beforeId: F.entryItems(dest)[1].id });
+  assert.equal(names(F.entryItems(res.to)), 'Котлеты, Чай, Рис', 'перед рисом');
+  assert.equal(F.itemRank(F.entryItems(e).find((it) => it.name === 'Глюкоза')), 0);
+});

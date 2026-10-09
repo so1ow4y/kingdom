@@ -6,7 +6,7 @@ import { html, useMemo, useState } from '../html.js';
 import { Icon } from '../icons.js';
 import { DayStrip } from '../components/DayStrip.js';
 import { Banner } from '../components/Overlays.js';
-import { DaySummary, NutrientTable, macroLine, feastGoals, rewardLine } from '../components/FeastParts.js';
+import { DaySummary, NutrientTable, macroLine, feastGoals, rewardLine, itemDisplay } from '../components/FeastParts.js';
 import { openAddFood } from '../components/AddFood.js';
 import { openMealMenu } from '../components/Meals.js';
 import { beginItemDrag, justDropped } from '../components/EntryDrag.js';
@@ -51,7 +51,9 @@ export function noteDisplay(where = 'diary') {
  */
 function EntryRow({ e, where = 'diary', drag = false }) {
   const n = entryNutrients(e);
-  const items = F.entryItems(e);
+  const disp = itemDisplay();
+  // 0.14.2: замеры сверху, еда посередине, лекарства снизу (если включено); внутри — свой порядок
+  const items = F.displayItems(e, disp.grouped);
   const multi = items.length > 1;
   const show = noteDisplay(where);
   const onlyMeds = !F.hasFood(e);
@@ -77,12 +79,12 @@ function EntryRow({ e, where = 'diary', drag = false }) {
   const grip = (it) => (drag ? html`<span class="item-drag" role="button" aria-label=${tr('Перетащить «{name}» в другую запись', { name: it.name })}
     title=${tr('Перетащить в другую запись или отдельно')} onPointerDown=${(ev) => beginItemDrag(ev, { entryId: e.id, itemId: it.id, name: it.name, meal: e.meal, single: items.length === 1 && !F.entryNoteList(e).length })}
     onClick=${(ev) => { ev.stopPropagation(); ev.preventDefault(); }}><${Icon} name="grip" size=${14}/></span>` : null);
-  return html`<button type="button" data-entry=${e.id} class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '') + (drag ? ' can-drag' : '') + (store.ui.sheet?.type === 'entry' && store.ui.sheet.id === e.id ? ' selected' : '')}
+  return html`<button type="button" data-entry=${e.id} class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '') + (drag ? ' can-drag' : '') + (store.ui.sheet?.type === 'entry' && store.ui.sheet.id === e.id ? ' selected' : '') + (disp.wrap ? ' names-wrap' : '')}
     onClick=${() => !justDropped() && openSheet('entry', { id: e.id })}>
     ${e.time ? html`<span class="er-time">${e.time}</span>` : null}
-    <span class="er-main">
+    <span class="er-main" data-item=${!multi && items.length ? items[0].id : null} data-name=${!multi && items.length ? items[0].name : null}>
       ${!items.length ? null : multi ? html`
-        <span class="er-items">${items.map((it) => html`<span class="er-item-wrap" key=${it.id}><span class="er-item">
+        <span class="er-items">${items.map((it) => html`<span class="er-item-wrap" key=${it.id} data-item=${it.id} data-name=${it.name}><span class="er-item">
           <span class="er-name">${grip(it)}${icon(it)}${it.name}</span>${line(it)}</span>
           ${notesOf(it)}</span>`)}</span>
         ${onlyMeds && !kcal ? null : html`<small class="muted">${macroLine(n)}</small>`}` : html`

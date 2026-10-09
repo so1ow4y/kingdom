@@ -2129,3 +2129,17 @@ body.entry-dragging, body.entry-dragging * { cursor: grabbing !important; user-s
 .meal-day-list .link-row:hover { background: var(--surface-2); }
 .mdl-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .meal-time-hint { display: block; margin-top: 4px; }
+/* ---------- 0.14.2: порядок продуктов в записи, длинные названия ---------- */
+/* название — на всю ширину первой строкой, поля — под ним; ⋮⋮ — слева на обе строки */
+.item-edit.has-handle { grid-template-columns: auto minmax(0, 1fr) auto auto auto; row-gap: 4px; }
+.item-edit.has-handle .drag-handle { grid-row: span 2; width: 28px; height: 40px; margin-left: -6px; align-self: center; }
+.item-edit.has-handle .ie-name { grid-column: 2 / -1; }
+.item-edit.has-handle .num-field, .item-edit.has-handle .measure-inputs { max-width: 220px; }
+.ie-name { display: flex; align-items: center; gap: 4px; }
+.ie-icon { flex: none; }
+.ie-name .ie-title { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: left; }
+.names-wrap .er-name, .names-wrap .ie-name, .names-wrap .ie-name .ie-title { white-space: normal; overflow: visible; text-overflow: clip; overflow-wrap: anywhere; }
+.names-wrap .er-item { align-items: flex-start; flex-wrap: wrap; }
+.sortable.item-edit-list > .sortable-item { list-style: none; }
+.er-item-wrap.drop-before, .er-main.drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
+.er-item-wrap.drop-after, .er-main.drop-after { box-shadow: 0 2px 0 0 var(--accent); }

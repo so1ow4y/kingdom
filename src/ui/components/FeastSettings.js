@@ -176,6 +176,25 @@ function NoteDisplaySettings() {
   </section>`;
 }
 
+/** Продукты в записи (0.14.2, только это устройство): порядок групп и длинные названия. */
+function ItemDisplaySettings() {
+  const p = getPrefs().feastItems || {};
+  const set = (patch) => setPrefs({ feastItems: { ...(getPrefs().feastItems || {}), ...patch } });
+  const wrap = p.names === 'wrap';
+  return html`<section class="set-section">
+    <h2>Продукты в записи</h2>
+    <label class="toggle-row compact"><input type="checkbox" checked=${p.grouped !== false} onChange=${(e) => set({ grouped: e.target.checked })}/>
+      <span>${tr('Замеры — сверху, лекарства — снизу')}<small>${tr('Внутри записи: сначала замеры, потом еда, в конце лекарства. Внутри каждой группы — твой порядок: перетаскивай за ⋮⋮ в дневнике или в записи. Выключено — порядок целиком твой.')}</small></span></label>
+    <div class="field"><span>${tr('Длинные названия')}</span>
+      <div class="chip-row wrap" role="radiogroup" aria-label=${tr('Длинные названия')}>
+        <button type="button" role="radio" aria-checked=${!wrap} class=${'chip' + (!wrap ? ' selected' : '')} onClick=${() => set({ names: 'clip' })}>${tr('Частично — сколько помещается')}</button>
+        <button type="button" role="radio" aria-checked=${wrap} class=${'chip' + (wrap ? ' selected' : '')} onClick=${() => set({ names: 'wrap' })}>${tr('С переносом — целиком')}</button>
+      </div>
+    </div>
+    <p class="muted small">${tr('В дневнике, в записи и при записи еды. Только для этого устройства.')}</p>
+  </section>`;
+}
+
 export function FeastDataSection() {
   const s = store.feast.settings || {};
   const ro = !!store.ui.feastReadOnly;
@@ -188,6 +207,7 @@ export function FeastDataSection() {
     FA.updateFeastSettings({ entryLimit: Math.max(FEAST_RETENTION.entryMin, Math.min(FEAST_RETENTION.entryMax, n)) });
   };
   return html`
+    <${ItemDisplaySettings}/>
     <${NoteDisplaySettings}/>
     <section class="set-section">
       <h2>Записи дневника</h2>

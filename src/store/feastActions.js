@@ -747,7 +747,7 @@ export async function moveEntryItem(fromId, itemId, to = {}) {
   const c0 = ctx();
   const fromBase = F.upgradeEntry(from, c0);
   const toBase = target ? F.upgradeEntry(target, c0) : null;
-  const res = F.moveItem(fromBase, itemId, toBase, c0, { meal: to.meal || null });
+  const res = F.moveItem(fromBase, itemId, toBase, c0, { meal: to.meal || null, beforeId: to.beforeId || null });
   if (!res) return false;
   const changes = [
     F.isEmptyEntry(res.from) ? { coll: 'entries', prev: from, base: fromBase, next: tombstone(res.from, c0) } : { coll: 'entries', prev: from, base: fromBase, next: res.from },
@@ -757,4 +757,11 @@ export async function moveEntryItem(fromId, itemId, to = {}) {
   const where = target ? tr('в запись {time}', { time: target.time || F.entryTitle(target) }) : tr('отдельной записью');
   offerUndo(tr('Перенесено: «{name}» — {where}', { name: res.item.name, where }), changes);
   return true;
+}
+
+/** Переставить продукт внутри записи (0.14.2): перед beforeId, null — в конец. */
+export async function reorderEntryItem(entryId, itemId, beforeId = null) {
+  const c = changeEntry(entryId, (e, c0) => F.reorderItem(e, itemId, beforeId, c0));
+  if (!c || c.next === c.base || c.next === c.prev) return false;
+  return commit([c]);
 }

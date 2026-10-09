@@ -11,7 +11,8 @@ import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { Sheet } from './Sheet.js';
 import { BarcodeScanner } from './Scanner.js';
-import { MealChips, macroLine, NutrientEditor, NumField, rewardLine, IconPicker } from './FeastParts.js';
+import { MealChips, macroLine, NutrientEditor, NumField, rewardLine, IconPicker, itemDisplay } from './FeastParts.js';
+import { SortableList, DragHandle } from './Sortable.js';
 import { TimeInput } from './TimeInput.js';
 import { store, closeSheet, openSheet, showSnackbar } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
@@ -435,7 +436,7 @@ function ReviewStep({ basket, setBasket, meta, entryMode, onMore, onSave }) {
   const setNote = (key, v) => setBasket(basket.map((it) => (it.key === key ? { ...it, note: v } : it)));
   const total = sumNutrients(basket.map(basketNutrients));
   return html`<div class="add-review">
-    <ul class="item-edit-list">
+    <ul class=${'item-edit-list' + (itemDisplay().wrap ? ' names-wrap' : '')}>
       ${basket.map((it) => html`<li key=${it.key} class="item-edit">
         <span class="ie-name">${basketName(it)}</span>
         ${it.values ? html`<span class="ie-values">${basketAmount(it)}</span>` : html`<${NumField} label="Сколько" value=${it.amount} unit=${it.quick ? tr('порц.') : unitLabel(basketFood(it))}
@@ -572,7 +573,9 @@ export function AddFoodSheet({ date = store.now.today, meal: initialMeal = null,
 /** Лист записи дневника: время, рацион, продукты и лекарства (количество, убрать, добавить ещё), заметки, удалить. */
 export function EntrySheet({ id }) {
   const e = store.feast.entries.get(id);
-  const items = e && !e.deletedAt ? F.entryItems(e) : [];
+  const disp = itemDisplay();
+  // 0.14.2: в том же порядке, что и в дневнике; ⋮⋮ — переставить
+  const items = e && !e.deletedAt ? F.displayItems(e, disp.grouped) : [];
   const [amounts, setAmounts] = useState(() => Object.fromEntries(items.map((it) => [it.id, it.amount])));
   const [vals, setVals] = useState(() => Object.fromEntries(items.filter(F.isMeasure).map((it) => [it.id, (it.values || [it.amount]).map((v) => (v == null ? '' : dec(v)))])));
   const [notes, setNotes] = useState(() => Object.fromEntries(items.map((it) => [it.id, it.note || ''])));
@@ -624,9 +627,12 @@ export function EntrySheet({ id }) {
   };
   return html`
     <${Sheet} title=${F.entryTitle(e)} onClose=${closeSheet} className="entry-sheet">
-      <ul class="item-edit-list">
-        ${live.map((it) => html`<li key=${it.id} class="item-edit">
-          <span class="ie-name">${F.isMed(it) || F.isMeasure(it) ? (F.kindIcon(foodOf(it)) || F.kindIcon(it)) + ' ' : ''}${foodOf(it) ? html`<button type="button" class="link-btn" onClick=${() => { closeSheet(); openFood(it.foodId); }}>${it.name}</button>` : it.name}</span>
+      <${SortableList} items=${live} className=${'item-edit-list' + (disp.wrap ? ' names-wrap' : '')} disabled=${readOnly() || live.length < 2}
+        onMove=${(itemId, index) => FA.reorderEntryItem(id, itemId, live.filter((x) => x.id !== itemId)[index]?.id || null)}
+        render=${(it, handle) => html`<div class="item-edit has-handle">
+          <${DragHandle} handle=${handle} label=${tr('Переставить «{name}»', { name: it.name })}/>
+          <span class="ie-name" title=${it.name}>${F.isMed(it) || F.isMeasure(it) ? html`<span class="ie-icon">${F.kindIcon(foodOf(it)) || F.kindIcon(it)}</span>` : null}${foodOf(it)
+            ? html`<button type="button" class="link-btn ie-title" onClick=${() => { closeSheet(); openFood(it.foodId); }}>${it.name}</button>` : html`<span class="ie-title">${it.name}</span>`}</span>
           ${F.isMeasure(it) ? html`<${MeasureInputs} m=${foodOf(it) || { name: it.name, unit: it.unit, parts: (it.values || []).length > 1 ? it.values.map((_, i) => tr('Значение {n}', { n: i + 1 })) : [] }}
             values=${vals[it.id] || ['']} setValues=${(v) => setVals({ ...vals, [it.id]: v })}/>` : html`<${NumField} label=${it.unit === 'portion' ? tr('Порций') : F.isMed(it) ? tr('Доза') : tr('Сколько')} value=${amountOf(it)} unit=${unitOf(it)}
             onCommit=${(v) => setAmounts({ ...amounts, [it.id]: num(v) })}/>`}
@@ -644,8 +650,7 @@ export function EntrySheet({ id }) {
           <input class="item-note-input ie-note" value=${notes[it.id] ?? ''} maxlength=${F.NOTE_MAX} disabled=${readOnly()}
             placeholder=${F.isMed(it) ? tr('Заметка к приёму') : tr('Заметка к продукту: например, 4 ед. инсулина')} aria-label=${tr('Заметка: ') + it.name}
             onInput=${(ev) => setNotes({ ...notes, [it.id]: ev.target.value })}/>
-        </li>`)}
-      </ul>
+        </div>`}/>
       ${!live.length && !entryNotes.some((n) => n.text.trim()) ? html`<p class="hint warn">В записи не осталось ни продуктов, ни заметок — при сохранении она удалится.</p>` : null}
       <button type="button" class="btn small" disabled=${readOnly()} onClick=${addMore}><${Icon} name="plus" size=${16}/> Добавить продукт, лекарство или замер</button>
       <${EntryMeta} date=${e.date} meal=${meal} setMeal=${setMeal} time=${time} setTime=${setTime} notes=${entryNotes} setNotes=${setEntryNotes} allowEmptyTime=${!e.time}/>

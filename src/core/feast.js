@@ -656,13 +656,58 @@ export const isEmptyEntry = (e) => !entryItems(e).length && !entryNoteList(e).le
  * заметка, награда — те же; время и рацион — у to). to = null — отдельной записью: рацион meal, время from.
  * → { from, to, item } (from может стать пустой — её удаляет вызывающий) или null.
  */
-export function moveItem(from, itemId, to, ctx, { meal = null } = {}) {
+export function moveItem(from, itemId, to, ctx, { meal = null, beforeId = null } = {}) {
   const item = entryItems(from).find((x) => x.id === itemId);
   if (!item || (to && to.id === from.id)) return null;
   const nextFrom = removeItem(from, itemId, ctx);
-  const nextTo = to ? addItems(to, [{ snapshot: item }], ctx)
+  let nextTo = to ? addItems(to, [{ snapshot: item }], ctx)
     : newEntry({ date: from.date, meal: meal || from.meal, time: from.time, items: [{ snapshot: item }] }, ctx);
+  // 0.14.2: на место перед beforeId (иначе — в конец)
+  if (to && beforeId) {
+    const before = new Set(entryItems(to).map((x) => x.id));
+    const added = entryItems(nextTo).find((x) => !before.has(x.id));
+    if (added) nextTo = reorderItem(nextTo, added.id, beforeId, ctx);
+  }
   return { from: nextFrom, to: nextTo, item };
+}
+
+// ---------- Порядок продуктов в записи (0.14.2) ----------
+
+/** Группа продукта записи для показа: замеры — сверху, еда — посередине, лекарства — снизу. */
+export const itemRank = (it) => (isMeasure(it) ? 0 : isMed(it) ? 2 : 1);
+
+/** Продукты записи для показа: grouped — замеры, еда, лекарства (внутри группы — свой порядок); иначе — как расставили. */
+export function displayItems(e, grouped = true) {
+  const list = entryItems(e);
+  if (!grouped) return list;
+  return list.map((it, i) => [it, i]).sort((a, b) => itemRank(a[0]) - itemRank(b[0]) || a[1] - b[1]).map(([it]) => it);
+}
+
+/**
+ * Переставить продукт в записи: перед beforeId (null — в конец). Продукты без ключа порядка (старые записи) и
+ * совпавшие ключи (слияние с другого устройства) получают новые ключи по порядку — порядок остаётся тем, что видно.
+ */
+export function reorderItem(e, itemId, beforeId, ctx) {
+  let base = upgradeEntry(e, ctx);
+  const items = entryItems(base);
+  if (!items.some((x) => x.id === itemId) || itemId === beforeId) return e;
+  const rest = items.filter((x) => x.id !== itemId);
+  const found = beforeId ? rest.findIndex((x) => x.id === beforeId) : -1;
+  const at = found < 0 ? rest.length : found;
+  const target = [...rest.slice(0, at).map((x) => x.id), itemId, ...rest.slice(at).map((x) => x.id)];
+  if (target.every((id, i) => id === items[i].id)) return e;
+  const prev = rest[at - 1]?.order || null;
+  const next = rest[at]?.order || null;
+  const clean = items.every((x) => x.order) && new Set(items.map((x) => x.order)).size === items.length;
+  if (clean && (!prev || !next || prev < next)) {
+    return touchNested(base, 'items', itemId, { order: keyBetween(prev, next) }, ctx);
+  }
+  const keys = nextOrders(null, target.length);
+  target.forEach((id, i) => {
+    const it = (base.items || []).find((x) => x.id === id);
+    if (it && it.order !== keys[i]) base = touchNested(base, 'items', id, { order: keys[i] }, ctx);
+  });
+  return base;
 }
 
 // ---------- Заметки записи (0.12.5): первая — поле note, дальше — вложенный массив notes (сколько угодно) ----------
