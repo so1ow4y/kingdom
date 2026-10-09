@@ -1132,3 +1132,22 @@ export function strippedArchive(date, entries, prev, ctx) {
   if (!hasRewards(full.rewards)) return null;
   return touch(full, { count: 0, totals: {}, meals: {}, foods: {}, meds: {}, measures: {}, stripped: true }, ctx);
 }
+
+/**
+ * Что значит время рациона (0.14.1): какие записи «Записать еду» сама отнесёт к нему (правило mealByTime — последний
+ * рацион, чьё время уже наступило; раньше первого — последний). time — время из формы (черновик), mealId — рацион
+ * (null — новый). → { kind: 'range', from, to, next, overnight } — с from до to; overnight — до полуночи и ночью до to |
+ * { kind: 'all' } — время только у него: все новые записи сюда | { kind: 'manual' } — у других есть, у него нет |
+ * { kind: 'hours' } — времени нет ни у кого (по часам: завтрак 4–11, обед 11–16, ужин 16–21, иначе перекус).
+ */
+export function mealTimeInfo(data, date, mealId, time) {
+  const list = mealsForDay(data, date).filter((m) => !m.missing && m.id !== mealId);
+  const timed = [...list.filter((m) => m.time), ...(time ? [{ id: mealId || '__new', time }] : [])]
+    .sort((a, b) => (a.time < b.time ? -1 : a.time > b.time ? 1 : 0));
+  if (!timed.length) return { kind: 'hours' };
+  if (!time) return { kind: 'manual' };
+  if (timed.length === 1) return { kind: 'all' };
+  const i = timed.findIndex((m) => m.id === (mealId || '__new'));
+  const next = timed[(i + 1) % timed.length];
+  return { kind: 'range', from: time, to: next.time, next: mealName(next), overnight: i === timed.length - 1 };
+}

@@ -2114,3 +2114,18 @@ a.msr-name:hover { color: var(--accent); }
 body.entry-dragging, body.entry-dragging * { cursor: grabbing !important; user-select: none; -webkit-user-select: none; }
 .ie-move { grid-column: 1 / -1; margin: 4px 0 0; }
 .icon-btn.small.active { background: var(--accent-soft); color: var(--accent); }
+/* ---------- 0.14.1: замеры по периодам, панель справа для записи и рациона, рацион: записать сюда ---------- */
+.fchart-svg .whisker { stroke-width: 2; stroke-linecap: round; opacity: .45; vector-effect: non-scaling-stroke; }
+.whisker-key { display: inline-block; flex: none; width: 2px; height: 12px; border-radius: 1px; background: var(--muted); vertical-align: middle; }
+.sheet-side { padding-top: 6px; }
+.sheet-panel .sheet-head { padding-top: 10px; }
+.sheet-panel .sheet-body { padding-bottom: 24px; }
+.entry-row.selected { outline: 2px solid var(--accent); outline-offset: -2px; background: var(--accent-soft); }
+.meal-day { margin: 4px 0 8px; }
+.meal-day-add { gap: 6px; margin: 6px 0; }
+.meal-day-list { display: flex; flex-direction: column; gap: 2px; margin: 6px 0 0; padding: 0; list-style: none; }
+.meal-day-list .link-row { display: grid; grid-template-columns: 52px minmax(0, 1fr) auto; align-items: center; gap: 8px; width: 100%; padding: 8px 6px;
+  border: 0; border-radius: 8px; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.meal-day-list .link-row:hover { background: var(--surface-2); }
+.mdl-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.meal-time-hint { display: block; margin-top: 4px; }

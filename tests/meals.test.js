@@ -742,3 +742,47 @@ test('Перенос продукта между записями (0.14.1): од
   assert.equal(F.entryItems(moved.to).at(-1).amount, 50);
   assert.ok(F.isEmptyEntry(moved.from));
 });
+
+test('Замеры по периодам (0.14.1): среднее, минимум и максимум по часам, дням, месяцам; части давления', () => {
+  const readings = [
+    { date: '2026-10-07', time: '07:30', values: [5] },
+    { date: '2026-10-07', time: '13:10', values: [9] },
+    { date: '2026-10-08', time: '07:40', values: [6] },
+    { date: '2026-10-08', time: null, values: [7] },
+  ];
+  const days = M.readingBuckets({ readings, from: '2026-10-06', to: '2026-10-08', group: 'day' });
+  assert.deepEqual(days.map((b) => [b.key, b.n, b.avg[0], b.min[0], b.max[0]]), [['2026-10-06', 0, null, null, null], ['2026-10-07', 2, 7, 5, 9], ['2026-10-08', 2, 6.5, 6, 7]]);
+  const hours = M.readingBuckets({ readings, from: '2026-10-06', to: '2026-10-08', group: 'hour' });
+  assert.equal(hours.length, 24);
+  assert.deepEqual([hours[7].n, hours[7].avg[0], hours[13].avg[0]], [2, 5.5, 9], 'по часам — без показаний без времени');
+  const months = M.readingBuckets({ readings, from: '2026-09-15', to: '2026-10-08', group: 'month' });
+  assert.deepEqual(months.map((b) => [b.key, b.n]), [['2026-09', 0], ['2026-10', 4]]);
+  const bp = M.readingBuckets({ readings: [{ date: TODAY, time: '08:00', values: [120, 80] }, { date: TODAY, time: '20:00', values: [140, null] }], from: TODAY, to: TODAY, group: 'day', parts: 2 });
+  assert.deepEqual([bp[0].avg, bp[0].min, bp[0].max], [[130, 80], [120, 80], [140, 80]], 'пустая часть не мешает');
+});
+
+test('Время рациона (0.14.1): с какого до какого времени «Записать еду» кладёт записи сюда', () => {
+  const d = feastData();
+  assert.deepEqual(F.mealTimeInfo(d, TODAY, 'breakfast', null), { kind: 'hours' }, 'ни у кого нет времени — по часам');
+  assert.deepEqual(F.mealTimeInfo(d, TODAY, 'breakfast', '08:00'), { kind: 'all' }, 'время только у этого — все записи сюда');
+  d.meals.set('lunch', { ...d.meals.get('lunch'), time: '12:00' });
+  d.meals.set('dinner', { ...d.meals.get('dinner'), time: '18:00' });
+  assert.deepEqual(F.mealTimeInfo(d, TODAY, 'breakfast', null), { kind: 'manual' }, 'у других есть, у этого нет');
+  const b = F.mealTimeInfo(d, TODAY, 'breakfast', '08:00');
+  assert.deepEqual([b.kind, b.from, b.to, b.next, b.overnight], ['range', '08:00', '12:00', 'Обед', false]);
+  const din = F.mealTimeInfo(d, TODAY, 'dinner', '18:00');
+  assert.deepEqual([din.to, din.next, din.overnight], ['12:00', 'Обед', true], 'последний — до полуночи и ночью до первого');
+  assert.equal(F.mealByTime(d, TODAY, '02:00'), 'dinner', 'ночью — последний рацион');
+  assert.equal(F.mealByTime(d, TODAY, '12:30'), 'lunch');
+  const fresh = F.mealTimeInfo(d, TODAY, null, '15:00');
+  assert.deepEqual([fresh.from, fresh.to, fresh.next], ['15:00', '18:00', 'Ужин'], 'новый рацион — тоже');
+});
+
+test('Окно показаний (0.14.1): «Показания» листаются по неделям', async () => {
+  const TW = await import('../src/core/timeWindow.js');
+  assert.equal(TW.windowUnit('raw'), 'week');
+  assert.equal(TW.anchorOf('raw', '2026-10-09'), '2026-10-05');
+  assert.deepEqual(TW.windowRange('raw', '2026-10-05'), { from: '2026-10-05', to: '2026-10-11' });
+  assert.deepEqual(TW.bucketSkeleton('2026-10-01', '2026-10-02', 'day').map((b) => b.key), ['2026-10-01', '2026-10-02']);
+  assert.equal(TW.bucketKey('hour', '2026-10-01', null), null);
+});

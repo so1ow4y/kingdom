@@ -4,8 +4,8 @@
 
 import { addDays, mondayOf, longDate, MONTH_NOM } from './dates.js';
 
-/** Единица окна для группировки: day | week | year | null. */
-export const windowUnit = (group) => ({ hour: 'day', day: 'week', month: 'year' })[group] || null;
+/** Единица окна для группировки: day | week | year | null; raw (показания замера как есть, 0.14.1) — неделя. */
+export const windowUnit = (group) => ({ hour: 'day', day: 'week', month: 'year', raw: 'week' })[group] || null;
 
 /** Окно, в котором лежит дата d (сегодня — текущее). */
 export function anchorOf(group, d) {
@@ -53,28 +53,32 @@ export function trimLead(list, group) {
  * log — события с датой и временем ({ key: ряд, date, time, amount }), extra — итоги дней без времени ({ date, key, count, amount });
  * metric — 'count' (сколько раз) или 'amount' (сумма amount); group — hour (по часу суток за всё окно), day, month, year.
  */
+/** Пустые корзины окна по порядку: [{ key, label, title }] (часы суток, дни, месяцы, годы). */
+export function bucketSkeleton(from, to, group) {
+  const out = [];
+  if (group === 'hour') {
+    for (let h = 0; h < 24; h++) out.push({ key: String(h).padStart(2, '0'), label: String(h), title: `${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59` });
+  } else if (group === 'day') {
+    for (let d = from; d <= to; d = addDays(d, 1)) out.push({ key: d, label: `${+d.slice(8)}.${d.slice(5, 7)}`, title: longDate(d, '0000') }); // в подсказке — с годом
+  } else if (group === 'month') {
+    for (let d = from.slice(0, 7) + '-01'; d.slice(0, 7) <= to.slice(0, 7); d = addDays(d.slice(0, 7) + '-28', 4).slice(0, 7) + '-01') {
+      out.push({ key: d.slice(0, 7), label: `${d.slice(5, 7)}.${d.slice(2, 4)}`, title: `${MONTH_NOM[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}` });
+    }
+  } else {
+    for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) out.push({ key: String(y), label: String(y), title: String(y) });
+  }
+  return out;
+}
+
+/** Ключ корзины события; по часам без времени — null. */
+export const bucketKey = (group, date, time) => (group === 'hour' ? (time ? time.slice(0, 2) : null) : group === 'day' ? date : group === 'month' ? date.slice(0, 7) : date.slice(0, 4));
+
 export function timeBuckets({ log = [], extra = [], from, to, group = 'day', metric = 'count', keys = null }) {
   const want = (k) => !keys || keys.includes(k);
   const val = (x) => (metric === 'amount' ? x.amount || 0 : x.count ?? 1);
-  const buckets = new Map();
-  const order = [];
-  const ensure = (key, label, title) => {
-    if (!buckets.has(key)) {
-      buckets.set(key, { key, label, title, values: {} });
-      order.push(key);
-    }
-    return buckets.get(key);
-  };
-  if (group === 'hour') {
-    for (let h = 0; h < 24; h++) ensure(String(h).padStart(2, '0'), String(h), `${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59`);
-  } else if (group === 'day') {
-    for (let d = from; d <= to; d = addDays(d, 1)) ensure(d, `${+d.slice(8)}.${d.slice(5, 7)}`, longDate(d, '0000')); // в подсказке — с годом
-  } else if (group === 'month') {
-    for (let d = from.slice(0, 7) + '-01'; d.slice(0, 7) <= to.slice(0, 7); d = addDays(d.slice(0, 7) + '-28', 4).slice(0, 7) + '-01') ensure(d.slice(0, 7), `${d.slice(5, 7)}.${d.slice(2, 4)}`, `${MONTH_NOM[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`);
-  } else {
-    for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) ensure(String(y), String(y), String(y));
-  }
-  const keyOf = (date, time) => (group === 'hour' ? (time ? time.slice(0, 2) : null) : group === 'day' ? date : group === 'month' ? date.slice(0, 7) : date.slice(0, 4));
+  const list = bucketSkeleton(from, to, group).map((b) => ({ ...b, values: {} }));
+  const buckets = new Map(list.map((b) => [b.key, b]));
+  const keyOf = (date, time) => bucketKey(group, date, time);
   const put = (k, medKey, v) => {
     const b = k && buckets.get(k);
     if (!b) return;
@@ -82,5 +86,5 @@ export function timeBuckets({ log = [], extra = [], from, to, group = 'day', met
   };
   for (const l of log) if (want(l.key)) put(keyOf(l.date, l.time), l.key, val({ count: 1, amount: l.amount }));
   if (group !== 'hour') for (const x of extra) if (want(x.key)) put(keyOf(x.date, null), x.key, val(x));
-  return order.map((k) => buckets.get(k));
+  return list;
 }

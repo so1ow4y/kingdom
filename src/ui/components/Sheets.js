@@ -243,9 +243,13 @@ function FocusPickerSheet({ date }) {
     <//>`;
 }
 
-export function SheetHost() {
+/**
+ * Открытый лист. side (0.14.1) — лист записи или рациона показан панелью справа (широкий экран): обычный хост его
+ * пропускает, а панельный (panel) показывает только его.
+ */
+export function SheetHost({ panel = false, side = false }) {
   const s = store.ui.sheet;
-  if (!s) return null;
+  if (!s || panel !== side) return null;
   switch (s.type) {
     case 'when': return html`<${WhenSheet} ...${s}/>`;
     case 'listPicker': return html`<${ListPickerSheet} ...${s}/>`;

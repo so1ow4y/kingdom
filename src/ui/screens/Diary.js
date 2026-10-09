@@ -77,7 +77,7 @@ function EntryRow({ e, where = 'diary', drag = false }) {
   const grip = (it) => (drag ? html`<span class="item-drag" role="button" aria-label=${tr('Перетащить «{name}» в другую запись', { name: it.name })}
     title=${tr('Перетащить в другую запись или отдельно')} onPointerDown=${(ev) => beginItemDrag(ev, { entryId: e.id, itemId: it.id, name: it.name, meal: e.meal, single: items.length === 1 && !F.entryNoteList(e).length })}
     onClick=${(ev) => { ev.stopPropagation(); ev.preventDefault(); }}><${Icon} name="grip" size=${14}/></span>` : null);
-  return html`<button type="button" data-entry=${e.id} class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '') + (drag ? ' can-drag' : '')}
+  return html`<button type="button" data-entry=${e.id} class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '') + (drag ? ' can-drag' : '') + (store.ui.sheet?.type === 'entry' && store.ui.sheet.id === e.id ? ' selected' : '')}
     onClick=${() => !justDropped() && openSheet('entry', { id: e.id })}>
     ${e.time ? html`<span class="er-time">${e.time}</span>` : null}
     <span class="er-main">

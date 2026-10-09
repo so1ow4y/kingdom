@@ -401,7 +401,13 @@ export function ReadingsChart({ readings, parts = [], ranges = [], unit = '', la
         ${r.note ? html`<span class="muted">${r.note}</span>` : null}`,
     });
   };
-  const xLabels = [t0, t0 + span / 2, t1].map((ms) => new Date(ms).toISOString().slice(0, 10));
+  // 0.14.1: показания за один-два дня — подписи со временем, а не три одинаковые даты
+  const short = t1 - t0 < 3 * 86400000;
+  const oneDay = new Date(t0).toISOString().slice(0, 10) === new Date(t1).toISOString().slice(0, 10);
+  const xLabels = [t0, t0 + span / 2, t1].map((ms) => {
+    const iso = new Date(ms).toISOString();
+    return oneDay ? iso.slice(11, 16) : short ? `${shortDate(iso.slice(0, 10))} ${iso.slice(11, 16)}` : shortDate(iso.slice(0, 10));
+  });
   const off = (r) => {
     const st = statusOf(r.values);
     return st && st !== 'ok';
@@ -429,7 +435,95 @@ export function ReadingsChart({ readings, parts = [], ranges = [], unit = '', la
       ${readings.flatMap((r, k) => r.values.map((v, i) => (Number.isFinite(v) ? html`<i key=${k + ':' + i} class=${'fchart-dot' + (off(r) ? ' off-norm' : '')}
         style=${{ left: (x(t(r)) / W) * 100 + '%', top: (y(v) / height) * 100 + '%', background: SERIES[i] }}></i>` : null)))}
       <div class="fchart-axis-y">${tk.map((v) => html`<span key=${v} style=${{ top: (y(v) / height) * 100 + '%' }}>${f(v)}</span>`)}</div>
-      <div class="fchart-axis-x">${xLabels.map((d, i) => html`<span key=${i} style=${{ left: ((i === 0 ? PAD.l + 6 : i === 2 ? W - PAD.r - 6 : W / 2) / W) * 100 + '%' }}>${shortDate(d)}</span>`)}</div>
+      <div class="fchart-axis-x">${xLabels.map((d, i) => html`<span key=${i} style=${{ left: ((i === 0 ? PAD.l + 6 : i === 2 ? W - PAD.r - 6 : W / 2) / W) * 100 + '%' }}>${d}</span>`)}</div>
+      <${Tip} tip=${tip}/>
+    </div>`}
+  </div>`;
+}
+
+/**
+ * Показания замера по корзинам (0.14.1, «для врача»): по часам суток, дням, месяцам, годам — линия средних по каждой
+ * части, вертикальная черта «мин–макс», полоса нормы; среднее вне нормы — точка с обводкой и «⚠» в подсказке и таблице.
+ * buckets — measures.readingBuckets(); пустые корзины — разрыв линии.
+ */
+export function ReadingBucketsChart({ buckets, parts = [], ranges = [], unit = '', label = tr('Показания'), height = 200, statusOf = () => null, statusLabel = {} }) {
+  const box = useRef(null);
+  const [tip, setTip] = useState(null);
+  const [table, setTable] = useState(false);
+  const data = buckets.filter((b) => b.n);
+  if (!data.length) return html`<p class="muted fchart-empty">${tr('Пока нет показаний.')}</p>`;
+  const n = Math.max(1, parts.length, ...buckets.map((b) => b.avg.length));
+  const names = Array.from({ length: n }, (_, i) => parts[i] || (n > 1 ? tr('Значение {n}', { n: i + 1 }) : label));
+  const all = data.flatMap((b) => [...b.min, ...b.max].filter((v) => Number.isFinite(v)));
+  for (const r of ranges) if (r) all.push(...[r.min, r.max].filter((v) => v != null));
+  let lo = Math.min(...all);
+  let hi = Math.max(...all);
+  const pad = Math.max(0.5, (hi - lo) * 0.12);
+  lo = Math.floor((lo - pad) * 2) / 2;
+  hi = Math.ceil((hi + pad) * 2) / 2;
+  const ih = height - PAD.t - PAD.b;
+  const iw = W - PAD.l - PAD.r;
+  const slot = iw / buckets.length;
+  const cx = (i) => PAD.l + slot * i + slot / 2;
+  const y = (v) => PAD.t + ih - ((v - lo) / (hi - lo || 1)) * ih;
+  const tk = ticks(hi - lo).map((v) => Math.round((lo + v) * 100) / 100).filter((v) => v <= hi + 1e-9);
+  const f = (v) => (v == null ? '—' : v.toLocaleString(locale(), { maximumFractionDigits: 2 }));
+  const labelEvery = Math.ceil(buckets.length / 8);
+  const off = (b) => {
+    const st = statusOf(b.avg);
+    return st && st !== 'ok' ? st : null;
+  };
+  const cell = (b, i) => (b.avg[i] == null ? '—' : `${f(b.avg[i])}${b.min[i] !== b.max[i] ? ` (${f(b.min[i])}–${f(b.max[i])})` : ''}`);
+  // линии средних: разрыв на пустых корзинах
+  const segments = (i) => {
+    const out = [];
+    let cur = [];
+    buckets.forEach((b, k) => {
+      if (b.avg[i] == null) {
+        if (cur.length) out.push(cur);
+        cur = [];
+      } else cur.push(`${cx(k)},${y(b.avg[i])}`);
+    });
+    if (cur.length) out.push(cur);
+    return out;
+  };
+  const show = (k) => {
+    const b = buckets[k];
+    if (!b.n) return setTip(null);
+    const rect = box.current.getBoundingClientRect();
+    const st = off(b);
+    setTip({
+      x: (cx(k) / W) * rect.width, y: (y(Math.max(...b.max.filter((v) => Number.isFinite(v)))) / height) * rect.height,
+      body: html`<b>${b.title}</b>${names.map((nm, i) => html`<span key=${i}>${n > 1 ? nm + ': ' : ''}${tr('среднее {v}', { v: f(b.avg[i]) })}${b.min[i] !== b.max[i] ? ` · ${f(b.min[i])}–${f(b.max[i])}` : ''} ${unit}</span>`)}
+        <span class="muted">${tr('показаний: {n}', { n: b.n })}</span>
+        ${st ? html`<span class="tone-danger">⚠ ${statusLabel[st] || ''}</span>` : null}`,
+    });
+  };
+  return html`<div class="fchart">
+    <div class="fchart-legend">
+      ${n > 1 ? names.map((nm, i) => html`<span key=${i}><i class="line-key" style=${{ background: SERIES[i] }}></i>${nm}</span>`) : null}
+      <span><i class="whisker-key"></i>${tr('мин–макс')}</span>
+      ${ranges.some(Boolean) ? html`<span><i class="swatch norm-key"></i>${tr('норма')}</span>` : null}
+      <button type="button" class="link-btn fchart-table-btn" onClick=${() => setTable(!table)}>${table ? tr('График') : tr('Таблицей')}</button>
+    </div>
+    ${table ? html`<div class="fchart-table"><table><thead><tr><th>${tr('Период')}</th>${names.map((nm, i) => html`<th class="num" key=${i}>${nm}</th>`)}<th class="num">${tr('Показаний')}</th><th></th></tr></thead><tbody>
+      ${[...data].reverse().map((b) => html`<tr key=${b.key}><td>${b.title}</td>${names.map((_, i) => html`<td class="num" key=${i}>${cell(b, i)}</td>`)}
+        <td class="num">${b.n}</td><td>${off(b) ? '⚠ ' + (statusLabel[off(b)] || '') : ''}</td></tr>`)}
+    </tbody></table></div>` : html`
+    <div class="fchart-box" ref=${box} onPointerLeave=${() => setTip(null)}>
+      <svg viewBox=${`0 0 ${W} ${height}`} preserveAspectRatio="none" class="fchart-svg" style=${{ height: height + 'px' }} role="img" aria-label=${label}>
+        ${ranges.map((r, i) => (r ? html`<rect key=${'n' + i} class="norm-band" x=${PAD.l} width=${iw} y=${y(r.max ?? hi)} height=${Math.max(0, y(r.min ?? lo) - y(r.max ?? hi))}/>` : null))}
+        ${tk.map((v) => html`<line key=${'g' + v} class="grid" x1=${PAD.l} x2=${W - PAD.r} y1=${y(v)} y2=${y(v)}/>`)}
+        ${buckets.map((b, k) => names.map((_, i) => (b.min[i] != null && b.max[i] != null && b.max[i] > b.min[i]
+          ? html`<line key=${'w' + k + ':' + i} class="whisker" stroke=${SERIES[i]} x1=${cx(k)} x2=${cx(k)} y1=${y(b.max[i])} y2=${y(b.min[i])}/>` : null)))}
+        ${names.flatMap((_, i) => segments(i).map((pts, j) => (pts.length > 1 ? html`<polyline key=${'l' + i + ':' + j} class="series-line" stroke=${SERIES[i]} points=${pts.join(' ')}/>` : null)))}
+        ${buckets.map((b, k) => html`<rect key=${'h' + b.key} class="hit" x=${PAD.l + slot * k} y=${PAD.t} width=${slot} height=${ih}
+          onPointerEnter=${() => show(k)} onPointerDown=${() => show(k)}/>`)}
+      </svg>
+      ${buckets.flatMap((b, k) => b.avg.map((v, i) => (Number.isFinite(v) ? html`<i key=${k + ':' + i} class=${'fchart-dot' + (off(b) ? ' off-norm' : '')}
+        style=${{ left: (cx(k) / W) * 100 + '%', top: (y(v) / height) * 100 + '%', background: SERIES[i] }}></i>` : null)))}
+      <div class="fchart-axis-y">${tk.map((v) => html`<span key=${v} style=${{ top: (y(v) / height) * 100 + '%' }}>${f(v)}</span>`)}</div>
+      <div class="fchart-axis-x">${buckets.map((b, k) => (k % labelEvery === 0 ? html`<span key=${b.key} style=${{ left: (cx(k) / W) * 100 + '%' }}>${b.label}</span>` : null))}</div>
       <${Tip} tip=${tip}/>
     </div>`}
   </div>`;

@@ -8,6 +8,7 @@ import { Icon } from './icons.js';
 import { useStore, useRoute, useMedia, readLocal, writeLocal } from './hooks.js';
 import { navigate, goBack, setBasePath, closeTask, currentTaskId, currentFoodId } from './router.js';
 import { SheetHost } from './components/Sheets.js';
+import { PANEL_SHEETS, SheetPanelCtx } from './components/Sheet.js';
 import { QuickAddHost } from './components/QuickAdd.js';
 import { DialogHost, Snackbar, Banner } from './components/Overlays.js';
 import { TodayScreen } from './screens/Today.js';
@@ -197,6 +198,8 @@ export function App() {
     ? '?' + new URLSearchParams(lastBase.current.query) : ''));
 
   const panel = wide && isCard;
+  // 0.14.1: лист записи или рациона на широком экране — панелью справа (дневник остаётся рядом, как у задач)
+  const sheetSide = wide && !panel && PANEL_SHEETS.includes(store.ui.sheet?.type);
   const base = panel ? lastBase.current : route;
   // Открытое приложение следует за экраном (общие экраны — настройки, журнал — остаются в текущем)
   followRoute(appOfRoute(route.name === 'food' ? 'food' : base.name));
@@ -361,7 +364,7 @@ export function App() {
   const wideContent = ['tasks', 'archive', 'trash', 'settings', 'foods'].includes(base.name);
 
   return html`
-    <div class=${'app' + (panel ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + position
+    <div class=${'app' + (panel || sheetSide ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + position
       + (base.name === 'village' && villageOn() ? ' village-mode' : '')
       + (villageOn() && (base.name === 'village' || getPrefs().villageBackdrop !== false) ? ' village-bg-on' : '')}>
       <${VillageHost} route=${base}/><${AchievementToast}/><${SkillToast}/>
@@ -384,8 +387,9 @@ export function App() {
           ${route.name === 'food' ? html`<${FoodCard} key=${route.param} id=${route.param} panel onClose=${closeTask}/>`
             : html`<${TaskScreen} key=${route.param} taskId=${route.param} panel onClose=${closeTask}/>`}
         </aside>` : null}
+      ${sheetSide ? html`<aside class="task-panel sheet-side"><${SheetPanelCtx.Provider} value=${true}><${SheetHost} panel side/><//></aside>` : null}
       <${QuickAddHost}/>
-      <${SheetHost}/>
+      <${SheetHost} side=${sheetSide}/>
       <${StartScreen}/>
       <${RedirectingScreen}/>
       <${DialogHost}/>

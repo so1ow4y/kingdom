@@ -7,7 +7,7 @@
 // (у количества — одной единицы); вкладка «Замеры» (#/nutrition/measures) — показания с нормой и журнал.
 
 import { html, useState, useMemo } from '../html.js';
-import { CalorieChart, LineChart, MacroSplitBar, StackedBars, ReadingsChart, SERIES } from '../components/FeastCharts.js';
+import { CalorieChart, LineChart, MacroSplitBar, StackedBars, ReadingsChart, ReadingBucketsChart, SERIES } from '../components/FeastCharts.js';
 import { openAddFood } from '../components/AddFood.js';
 import { TimeWindow, windowLabel, regroupAnchor } from '../components/TimeWindow.js';
 import * as TW from '../../core/timeWindow.js';
@@ -274,12 +274,28 @@ function MedsTab() {
  * Вкладка «Замеры» (0.13): показания выбранного замера за период — график с нормой, последнее, среднее, разброс,
  * сколько вне нормы, журнал (с едой и лекарствами той же записи).
  */
+const M_GROUPS = [['raw', tr('Показания')], ['hour', tr('По часам')], ['day', tr('По дням')], ['month', tr('По месяцам')], ['year', tr('По годам')]];
+const M_GROUP_TITLE = { raw: '', hour: tr('по часам суток'), day: tr('по дням'), month: tr('по месяцам'), year: tr('по годам') };
+
 function MeasuresTab() {
   const { period, setPeriod, from, today } = usePeriod();
   const [pick, setPick] = useState(null);
+  // 0.14.1: как у лекарств — показания как есть или средние по часам, дням, месяцам, годам; за период или конкретную
+  // неделю, день, год (показать врачу)
+  const [group, setGroupState] = useState('raw');
+  const [anchor, setAnchor] = useState(null);
+  const setGroup = (g) => {
+    setAnchor(regroupAnchor(group, anchor, g, today));
+    setGroupState(g);
+  };
+  const win = anchor ? TW.windowRange(group, anchor) : null;
   const st = useMemo(() => F.measureStats(store.feast, from, today), [store.version, from, today]);
+  const ws = useMemo(() => (win ? F.measureStats(store.feast, win.from, win.to) : st), [st, win?.from, win?.to]);
   const catalog = [...store.feast.foods.values()].filter((f) => !f.deletedAt && F.isMeasure(f));
-  const sel = st.types.find((t) => t.key === pick) || st.types[0] || null;
+  const types = [...st.types, ...ws.types.filter((t) => !st.types.some((x) => x.key === t.key))];
+  const selKey = (types.find((t) => t.key === pick) || types[0])?.key;
+  const sel = !selKey ? null : ws.types.find((t) => t.key === selKey)
+    || { ...types.find((t) => t.key === selKey), readings: [], last: null, stat: [], count: 0 };
   const type = sel ? store.feast.foods.get(sel.key) : null;
   const parts = type?.parts?.length ? type.parts : [];
   const ranges = type?.ranges || [];
@@ -288,6 +304,13 @@ function MeasuresTab() {
   const unit = sel?.unit ? tr(sel.unit) : '';
   const fv = (v) => (v == null ? '—' : dec(r2(v)));
   const log = sel ? [...sel.readings].reverse().slice(0, 80) : [];
+  const nParts = Math.max(1, parts.length, ...(sel?.readings || []).map((r) => r.values.length));
+  const buckets = useMemo(() => {
+    if (!sel || group === 'raw') return null;
+    const raw = M.readingBuckets({ readings: sel.readings, from: win ? win.from : from, to: win ? win.to : today, group, parts: nParts });
+    return win ? raw : TW.trimLead(raw.map((b) => ({ ...b, values: { n: b.n } })), group);
+  }, [sel, group, win?.from, from, today, nParts]);
+  const wl = win ? ' · ' + windowLabel(group, anchor, today) : '';
   return html`
     <${PeriodChips} period=${period} setPeriod=${setPeriod}/>
     <div class="page-actions meds-actions">
@@ -297,21 +320,28 @@ function MeasuresTab() {
     ${!sel ? html`<div class="card-block"><p class="muted">${catalog.length
       ? tr('За этот период замеров нет. Записывай их в «Дневнике» — отдельно или вместе с едой и лекарствами.')
       : tr('Замеров пока нет. Добавь известный (глюкоза, давление, пульс…) или свой в «Замерах» — и записывай показания в «Дневнике».')}</p></div>` : html`
-      ${st.types.length > 1 ? html`<${Chips} label=${tr('Замер')} value=${sel.key} onChange=${setPick} list=${st.types.map((t) => [t.key, (store.feast.foods.get(t.key)?.icon || '📏') + ' ' + t.name])}/>` : null}
+      ${types.length > 1 ? html`<${Chips} label=${tr('Замер')} value=${sel.key} onChange=${setPick} list=${types.map((t) => [t.key, (store.feast.foods.get(t.key)?.icon || '📏') + ' ' + t.name])}/>` : null}
+      <div class="med-controls">
+        <${Chips} label=${tr('Группировка')} value=${group} onChange=${setGroup} list=${M_GROUPS}/>
+      </div>
+      <${TimeWindow} group=${group} anchor=${anchor} setAnchor=${setAnchor} today=${today}/>
       <div class="stat-tiles">
-        <div class="stat-tile"><span>Последнее</span><b>${sel.last ? sel.last.values.map(fv).join('/') : '—'} <small>${unit}</small></b>
+        <div class="stat-tile"><span>${win ? tr('Последнее · {w}', { w: windowLabel(group, anchor, today) }) : tr('Последнее')}</span><b>${sel.last ? sel.last.values.map(fv).join('/') : '—'} <small>${unit}</small></b>
           <small>${sel.last ? whenLabel(sel.last.date + ' ' + (sel.last.time || ''), today) : ''}</small></div>
         <div class="stat-tile"><span>Среднее</span><b>${sel.stat.map((s) => fv(s?.avg)).join('/')} <small>${unit}</small></b><small>${countLabel(sel.count, ['показание', 'показания', 'показаний'])}</small></div>
         <div class="stat-tile"><span>Разброс</span><b class="tile-text">${sel.stat.map((s) => (s ? `${fv(s.min)}–${fv(s.max)}` : '—')).join(' / ')}</b><small>мин–макс</small></div>
         <div class="stat-tile"><span>Вне нормы</span><b>${ranges.some(Boolean) ? (off ? '⚠ ' + off : '0') : '—'}</b><small>${ranges.some(Boolean) ? tr('норма {p0}', { p0: M.normText(type) }) : tr('норма не задана')}</small></div>
       </div>
       <section class="card-block">
-        <h2 class="block-title">${sel.name}${unit ? ', ' + unit : ''}</h2>
-        <${ReadingsChart} readings=${sel.readings} parts=${parts} ranges=${ranges} unit=${unit} label=${sel.name}
-          statusOf=${statusOf} statusLabel=${M.STATUS_LABEL}/>
+        <h2 class="block-title">${sel.name}${unit ? ', ' + unit : ''}${group !== 'raw' ? ' · ' + tr('среднее') + ' ' + M_GROUP_TITLE[group] : ''}${wl}</h2>
+        ${!sel.readings.length ? html`<p class="muted">${tr('В это время показаний нет — листай стрелками.')}</p>`
+          : group === 'raw' ? html`<${ReadingsChart} readings=${sel.readings} parts=${parts} ranges=${ranges} unit=${unit} label=${sel.name}
+          statusOf=${statusOf} statusLabel=${M.STATUS_LABEL}/>` : html`<${ReadingBucketsChart} buckets=${buckets} parts=${parts} ranges=${ranges} unit=${unit} label=${sel.name}
+          statusOf=${statusOf} statusLabel=${M.STATUS_LABEL}/>`}
+        ${group === 'hour' ? html`<p class="muted small">${win ? tr('Показания этого дня по часу замера.') : tr('Среднее за период по часу замера — видно, в какое время суток значения выше; показания без времени не учитываются.')}</p>` : null}
       </section>
       <section class="card-block">
-        <h2 class="block-title">Журнал · ${sel.name}</h2>
+        <h2 class="block-title">Журнал · ${sel.name}${wl}</h2>
         ${log.map((r, i) => {
           const s = statusOf(r.values);
           return html`<button type="button" class="med-log-row" key=${i} disabled=${!r.entryId} onClick=${() => r.entryId && openSheet('entry', { id: r.entryId })}>

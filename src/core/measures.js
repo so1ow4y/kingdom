@@ -3,6 +3,7 @@
 // и нормой; показание — элемент записи дневника (kind: 'measure', values). Чистые функции.
 
 import { num } from './nutrition.js';
+import { bucketSkeleton, bucketKey } from './timeWindow.js';
 import { tr, dec } from './i18n.js';
 
 export const MEASURE_UNIT_MAX = 24;
@@ -110,3 +111,28 @@ export const STATUS_LABEL = { low: tr('ниже нормы'), high: tr('выше
 
 /** Шаблон по ключу известного замера. */
 export const presetOf = (key) => MEASURE_PRESETS.find((p) => p.key === key) || null;
+
+/**
+ * Показания по корзинам (0.14.1, «для врача»): по часам суток, дням, месяцам или годам — по каждой части значения
+ * среднее, минимум и максимум, сколько показаний. readings — [{ date, time, values }] (по часам — только со временем).
+ * → [{ key, label, title, n, avg: [], min: [], max: [] }] — все корзины окна (пустые — n = 0).
+ */
+export function readingBuckets({ readings = [], from, to, group = 'day', parts = 1 }) {
+  const list = bucketSkeleton(from, to, group).map((b) => ({ ...b, n: 0, sum: Array(parts).fill(0), cnt: Array(parts).fill(0),
+    min: Array(parts).fill(null), max: Array(parts).fill(null) }));
+  const by = new Map(list.map((b) => [b.key, b]));
+  for (const r of readings) {
+    const b = by.get(bucketKey(group, r.date, r.time));
+    if (!b) continue;
+    b.n++;
+    for (let i = 0; i < parts; i++) {
+      const v = r.values?.[i];
+      if (!Number.isFinite(v)) continue;
+      b.sum[i] += v;
+      b.cnt[i]++;
+      b.min[i] = b.min[i] == null ? v : Math.min(b.min[i], v);
+      b.max[i] = b.max[i] == null ? v : Math.max(b.max[i], v);
+    }
+  }
+  return list.map(({ sum, cnt, ...b }) => ({ ...b, avg: sum.map((s, i) => (cnt[i] ? Math.round((s / cnt[i]) * 100) / 100 : null)) }));
+}

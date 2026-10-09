@@ -12,6 +12,8 @@ import { Link, navigate } from '../router.js';
 import * as FA from '../../store/feastActions.js';
 import * as F from '../../core/feast.js';
 import { humanDate } from '../../core/dates.js';
+import { entryNutrients, nv, fmt } from '../../core/nutrition.js';
+import { openAddFood } from './AddFood.js';
 import { tr } from '../../core/i18n.js';
 
 const ICONS = ['🌅', '☕', '🍳', '🥪', '🍲', '🥗', '🍝', '🍵', '🍪', '🍎', '🥤', '🏋️', '🌙', '🍷', '🍽️'];
@@ -23,6 +25,43 @@ const focusOnce = (el) => {
   }
 };
 const dayLabel = (date) => humanDate(date, store.now.today).toLowerCase();
+
+/**
+ * Подсказка ко времени рациона (0.14.1): какие записи «Записать еду» сама положит сюда (время записи можно поменять).
+ */
+function timeHint(info) {
+  if (info.kind === 'hours') return tr('Необязательно. Пока время не задано ни у одного рациона, «Записать еду» выбирает по часам: завтрак с 4 до 11, обед до 16, ужин до 21, ночью — перекус.');
+  if (info.kind === 'manual') return tr('Без времени этот рацион сам не выбирается: у других время задано — сюда записи попадут, только если выбрать его вручную.');
+  if (info.kind === 'all') return tr('Время задано только у этого рациона — «Записать еду» будет класть сюда все новые записи. Задай время и другим рационам.');
+  return info.overnight
+    ? tr('Записи с {from} до полуночи и ночью до {to} «Записать еду» сама положит сюда, с {to} — в «{next}». Рацион можно сменить при записи.', info)
+    : tr('Записи с {from} до {to} «Записать еду» сама положит сюда, с {to} — в «{next}». Рацион можно сменить при записи.', info);
+}
+
+/**
+ * Записать в этот рацион прямо из его листа (0.14.1): продукт, лекарство, замер, заметка; записи рациона за день.
+ */
+function MealDay({ meal, date }) {
+  const list = (F.dayEntries(store.feast, date)[meal.id] || []).slice().sort((a, b) => ((a.time || '') < (b.time || '') ? -1 : 1));
+  const ro = readOnly();
+  const add = (opts) => openAddFood({ date, meal: meal.id, ...opts });
+  return html`<section class="meal-day">
+    <h3 class="set-sub">${tr('Записать в рацион · {day}', { day: dayLabel(date) })}</h3>
+    <div class="chip-row wrap meal-day-add">
+      <button type="button" class="btn small primary" disabled=${ro} onClick=${() => add({})}><${Icon} name="plus" size=${14}/> ${tr('Продукт')}</button>
+      <button type="button" class="btn small" disabled=${ro} onClick=${() => add({ kind: 'med' })}>💊 ${tr('Лекарство')}</button>
+      <button type="button" class="btn small" disabled=${ro} onClick=${() => add({ kind: 'measure' })}>📏 ${tr('Замер')}</button>
+      <button type="button" class="btn small" disabled=${ro} onClick=${() => add({ note: true })}>📝 ${tr('Заметка')}</button>
+      <button type="button" class="btn small" disabled=${ro} onClick=${() => openSheet('mealNote', { date, meal: meal.id })}>
+        <${Icon} name="edit" size=${14}/> ${F.mealNoteOf(store.feast, date, meal.id) ? tr('Заметка к рациону') : tr('Заметка ко всему рациону')}</button>
+    </div>
+    ${list.length ? html`<ul class="meal-day-list">${list.map((e) => html`<li key=${e.id}>
+      <button type="button" class="link-row" onClick=${() => openSheet('entry', { id: e.id })}>
+        <span class="muted">${e.time || '—'}</span><span class="mdl-title">${F.entryTitle(e)}</span>
+        <b>${F.hasFood(e) ? fmt(nv(entryNutrients(e), 'kcal'), 'kcal') : ''}</b>
+      </button></li>`)}</ul>` : html`<p class="muted small">${tr('Записей в этом рационе пока нет.')}</p>`}
+  </section>`;
+}
 
 /** Список рационов для выбора места: рационы дня или общие. */
 const placeList = (date) => (date ? F.mealsForDay(store.feast, date).filter((m) => !m.missing) : F.globalMeals(store.feast));
@@ -63,7 +102,7 @@ export function MealForm({ id = null, date = null, afterId, onDone = () => {}, i
       </div>
       <div class="field"><span>Время</span>
         <${TimeInput} value=${time} onChange=${setTime} label="Время рациона"/>
-        <small class="muted">Необязательно. Если у рационов есть время, «Записать еду» сама выберет нужный по часам.</small>
+        <small class="muted meal-time-hint">${timeHint(F.mealTimeInfo(store.feast, meal?.date || date || store.now.today, id, time))}</small>
       </div>
       ${!meal && date ? html`
         <div class="field"><span>Где</span>
@@ -106,7 +145,9 @@ export function MealSheet({ id = null, date = null, afterId }) {
   const meal = id ? store.feast.meals.get(id) : null;
   if (id && (!meal || meal.deletedAt)) return null;
   return html`
-    <${Sheet} title=${meal ? tr('Рацион') : tr('Новый рацион')} onClose=${closeSheet} className="meal-sheet">
+    <${Sheet} title=${meal ? `${meal.icon} ${F.mealName(meal)}` : tr('Новый рацион')} onClose=${closeSheet} className="meal-sheet">
+      ${meal ? html`<${MealDay} meal=${meal} date=${meal.date || date || store.now.today}/>` : null}
+      ${meal ? html`<h3 class="set-sub">${tr('Настройки рациона')}</h3>` : null}
       <${MealForm} id=${id} date=${date} afterId=${afterId} onDone=${closeSheet}/>
     <//>`;
 }

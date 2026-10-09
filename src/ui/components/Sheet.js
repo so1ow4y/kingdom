@@ -1,11 +1,25 @@
-import { html } from '../html.js';
+import { html, createContext, useContext } from '../html.js';
 import { Icon } from '../icons.js';
+
+/** Листы записи и рациона на широком экране — панелью справа, как карточка задачи (0.14.1). */
+export const PANEL_SHEETS = ['entry', 'meal', 'mealNote'];
+export const SheetPanelCtx = createContext(false);
 
 /**
  * Нижняя панель на телефоне, диалог по центру на компьютере.
  * anchor (DOMRect кнопки) — на компьютере вместо диалога выпадающий список под кнопкой.
  */
 export function Sheet({ title, onClose, children, className = '', anchor = null }) {
+  if (useContext(SheetPanelCtx)) {
+    return html`
+      <div class=${'sheet-panel ' + className} role="region" aria-label=${title}>
+        <header class="sheet-head">
+          <h2>${title}</h2>
+          <button class="icon-btn" onClick=${onClose} aria-label="Закрыть"><${Icon} name="close"/></button>
+        </header>
+        <div class="sheet-body">${children}</div>
+      </div>`;
+  }
   if (anchor && matchMedia('(min-width: 900px)').matches) {
     const width = 320;
     const left = Math.max(8, Math.min(anchor.left, innerWidth - width - 8));
