@@ -51,7 +51,8 @@ export const LEGACY_ENTRY_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrien
 // order — порядок продуктов в записи (как добавляли), дробный ключ
 // note (0.12.4) — заметка к продукту в записи (например, сколько единиц инсулина); kind (0.12.5) — 'med' у лекарства
 // values (0.13) — значения замера по частям (у давления два), amount = первое значение (для старых версий)
-export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'note', 'kind', 'values', 'deletedAt'];
+// count (0.14.4) — сколько одинаковых порций: amount и rewards — уже общие (40 г × 3 = 120 г), так старые версии считают верно
+export const ITEM_FIELDS = ['foodId', 'name', 'amount', 'unit', 'nutrients', 'rewards', 'order', 'note', 'kind', 'values', 'count', 'deletedAt'];
 export const MEAL_FIELDS = ['name', 'icon', 'time', 'order', 'date', 'archived', 'deletedAt'];
 export const MEAL_NOTE_FIELDS = ['date', 'meal', 'text', 'deletedAt'];
 // 0.13: ещё обхваты — грудь, бицепс, бедро (для фигуры)
@@ -450,7 +451,7 @@ export function mealStats(data, mealId, from, to) {
     for (const it of entryItems(e)) {
       const key = it.foodId || 'quick:' + it.name;
       const f = foods.get(key) || { key, foodId: it.foodId || null, name: it.name, count: 0, kcal: 0 };
-      f.count++;
+      f.count += itemCount(it);
       f.kcal += nv(itemNutrients(it), 'kcal');
       foods.set(key, f);
     }
@@ -495,7 +496,7 @@ function nestedItem(fields, ctx) {
  * amount в граммах/мл. Быстрая запись без продукта — unit 'portion', amount — число порций, значения — на порцию.
  * snapshot — копия продукта другой записи («как вчера»).
  */
-export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null, note = null, med = null, measure = null, values = null }) {
+export function itemFields({ food = null, amount, quick = null, snapshot = null, rewards = null, note = null, med = null, measure = null, values = null, count = 1 }) {
   // награда — снимок на момент записи (правка продукта или настроек прошлые записи не меняет); заметка — если есть
   const text = cleanNote(note ?? snapshot?.note ?? '').trim() ? cleanNote(note ?? snapshot?.note) : '';
   const withRewards = (f, r) => {
@@ -526,13 +527,17 @@ export function itemFields({ food = null, amount, quick = null, snapshot = null,
       foodId: snapshot.foodId ?? null, name: normalizeName(snapshot.name) || tr('Запись'),
       amount: num(snapshot.amount), unit: ['g', 'ml', 'portion'].includes(snapshot.unit) ? snapshot.unit : 'g',
       nutrients: cleanNutrients(snapshot.nutrients || {}),
+      ...(itemCount(snapshot) > 1 && snapshot.unit !== 'portion' ? { count: itemCount(snapshot) } : {}),
     }, rewards ?? snapshot.rewards);
   }
   if (food) {
+    // 0.14.4: amount — одна порция, count — сколько их; хранится общее количество и награда за все порции
+    const k = cleanCount(count);
     return withRewards({
       foodId: food.id, name: food.name + (food.brand ? ` (${food.brand})` : ''),
-      amount: num(amount) || 100, unit: food.unit === 'ml' ? 'ml' : 'g', nutrients: cleanNutrients(food.nutrients),
-    }, rewards);
+      amount: Math.round((num(amount) || 100) * k * 1000) / 1000, unit: food.unit === 'ml' ? 'ml' : 'g', nutrients: cleanNutrients(food.nutrients),
+      ...(k > 1 ? { count: k } : {}),
+    }, k > 1 ? mulRewards(rewards, k) : rewards);
   }
   return withRewards({
     foodId: null, name: normalizeName(quick?.name) || tr('Быстрая запись'),
@@ -568,7 +573,7 @@ const cleanMealId = (m) => (typeof m === 'string' && m && m.length <= 64 ? m : '
 export function newEntry({ date, meal, time = null, note = '', notes = null, items = null, food = null, amount, quick = null }, ctx) {
   const specs = items || [{ food, amount, quick }];
   const orders = nextOrders(null, specs.length);
-  const list = specs.map((x, i) => newItem(x, ctx, orders[i])).sort((a, b) => (a.id < b.id ? -1 : 1));
+  const list = glueNew([], specs.map((x, i) => newItem(x, ctx, orders[i]))).sort((a, b) => (a.id < b.id ? -1 : 1));
   const texts = (notes || [note]).map(cleanNote).filter((t) => t.trim());
   let e = create(uuidv7(ctx.now), {
     date, meal: cleanMealId(meal), time: cleanTime(time), note: texts[0] || '', items: list,
@@ -615,11 +620,18 @@ export function upgradeEntry(e, ctx) {
 
 /** Добавить продукты в запись. */
 export function addItems(e, specs, ctx) {
-  const base = upgradeEntry(e, ctx);
+  let base = upgradeEntry(e, ctx);
   const last = (base.items || []).map((x) => x.order).filter(Boolean).sort().at(-1) || null;
   const orders = nextOrders(last, specs.length);
-  const added = specs.map((x, i) => newItem(x, ctx, orders[i]));
-  return { ...base, items: [...base.items, ...added].sort((a, b) => (a.id < b.id ? -1 : 1)), updatedAt: iso(ctx), updatedBy: ctx.deviceId };
+  const fresh = [];
+  // 0.14.4: такой же продукт с той же порцией уже есть — прибавить к нему (× N), а не добавлять строку
+  for (const a of glueNew([], specs.map((x, i) => newItem(x, ctx, orders[i])))) {
+    const key = sameKey(a);
+    const t = key && entryItems(base).find((x) => sameKey(x) === key);
+    if (t) base = touchNested(base, 'items', t.id, glued(t, a), ctx);
+    else fresh.push(a);
+  }
+  return { ...base, items: [...base.items, ...fresh].sort((a, b) => (a.id < b.id ? -1 : 1)), updatedAt: iso(ctx), updatedBy: ctx.deviceId };
 }
 
 /** Заметка к продукту в записи (0.12.4); пустая — убрать. */
@@ -799,11 +811,11 @@ export function foodUsage(data) {
     for (const it of entryItems(e)) {
       if (!it.foodId) continue;
       const u = out.get(it.foodId) || { count: 0, last: '', amount: 0 };
-      u.count++;
+      u.count += itemCount(it);
       const when = e.date + (e.time || '') + e.createdAt;
       if (when > u.last) {
         u.last = when;
-        u.amount = it.amount;
+        u.amount = portionAmount(it); // одна порция (0.14.4)
       }
       out.set(it.foodId, u);
     }
@@ -903,7 +915,7 @@ export function archiveFor(date, entries, prev, ctx) {
       }
       const key = it.foodId || 'quick:' + it.name;
       const f = foods[key] || (foods[key] = { name: it.name, count: 0, kcal: 0 });
-      f.count++;
+      f.count += itemCount(it);
       f.kcal = Math.round(f.kcal + nv(itemNutrients(it), 'kcal'));
     }
   }
@@ -1085,7 +1097,7 @@ export function periodStats(data, from, to, goal) {
   };
   for (const e of data.entries.values()) {
     if (!isLiveEntry(e) || e.date < from || e.date > to) continue;
-    for (const it of entryItems(e)) if (!isMed(it)) add(it.foodId || 'quick:' + it.name, it.name, nv(itemNutrients(it), 'kcal'), 1);
+    for (const it of entryItems(e)) if (!isMed(it) && !isMeasure(it)) add(it.foodId || 'quick:' + it.name, it.name, nv(itemNutrients(it), 'kcal'), itemCount(it));
   }
   for (const a of data.dayArchive.values()) {
     if (a.deletedAt || a.date < from || a.date > to) continue;
@@ -1195,4 +1207,84 @@ export function mealTimeInfo(data, date, mealId, time) {
   const i = timed.findIndex((m) => m.id === (mealId || '__new'));
   const next = timed[(i + 1) % timed.length];
   return { kind: 'range', from: time, to: next.time, next: mealName(next), overnight: i === timed.length - 1 };
+}
+
+// ---------- Несколько одинаковых порций (0.14.4) ----------
+
+export const COUNT_MAX = 99;
+/** Множитель порций: целое 1…99. */
+export const cleanCount = (v) => Math.max(1, Math.min(COUNT_MAX, Math.round(num(v) || 1)));
+/** Сколько порций в продукте записи (нет поля — одна). */
+export const itemCount = (it) => (Number.isInteger(it?.count) && it.count > 1 ? it.count : 1);
+/** Одна порция: amount — общее количество. */
+export const portionAmount = (it) => Math.round(((num(it?.amount) || 0) / itemCount(it)) * 1000) / 1000;
+const mulRewards = (r, k) => (r ? Object.fromEntries(REWARD_KEYS.filter((x) => num(r[x])).map((x) => [x, Math.round(num(r[x]) * k * 1000) / 1000])) : r);
+/** Награда за k порций. */
+export const scaleRewards = (r, k) => mulRewards(r, k);
+const sumRewards = (a, b) => {
+  if (!hasRewards(a) && !hasRewards(b)) return a || b || undefined;
+  const acc = addRewardsMilli(addRewardsMilli(zeroMilli(), a), b);
+  return Object.fromEntries(Object.entries(fromMilli(acc)).filter(([, v]) => v > 0));
+};
+
+/**
+ * «Одинаковые» продукты записи: тот же продукт из каталога, та же порция, единица и заметка. Лекарства, замеры и быстрые
+ * записи не склеиваются. → строка-ключ или null.
+ */
+export function sameKey(it) {
+  if (!it || it.deletedAt || isMed(it) || isMeasure(it) || !it.foodId || it.unit === 'portion') return null;
+  return [it.foodId, it.unit, Math.round(portionAmount(it) * 1000), (it.note || '').trim()].join('|');
+}
+
+/** Поля продукта t после прибавления a: порции, количество и награды складываются. */
+function glued(t, a) {
+  const out = { count: itemCount(t) + itemCount(a), amount: Math.round((num(t.amount) + num(a.amount)) * 1000) / 1000 };
+  const r = sumRewards(t.rewards, a.rewards);
+  if (r) out.rewards = r;
+  return out;
+}
+
+/** Склеить одинаковые среди новых продуктов (ещё не в записи). */
+function glueNew(kept, list) {
+  const out = [...kept];
+  for (const a of list) {
+    const key = sameKey(a);
+    const i = key ? out.findIndex((x) => sameKey(x) === key) : -1;
+    if (i >= 0) out[i] = { ...out[i], ...glued(out[i], a) };
+    else out.push(a);
+  }
+  return out;
+}
+
+/** Склеить одинаковые продукты уже в записи (при сохранении): остаётся первый по порядку, остальные — надгробия. */
+export function glueItems(e, ctx) {
+  let base = upgradeEntry(e, ctx);
+  const seen = new Map();
+  let changed = false;
+  for (const it of entryItems(base)) {
+    const key = sameKey(it);
+    if (!key) continue;
+    const t = seen.get(key);
+    if (!t) {
+      seen.set(key, it);
+      continue;
+    }
+    const next = glued(t, it);
+    base = removeNested(touchNested(base, 'items', t.id, next, ctx), 'items', it.id, ctx);
+    seen.set(key, { ...t, ...next });
+    changed = true;
+  }
+  return changed ? base : e;
+}
+
+/** Сколько порций (× N): количество и награда пересчитываются от одной порции. */
+export function setItemCount(e, itemId, count, ctx) {
+  const base = upgradeEntry(e, ctx);
+  const it = entryItems(base).find((x) => x.id === itemId);
+  if (!it || isMed(it) || isMeasure(it) || it.unit === 'portion') return e;
+  const k = cleanCount(count);
+  if (k === itemCount(it)) return e;
+  const changes = { count: k, amount: Math.round(portionAmount(it) * k * 1000) / 1000 };
+  if (it.rewards) changes.rewards = mulRewards(it.rewards, k / itemCount(it));
+  return touchNested(base, 'items', itemId, changes, ctx);
 }

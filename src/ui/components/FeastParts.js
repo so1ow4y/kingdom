@@ -275,3 +275,15 @@ export function itemDisplay() {
   const p = getPrefs().feastItems || {};
   return { grouped: p.grouped !== false, wrap: p.names === 'wrap' };
 }
+
+/** Сколько одинаковых порций (0.14.4): «× [−] 3 [+]», 1…99. */
+export function CountStepper({ value = 1, onChange, disabled = false, label = tr('Сколько порций') }) {
+  const k = Math.max(1, Math.round(+value || 1));
+  const set = (v) => onChange(Math.max(1, Math.min(F.COUNT_MAX, Math.round(+String(v).replace(',', '.') || 1))));
+  return html`<span class="count-stepper" role="group" aria-label=${label} title=${label}>
+    <span class="cs-x" aria-hidden="true">×</span>
+    <button type="button" class="icon-btn small" disabled=${disabled || k <= 1} aria-label=${tr('Меньше порций')} onClick=${() => set(k - 1)}><${Icon} name="minus" size=${14}/></button>
+    <input inputmode="numeric" value=${k} disabled=${disabled} aria-label=${label} onChange=${(e) => set(e.target.value)}/>
+    <button type="button" class="icon-btn small" disabled=${disabled || k >= F.COUNT_MAX} aria-label=${tr('Больше порций')} onClick=${() => set(k + 1)}><${Icon} name="plus" size=${14}/></button>
+  </span>`;
+}

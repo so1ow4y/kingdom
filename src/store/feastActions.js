@@ -298,7 +298,7 @@ function itemSpecs(items) {
       }
       // лекарство (0.12.5) — без наград
       if (F.isMed(food)) out.push({ med: food, amount: it.amount, note: it.note });
-      else out.push({ food, amount: it.amount, note: it.note, rewards: boosted(F.rewardsOf(food, s)) });
+      else out.push({ food, amount: it.amount, count: it.count, note: it.note, rewards: boosted(F.rewardsOf(food, s)) });
     } else if (it.quick) {
       const n = it.quick.nutrients || {};
       if (num(n.kcal) || num(n.protein) || num(n.fat) || num(n.carbs)) out.push({ quick: it.quick, amount: it.amount, note: it.note, rewards: boosted(F.rewardDefaults(s)) });
@@ -391,7 +391,7 @@ export async function addToEntry(id, items) {
 /**
  * entryNotes (0.12.5) — заметки записи: { edits: { id: текст } (пусто — убрать), added: [текст] }.
  */
-export async function saveEntry(id, { amounts = {}, values = {}, notes = {}, removed = [], entryNotes = null, ...fields }) {
+export async function saveEntry(id, { amounts = {}, counts = {}, values = {}, notes = {}, removed = [], entryNotes = null, ...fields }) {
   const c = changeEntry(id, (e, c0) => {
     let next = F.editEntry(e, fields, c0);
     if (entryNotes) {
@@ -401,9 +401,12 @@ export async function saveEntry(id, { amounts = {}, values = {}, notes = {}, rem
       }
       for (const text of entryNotes.added || []) next = F.addEntryNote(next, text, c0);
     }
+    // 0.14.4: сначала сколько порций, потом одна порция (amounts — на одну порцию)
+    for (const [itemId, k] of Object.entries(counts)) next = F.setItemCount(next, itemId, k, c0);
     for (const [itemId, a] of Object.entries(amounts)) {
       const it = (next.items || []).find((x) => x.id === itemId);
-      if (it && !it.deletedAt && num(a) && num(a) !== it.amount) next = F.setItemAmount(next, itemId, a, c0);
+      const total = it ? Math.round(num(a) * F.itemCount(it) * 1000) / 1000 : 0;
+      if (it && !it.deletedAt && num(a) && total !== it.amount) next = F.setItemAmount(next, itemId, total, c0);
     }
     for (const [itemId, vs] of Object.entries(values)) {
       const it = (next.items || []).find((x) => x.id === itemId);
@@ -414,7 +417,7 @@ export async function saveEntry(id, { amounts = {}, values = {}, notes = {}, rem
       if (it && !it.deletedAt && (it.note || '') !== String(text || '')) next = F.setItemNote(next, itemId, text, c0);
     }
     for (const itemId of removed) next = F.removeItem(next, itemId, c0);
-    return next;
+    return F.glueItems(next, c0); // одинаковые продукты — в один (× N)
   });
   if (!c) return false;
   // без продуктов и без заметок запись не нужна (0.13: заметка без продуктов — тоже запись)

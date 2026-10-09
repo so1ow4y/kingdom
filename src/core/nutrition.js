@@ -192,6 +192,8 @@ export function amountLabel(e) {
   if (e?.kind === 'measure') return `${(Array.isArray(e.values) ? e.values : [e.amount]).map((v) => (v == null ? '—' : fmt(v, 'x'))).join('/')}${e.unit ? ' ' + tr(e.unit) : ''}`;
   const a = Number.isFinite(e?.amount) ? e.amount : 0;
   if (e?.unit === 'portion') return a === 1 ? tr('1 порция') : tr('{p0} порц.', { p0: fmt(a, 'x') });
+  // 0.14.4: несколько одинаковых порций — «40 г × 3» (× 1 не показывается)
+  if (Number.isInteger(e?.count) && e.count > 1 && !MED_UNIT[e.unit]) return `${fmt(a / e.count, 'x')} ${e.unit === 'ml' ? tr('мл') : tr('г')} × ${e.count}`;
   if (MED_UNIT[e?.unit]) return `${fmt(a, 'x')} ${MED_UNIT[e.unit].short}`;
   return `${fmt(a, 'x')} ${e?.unit === 'ml' ? tr('мл') : tr('г')}`;
 }

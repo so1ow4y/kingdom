@@ -2143,3 +2143,13 @@ body.entry-dragging, body.entry-dragging * { cursor: grabbing !important; user-s
 .sortable.item-edit-list > .sortable-item { list-style: none; }
 .er-item-wrap.drop-before, .er-main.drop-before { box-shadow: 0 -2px 0 0 var(--accent); }
 .er-item-wrap.drop-after, .er-main.drop-after { box-shadow: 0 2px 0 0 var(--accent); }
+/* ---------- 0.14.4: несколько одинаковых порций ---------- */
+.count-stepper { display: inline-flex; flex: none; align-items: center; gap: 2px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 12px; background: var(--surface-2); }
+.count-stepper .cs-x { padding: 0 2px 0 4px; color: var(--muted); font-weight: 600; }
+.count-stepper input { width: 34px; padding: 4px 0; border: 0; background: transparent; color: var(--text); font: inherit; font-weight: 600; text-align: center; }
+.count-stepper .icon-btn.small { min-width: 30px; height: 30px; }
+.ie-qty { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.ie-qty .num-field { flex: 1 1 110px; max-width: 180px; }
+.aa-qty { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
+.aa-qty .aa-amount { flex: 1 1 180px; }
+.aa-qty .count-stepper { margin-bottom: 4px; }

@@ -823,3 +823,45 @@ test('Порядок продуктов в записи (0.14.2): замеры �
   assert.equal(names(F.entryItems(res.to)), 'Котлеты, Чай, Рис', 'перед рисом');
   assert.equal(F.itemRank(F.entryItems(e).find((it) => it.name === 'Глюкоза')), 0);
 });
+
+test('Несколько порций (0.14.4): × N, одинаковые продукты склеиваются, старые версии видят общее количество', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  const syr = put(d, 'foods', F.newFood({ name: 'Сырок', nutrients: { kcal: 407 }, rewards: { xp: 1, coins: 0.2, gems: 0 } }, c));
+  const tv = put(d, 'foods', F.newFood({ name: 'Творог', nutrients: { kcal: 99 } }, c));
+  const ins = F.newFood({ kind: 'med', name: 'Инсулин', unit: 'iu', dose: 2 }, c);
+  const r = F.rewardsOf(syr, d.settings);
+  // «× 3» при записи: общее количество и награда — за три
+  let e = F.newEntry({ date: TODAY, meal: 'dinner', items: [{ food: syr, amount: 40, count: 3, rewards: r }] }, c);
+  let [it] = F.entryItems(e);
+  assert.deepEqual([it.amount, it.count, it.rewards], [120, 3, { xp: 3, coins: 0.6 }]);
+  assert.equal(F.portionAmount(it), 40);
+  assert.equal(N.amountLabel(it), '40 г × 3');
+  assert.equal(Math.round(nv(entryNutrients(e), 'kcal')), 488, 'старые версии считают по amount — тоже 488');
+  // тот же сырок с той же порцией — прибавляется к строке
+  e = F.addItems(e, [{ food: syr, amount: 40, rewards: r }, { food: tv, amount: 200 }, { med: ins, amount: 2 }, { med: ins, amount: 2 }], c);
+  const names = F.entryItems(e).map((x) => `${x.name} ${x.amount}×${F.itemCount(x)}`);
+  assert.deepEqual(names, ['Сырок 160×4', 'Творог 200×1', 'Инсулин 2×1', 'Инсулин 2×1'], 'лекарства не склеиваются');
+  assert.deepEqual(F.entryItems(e)[0].rewards, { xp: 4, coins: 0.8 });
+  // другая порция или заметка — отдельно
+  e = F.addItems(e, [{ food: syr, amount: 50 }, { food: syr, amount: 40, note: 'после тренировки' }], c);
+  assert.equal(F.entryItems(e).filter((x) => x.name === 'Сырок').length, 3);
+  assert.equal(N.amountLabel(F.entryItems(e).find((x) => x.amount === 50)), '50 г', '× 1 не показывается');
+  // в одной новой записи — сразу склеиваются
+  const fresh = F.newEntry({ date: TODAY, meal: 'snack', items: [{ food: syr, amount: 40 }, { food: syr, amount: 40 }] }, c);
+  assert.deepEqual(F.entryItems(fresh).map((x) => [x.amount, x.count]), [[80, 2]]);
+  // старая запись с тремя одинаковыми строками — склеивается при сохранении
+  const one = F.newEntry({ date: TODAY, meal: 'snack', items: [{ food: syr, amount: 40, rewards: r }] }, c);
+  const b0 = one.items[0];
+  const legacy = { ...one, items: [b0, { ...b0, id: b0.id.slice(0, -1) + 'x', order: b0.order + 'V' }, { ...b0, id: b0.id.slice(0, -1) + 'y', order: b0.order + 'W' }] };
+  const glued = F.glueItems(legacy, c);
+  assert.deepEqual(F.entryItems(glued).map((x) => [x.amount, F.itemCount(x), x.rewards]), [[120, 3, { xp: 3, coins: 0.6 }]]);
+  assert.equal(F.glueItems(glued, c), glued, 'уже склеено — без изменений');
+  // поменять число порций — количество и награда от одной порции
+  const two = F.setItemCount(glued, F.entryItems(glued)[0].id, 2, c);
+  assert.deepEqual([F.entryItems(two)[0].amount, F.entryItems(two)[0].count, F.entryItems(two)[0].rewards], [80, 2, { xp: 2, coins: 0.4 }]);
+  assert.equal(F.cleanCount(500), F.COUNT_MAX);
+  // для «Частых» — одна порция
+  put(d, 'entries', two);
+  assert.equal(F.foodUsage(d).get(syr.id).amount, 40);
+});

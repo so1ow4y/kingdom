@@ -2868,4 +2868,8 @@ export default {
   "Частично — сколько помещается": "Partly — as much as fits",
   "С переносом — целиком": "Wrapped — in full",
   "В дневнике, в записи и при записи еды. Только для этого устройства.": "In the diary, in an entry and when logging food. This device only.",
+  "Сколько порций по {p0} {u}": "How many servings of {p0} {u}",
+  "Сколько порций": "How many servings",
+  "Меньше порций": "Fewer servings",
+  "Больше порций": "More servings",
 };

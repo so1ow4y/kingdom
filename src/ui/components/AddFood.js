@@ -11,7 +11,7 @@ import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { Sheet } from './Sheet.js';
 import { BarcodeScanner } from './Scanner.js';
-import { MealChips, macroLine, NutrientEditor, NumField, rewardLine, IconPicker, itemDisplay } from './FeastParts.js';
+import { MealChips, macroLine, NutrientEditor, NumField, rewardLine, IconPicker, itemDisplay, CountStepper } from './FeastParts.js';
 import { SortableList, DragHandle } from './Sortable.js';
 import { TimeInput } from './TimeInput.js';
 import { store, closeSheet, openSheet, showSnackbar } from '../../store/appState.js';
@@ -92,15 +92,28 @@ function basketNutrients(it) {
   if (it.quick) return scaleNutrients(it.quick.nutrients || {}, it.amount || 1);
   const f = store.feast.foods.get(it.foodId);
   if (!f || F.isMeasure(f)) return {};
-  // лекарство (0.13): значения на 1 единицу формы
-  return scaleNutrients(f.nutrients || {}, F.isMed(f) ? it.amount || 0 : (it.amount || 0) / 100);
+  // лекарство (0.13): значения на 1 единицу формы; продукт — на 100 г × порций (0.14.4)
+  return scaleNutrients(f.nutrients || {}, F.isMed(f) ? it.amount || 0 : ((it.amount || 0) * (it.count || 1)) / 100);
+}
+
+/** Тот же продукт с той же порцией уже в корзине — прибавить порцию (× N), а не новую строку (0.14.4). */
+function mergeBasket(list, items) {
+  const out = [...list];
+  const plain = (x) => !x.quick && !x.values && x.foodId && !(x.note || '').trim()
+    && !F.isMed(store.feast.foods.get(x.foodId)) && !F.isMeasure(store.feast.foods.get(x.foodId));
+  for (const it of items) {
+    const i = plain(it) ? out.findIndex((x) => plain(x) && x.foodId === it.foodId && x.amount === it.amount) : -1;
+    if (i >= 0) out[i] = { ...out[i], count: (out[i].count || 1) + (it.count || 1) };
+    else out.push(it);
+  }
+  return out;
 }
 const basketFood = (it) => (it.quick ? null : store.feast.foods.get(it.foodId));
 const kindIcon = (f) => (F.kindIcon(f) ? F.kindIcon(f) + ' ' : '');
 const basketName = (it) => (it.quick ? it.quick.name || tr('Быстрая запись') : kindIcon(basketFood(it)) + (basketFood(it)?.name || tr('Продукт')));
 const basketAmount = (it) => (it.quick ? amountLabel({ unit: 'portion', amount: it.amount || 1 })
   : F.isMeasure(basketFood(it)) ? MS.readingText({ values: it.values, unit: basketFood(it).unit })
-    : amountLabel({ unit: basketFood(it)?.unit, amount: it.amount }));
+    : amountLabel({ unit: basketFood(it)?.unit, amount: (it.amount || 0) * (it.count || 1), count: it.count || 1 }));
 const itemReady = (it) => (it.values ? !!MS.cleanValues(it.values, it.values.length) : !!it.amount);
 
 /** Поля значения замера: по одному на часть (у давления — верхнее и нижнее). values — строки. */
@@ -248,16 +261,18 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
   const serving = servings[0]?.size ?? null;
   const usage = F.foodUsage(store.feast).get(food.id);
   const [amount, setAmount] = useState(dec(usage?.amount ?? (med ? food.dose || 1 : serving ?? 100)));
+  const [count, setCount] = useState(1);
   const [itemNote, setItemNote] = useState('');
   const [noteOpen, setNoteOpen] = useState(false);
   const [picked, setPicked] = useState(() => Object.fromEntries((food.meds || []).map((l) => [l.medId, l.amount])));
   const [measureValues, setMeasureValues] = useState({});
   const a = num(amount);
-  const n = scaleNutrients(food.nutrients || {}, med ? a : a / 100);
+  const k = med ? 1 : count;
+  const n = scaleNutrients(food.nutrients || {}, med ? a : (a * k) / 100);
   const presets = med ? [...new Set([food.dose || 1, 1, 2, 4, 6, 8, 10].filter(Boolean))].slice(0, 7)
     : [50, 100, 150, 200, 250].filter((p) => !servings.some((s) => s.size === p));
   const items = () => [
-    { key: ++basketKey, foodId: food.id, amount: a, note: itemNote },
+    { key: ++basketKey, foodId: food.id, amount: a, ...(k > 1 ? { count: k } : {}), note: itemNote },
     ...Object.entries(picked).filter(([, v]) => num(v)).map(([medId, v]) => ({ key: ++basketKey, foodId: medId, amount: num(v) })),
     ...Object.entries(measureValues).map(([measureId, vs]) => ({ key: ++basketKey, foodId: measureId, values: MS.cleanValues(vs, vs.length) })).filter((x) => x.values),
   ];
@@ -270,11 +285,14 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
       <button type="button" class="link-btn" onClick=${() => { closeSheet(); openFood(food.id); }}>Карточка</button>
     </div>
     ${food.note ? html`<p class="muted small aa-food-note">📝 ${food.note}</p>` : null}
-    <label class="num-field big aa-amount">
-      <span class="nf-label">${med ? tr('Доза') : tr('Сколько')}</span>
-      <span class="nf-box"><input inputmode="decimal" value=${amount} ref=${focusOnce} onInput=${(e) => setAmount(e.target.value)}
-        onKeyDown=${(e) => e.key === 'Enter' && save()}/><small>${u}</small></span>
-    </label>
+    <div class="aa-qty">
+      <label class="num-field big aa-amount">
+        <span class="nf-label">${med ? tr('Доза') : tr('Сколько')}</span>
+        <span class="nf-box"><input inputmode="decimal" value=${amount} ref=${focusOnce} onInput=${(e) => setAmount(e.target.value)}
+          onKeyDown=${(e) => e.key === 'Enter' && save()}/><small>${u}</small></span>
+      </label>
+      ${med ? null : html`<${CountStepper} value=${count} onChange=${setCount} label=${tr('Сколько порций по {p0} {u}', { p0: fmt(a, 'x'), u })}/>`}
+    </div>
     <div class="chip-row wrap">
       ${servings.map((s) => html`<button type="button" key=${'s' + s.id} class=${'chip serving-chip' + (a === s.size ? ' selected' : '')} onClick=${() => setAmount(dec(s.size))}>
         ${s.name || tr('Порция')} <small>${fmt(s.size, 'x')} ${u}</small></button>`)}
@@ -289,7 +307,7 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
     <div class="aa-total">
       ${med ? html`<b>${F.kindIcon(food)} ${amountLabel({ unit: food.unit, amount: a })}</b>${Object.keys(n).length ? html`<span class="muted">${fmt(nv(n, 'kcal'), 'kcal')} ккал · ${macroLine(n)}</span>` : null}` : html`<b>${fmt(nv(n, 'kcal'), 'kcal')} ккал</b>
       <span class="muted">${macroLine(n)}</span>
-      ${store.data.settings?.gameEnabled ? html`<span class="muted">Награда: ${rewardLine(F.rewardsOf(food, store.feast.settings)) || tr('нет')}</span>` : null}`}
+      ${store.data.settings?.gameEnabled ? html`<span class="muted">Награда: ${rewardLine(F.scaleRewards(F.rewardsOf(food, store.feast.settings), k)) || tr('нет')}</span>` : null}`}
       ${total !== null ? html`<span class="muted">Вся запись: ${countLabel(basket.length + 1, ['позиция', 'позиции', 'позиций'])} · ${fmt(total, 'kcal')} ккал</span>` : null}
       ${entryMode ? null : html`<span class="muted">${humanDate(meta.date, store.now.today)} · ${meta.time || ''} · ${F.mealName(F.mealInfo(store.feast, meta.meal))}</span>`}
     </div>
@@ -433,14 +451,16 @@ function QuickStep({ meta, entryMode, onBack, onAdd, onSave }) {
 /** Шаг «Запись»: собранные продукты и лекарства (количество можно поправить), время, рацион, заметки. */
 function ReviewStep({ basket, setBasket, meta, entryMode, onMore, onSave }) {
   const setAmount = (key, v) => setBasket(basket.map((it) => (it.key === key ? { ...it, amount: num(v) } : it)));
+  const setCount = (key, v) => setBasket(basket.map((it) => (it.key === key ? { ...it, count: v } : it)));
+  const countable = (it) => !it.quick && !it.values && !F.isMed(basketFood(it)) && !F.isMeasure(basketFood(it));
   const setNote = (key, v) => setBasket(basket.map((it) => (it.key === key ? { ...it, note: v } : it)));
   const total = sumNutrients(basket.map(basketNutrients));
   return html`<div class="add-review">
     <ul class=${'item-edit-list' + (itemDisplay().wrap ? ' names-wrap' : '')}>
       ${basket.map((it) => html`<li key=${it.key} class="item-edit">
         <span class="ie-name">${basketName(it)}</span>
-        ${it.values ? html`<span class="ie-values">${basketAmount(it)}</span>` : html`<${NumField} label="Сколько" value=${it.amount} unit=${it.quick ? tr('порц.') : unitLabel(basketFood(it))}
-          onCommit=${(v) => setAmount(it.key, v)}/>`}
+        ${it.values ? html`<span class="ie-values">${basketAmount(it)}</span>` : html`<div class="ie-qty"><${NumField} label="Сколько" value=${it.amount} unit=${it.quick ? tr('порц.') : unitLabel(basketFood(it))}
+          onCommit=${(v) => setAmount(it.key, v)}/>${countable(it) ? html`<${CountStepper} value=${it.count || 1} onChange=${(v) => setCount(it.key, v)}/>` : null}</div>`}
         <b class="ie-kcal">${F.isMeasure(basketFood(it)) ? '' : F.isMed(basketFood(it)) && !nv(basketNutrients(it), 'kcal') ? F.kindIcon(basketFood(it)) : fmt(nv(basketNutrients(it), 'kcal'), 'kcal')}</b>
         <button type="button" class="icon-btn small" aria-label=${tr('Убрать ') + basketName(it)} onClick=${() => setBasket(basket.filter((x) => x.key !== it.key))}>
           <${Icon} name="close" size=${16}/></button>
@@ -498,12 +518,12 @@ export function AddFoodSheet({ date = store.now.today, meal: initialMeal = null,
     }
   };
   const add = (items) => {
-    setBasket([...basket, ...items]);
+    setBasket(mergeBasket(basket, items));
     setQ('');
     setStep('pick');
   };
   const save = async (items) => {
-    const all = (items ? [...basket, ...items] : basket).filter(itemReady);
+    const all = (items ? mergeBasket(basket, items) : basket).filter(itemReady);
     // 0.13: без продуктов — запись-заметка (если заметка есть)
     if (!all.length && !(items && !items.length && notes.some((n) => n.text.trim()))) return;
     const clean = all.map(({ key, ...rest }) => rest);
@@ -576,7 +596,9 @@ export function EntrySheet({ id }) {
   const disp = itemDisplay();
   // 0.14.2: в том же порядке, что и в дневнике; ⋮⋮ — переставить
   const items = e && !e.deletedAt ? F.displayItems(e, disp.grouped) : [];
-  const [amounts, setAmounts] = useState(() => Object.fromEntries(items.map((it) => [it.id, it.amount])));
+  // 0.14.4: количество — на одну порцию, рядом — сколько порций (× N)
+  const [amounts, setAmounts] = useState(() => Object.fromEntries(items.map((it) => [it.id, F.portionAmount(it)])));
+  const [counts, setCounts] = useState(() => Object.fromEntries(items.map((it) => [it.id, F.itemCount(it)])));
   const [vals, setVals] = useState(() => Object.fromEntries(items.filter(F.isMeasure).map((it) => [it.id, (it.values || [it.amount]).map((v) => (v == null ? '' : dec(v)))])));
   const [notes, setNotes] = useState(() => Object.fromEntries(items.map((it) => [it.id, it.note || ''])));
   const [entryNotes, setEntryNotes] = useState(() => F.entryNoteList(e).map((n) => ({ key: n.id, id: n.id, text: n.text })));
@@ -586,8 +608,11 @@ export function EntrySheet({ id }) {
   const [time, setTime] = useState(e?.time || null);
   if (!e || e.deletedAt) return null;
   const live = items.filter((it) => !removed.includes(it.id));
-  const amountOf = (it) => (it.id in amounts ? amounts[it.id] : it.amount);
-  const preview = sumNutrients(live.map((it) => itemNutrients({ ...it, amount: amountOf(it) })));
+  const amountOf = (it) => (it.id in amounts ? amounts[it.id] : F.portionAmount(it));
+  const countable = (it) => !F.isMed(it) && !F.isMeasure(it) && it.unit !== 'portion';
+  const countOf = (it) => (countable(it) ? counts[it.id] ?? F.itemCount(it) : 1);
+  const totalOf = (it) => Math.round((num(amountOf(it)) || 0) * countOf(it) * 1000) / 1000;
+  const preview = sumNutrients(live.map((it) => itemNutrients({ ...it, amount: totalOf(it) })));
   const noteChanges = () => {
     const before = F.entryNoteList(e);
     const edits = {};
@@ -601,6 +626,7 @@ export function EntrySheet({ id }) {
   };
   const valuesOf = (it) => MS.cleanValues(vals[it.id], (vals[it.id] || []).length);
   const changes = () => ({ meal, time, amounts: Object.fromEntries(live.filter((it) => !F.isMeasure(it)).map((it) => [it.id, amountOf(it)])),
+    counts: Object.fromEntries(live.filter(countable).map((it) => [it.id, countOf(it)])),
     values: Object.fromEntries(live.filter(F.isMeasure).map((it) => [it.id, valuesOf(it)]).filter(([, v]) => v)),
     notes: Object.fromEntries(live.map((it) => [it.id, notes[it.id] ?? ''])), removed, entryNotes: noteChanges() });
   const save = async () => {
@@ -634,9 +660,10 @@ export function EntrySheet({ id }) {
           <span class="ie-name" title=${it.name}>${F.isMed(it) || F.isMeasure(it) ? html`<span class="ie-icon">${F.kindIcon(foodOf(it)) || F.kindIcon(it)}</span>` : null}${foodOf(it)
             ? html`<button type="button" class="link-btn ie-title" onClick=${() => { closeSheet(); openFood(it.foodId); }}>${it.name}</button>` : html`<span class="ie-title">${it.name}</span>`}</span>
           ${F.isMeasure(it) ? html`<${MeasureInputs} m=${foodOf(it) || { name: it.name, unit: it.unit, parts: (it.values || []).length > 1 ? it.values.map((_, i) => tr('Значение {n}', { n: i + 1 })) : [] }}
-            values=${vals[it.id] || ['']} setValues=${(v) => setVals({ ...vals, [it.id]: v })}/>` : html`<${NumField} label=${it.unit === 'portion' ? tr('Порций') : F.isMed(it) ? tr('Доза') : tr('Сколько')} value=${amountOf(it)} unit=${unitOf(it)}
-            onCommit=${(v) => setAmounts({ ...amounts, [it.id]: num(v) })}/>`}
-          <b class="ie-kcal">${F.isMed(it) || F.isMeasure(it) ? '' : fmt(nv(itemNutrients({ ...it, amount: amountOf(it) }), 'kcal'), 'kcal')}</b>
+            values=${vals[it.id] || ['']} setValues=${(v) => setVals({ ...vals, [it.id]: v })}/>` : html`<div class="ie-qty"><${NumField} label=${it.unit === 'portion' ? tr('Порций') : F.isMed(it) ? tr('Доза') : tr('Сколько')} value=${amountOf(it)} unit=${unitOf(it)}
+            onCommit=${(v) => setAmounts({ ...amounts, [it.id]: num(v) })}/>${countable(it) ? html`<${CountStepper} value=${countOf(it)} disabled=${readOnly()}
+            onChange=${(v) => setCounts({ ...counts, [it.id]: v })}/>` : null}</div>`}
+          <b class="ie-kcal">${F.isMed(it) || F.isMeasure(it) ? '' : fmt(nv(itemNutrients({ ...it, amount: totalOf(it) }), 'kcal'), 'kcal')}</b>
           <button type="button" class=${'icon-btn small' + (moving === it.id ? ' active' : '')} aria-label=${tr('Перенести в другую запись: ') + it.name} title=${tr('Перенести в другую запись')}
             aria-expanded=${moving === it.id} disabled=${readOnly() || (!others.length && live.length < 2)} onClick=${() => setMoving(moving === it.id ? null : it.id)}><${Icon} name="move" size=${16}/></button>
           <button type="button" class="icon-btn small" aria-label=${tr('Убрать из записи: ') + it.name} disabled=${readOnly()}

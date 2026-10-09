@@ -6,6 +6,7 @@ Live: https://so1ow4y.github.io/kingdom/
 
 ## What's inside (version 0.14)
 
+- **Several servings (0.14.4):** a food in an entry can be multiplied — "40 g × 3" (× 1 is not shown). Logging the same food with the same serving into an entry adds to it instead of a new line; old entries with identical lines are merged when saved. The total amount and rewards are stored, so older versions count calories correctly.
 - **Product button in the diary (0.14.3):** the row above the meals now starts with "Product" — it opens "Log food" with the food list, next to Scan, Medicine, Measurement, Note and Meal.
 - **Order inside an entry (0.14.2):** measurements are shown on top, food in the middle and medicines at the bottom (a setting, on by default); within each group the order is yours — drag items by ⋮⋮ up or down in the diary or in the entry sheet, or drop them at a specific place in another entry. Long item names are shown partly (as much as fits) or wrapped in full — another setting; the entry sheet now gives names their own row, so medicine names are always visible.
 - **Moving items between entries, measurement periods, side panel (0.14.1):** drag one food, medicine or measurement by its ⋮⋮ handle onto another diary entry to make it part of that entry (with its time and meal), or onto a meal to make it a separate entry; an entry left with nothing in it is removed, and Undo puts everything back. On a phone the same works from the entry sheet ("Move to…"). Measurement analytics can show readings as they are or the average with min–max by hour of day, day, month or year — for the whole period or a specific week, day or year, with a table view for the doctor. On wide screens the entry and meal sheets open as a panel on the right, like the task card. The meal sheet can log food, medicines, measurements and notes straight into that meal and explains what its time means (entries from this time until the next meal's time go here automatically).
@@ -46,7 +47,7 @@ Google sign-in works only on origins registered for the OAuth client (`http://lo
 ## Release and deploy
 
 ```
-python tools/release.py 0.14.3
+python tools/release.py 0.14.4
 git push origin main
 ```
 
