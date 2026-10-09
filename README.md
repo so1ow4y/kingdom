@@ -6,6 +6,7 @@ Live: https://so1ow4y.github.io/kingdom/
 
 ## What's inside (version 0.14)
 
+- **Product button in the diary (0.14.3):** the row above the meals now starts with "Product" — it opens "Log food" with the food list, next to Scan, Medicine, Measurement, Note and Meal.
 - **Order inside an entry (0.14.2):** measurements are shown on top, food in the middle and medicines at the bottom (a setting, on by default); within each group the order is yours — drag items by ⋮⋮ up or down in the diary or in the entry sheet, or drop them at a specific place in another entry. Long item names are shown partly (as much as fits) or wrapped in full — another setting; the entry sheet now gives names their own row, so medicine names are always visible.
 - **Moving items between entries, measurement periods, side panel (0.14.1):** drag one food, medicine or measurement by its ⋮⋮ handle onto another diary entry to make it part of that entry (with its time and meal), or onto a meal to make it a separate entry; an entry left with nothing in it is removed, and Undo puts everything back. On a phone the same works from the entry sheet ("Move to…"). Measurement analytics can show readings as they are or the average with min–max by hour of day, day, month or year — for the whole period or a specific week, day or year, with a table view for the doctor. On wide screens the entry and meal sheets open as a panel on the right, like the task card. The meal sheet can log food, medicines, measurements and notes straight into that meal and explains what its time means (entries from this time until the next meal's time go here automatically).
 - **Servings, trash and analytics over time (0.14):** a product can have any number of your own servings ("glass", "spoon", "pack"), offered as chips when logging; calories are checked against protein, fat and carbs (filled in automatically when missing, with a warning and a one-tap fix when they don't match); the brand field moved below the note. Medicines and measurements can have their own icon (colored circles, syringes, pills…) shown everywhere. The diary has the add buttons above the meals and "Vitamins and minerals" at the bottom. Crimson Harvest got a **Trash**: deleted entries, foods, medicines, measurements, weigh-ins and meals can be restored for a configurable number of days (synced between devices). Medicine charts can show one specific day (by hour), week (by day) or year (by month) with ‹ › arrows. History retention: diary entries and statistics older than N days can be removed (coins and 💎 earned for food stay); for tasks — a retention period for completed tasks (their statistics, levels and achievements stay), and the task trash period is typed in by hand. Chronicle analytics is its own dock branch with a new **Over time** tab like the medicines one: completed tasks by hour, day, month or year, by list or priority side by side, for the period or a specific day/week/year, with a completed log. The "Calculate" button now sits under the calorie limit field.
@@ -45,7 +46,7 @@ Google sign-in works only on origins registered for the OAuth client (`http://lo
 ## Release and deploy
 
 ```
-python tools/release.py 0.14.2
+python tools/release.py 0.14.3
 git push origin main
 ```
 

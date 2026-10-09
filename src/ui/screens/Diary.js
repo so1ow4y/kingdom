@@ -152,6 +152,7 @@ export function DiaryScreen({ query = {} }) {
       <div class="form-actions wrap diary-add">
         ${!day.count && prevCount ? html`<button type="button" class="btn" disabled=${readOnly}
           onClick=${() => FA.copyEntries(yesterday, date)}><${Icon} name="copy2" size=${16}/> Как ${humanDate(yesterday, store.now.today).toLowerCase()}: ${countLabel(prevCount, ['запись', 'записи', 'записей'])}</button>` : null}
+        <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'food' })}><${Icon} name="food" size=${16}/> Продукт</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, scan: true })}><${Icon} name="barcode" size=${16}/> Сканировать</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'med' })}>💊 Лекарство</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'measure' })}>📏 Замер</button>
