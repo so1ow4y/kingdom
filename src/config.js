@@ -44,6 +44,11 @@ export const RETENTION = {
   completedMin: 100,
   completedMax: 10000,
   keepRecentDays: 7, // выполненные за последние 7 дней не удаляются никогда
+  // 0.14: срок хранения выполненных и их статистики, дней (null — всегда); корзина — 1…365 дней
+  historyMin: 7,
+  historyMax: 36500,
+  trashMin: 1,
+  trashMax: 365,
 };
 
 // Feast (0.11): лимит записей дневника — старые дни удаляются, их итоги остаются сводками (DATA_FORMAT §19).
@@ -52,6 +57,12 @@ export const FEAST_RETENTION = {
   entryMin: 500,
   entryMax: 50000,
   keepRecentDays: 30, // записи последних 30 дней не удаляются никогда
+  // 0.14: корзина (удалённое можно вернуть N дней) и срок хранения истории дневника и статистики (null — всегда)
+  trashDefault: 30,
+  trashMin: 1,
+  trashMax: 365,
+  historyMin: 30,
+  historyMax: 36500,
 };
 
 export const DRIVE_QUOTA_URL = 'https://console.cloud.google.com/apis/api/drive.googleapis.com/quotas';

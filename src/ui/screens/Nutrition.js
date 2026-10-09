@@ -9,7 +9,10 @@
 import { html, useState, useMemo } from '../html.js';
 import { CalorieChart, LineChart, MacroSplitBar, StackedBars, ReadingsChart, SERIES } from '../components/FeastCharts.js';
 import { openAddFood } from '../components/AddFood.js';
+import { TimeWindow, windowLabel, regroupAnchor } from '../components/TimeWindow.js';
+import * as TW from '../../core/timeWindow.js';
 import { MACRO_COLOR, Meter, feastGoals } from '../components/FeastParts.js';
+import { FeastHistorySection } from '../components/FeastSettings.js';
 import { bodyState, bodyFatSeries, CompositionCard, WeightCard } from './Body.js';
 import { navigate } from '../router.js';
 import { readLocal, writeLocal } from '../hooks.js';
@@ -96,7 +99,8 @@ function FoodTab() {
       <div class="foods-tops">
         <${FoodTop} kcal title="Больше всего калорий дали" list=${st.topByKcal} value=${(f) => f.kcal}/>
         <${FoodTop} title="Чаще всего в дневнике" list=${st.topByCount} value=${(f) => f.count}/>
-      </div>`}`;
+      </div>`}
+    <${FeastHistorySection}/>`;
 }
 
 const timesLabel = (n) => countLabel(n, ['приём', 'приёма', 'приёмов']);
@@ -106,22 +110,17 @@ const whenLabel = (last, today) => {
 };
 const unitShort = (u) => MED_UNIT[u]?.short || u || '';
 const GROUPS = [['hour', tr('По часам')], ['day', tr('По дням')], ['month', tr('По месяцам')], ['year', tr('По годам')]];
-// пустые столбики в начале периода не показываем (у «по дням» — не меньше недели): видны сами приёмы
-const MIN_BUCKETS = { day: 7, month: 3, year: 1 };
-function trimLead(list, group) {
-  if (group === 'hour') return list;
-  const first = list.findIndex((b) => Object.values(b.values).some(Boolean));
-  if (first < 0) return list.slice(-MIN_BUCKETS[group]);
-  return list.slice(Math.max(0, Math.min(first, list.length - MIN_BUCKETS[group])));
-}
 const METRICS = [['count', tr('Приёмы')], ['amount', tr('Количество')]];
 const r2 = (v) => Math.round(v * 100) / 100;
 
-/** Цвет лекарства — по его месту в списке всех лекарств по названию (не меняется при фильтрах). */
+/** Цвет лекарства — по его месту в списке всех лекарств по названию (не меняется при фильтрах и окне графика). */
 function colorMap(meds) {
-  const keys = [...meds].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((m) => m.key);
+  const byKey = new Map(meds.map((m) => [m.key, m]));
+  const keys = [...byKey.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru')).map((m) => m.key);
   return (key) => SERIES[Math.max(0, keys.indexOf(key)) % SERIES.length];
 }
+/** Значок лекарства в аналитике (0.14 — свой у каждого). */
+const medIcon = (key) => F.kindIcon(store.feast.foods.get(key)) || '💊';
 
 function Chips({ list, value, onChange, label }) {
   return html`<div class="chip-row wrap" role="tablist" aria-label=${label}>
@@ -137,8 +136,13 @@ function Chips({ list, value, onChange, label }) {
 function MedsTab() {
   const { period, setPeriod, from, today } = usePeriod();
   const [pick, setPick] = useState('all');
-  // группировка всегда открывается «по дням»; что считать — запоминается
-  const [group, setGroup] = useState('day');
+  // группировка всегда открывается «по дням»; что считать — запоминается; окно графика (0.14) — день, неделя, год
+  const [group, setGroupState] = useState('day');
+  const [anchor, setAnchor] = useState(null);
+  const setGroup = (g) => {
+    setAnchor(regroupAnchor(group, anchor, g, today));
+    setGroupState(g);
+  };
   const [metric, setMetricState] = useState(() => readLocal('feastMedMetric', 'count'));
   const [unitPick, setUnitPick] = useState(null);
   const setMetric = (m) => {
@@ -148,13 +152,17 @@ function MedsTab() {
   const st = useMemo(() => F.medStats(store.feast, from, today), [store.version, from, today]);
   const catalog = [...store.feast.foods.values()].filter((f) => !f.deletedAt && F.isMed(f));
   const span = daysBetween(from, today) + 1;
+  const win = anchor ? TW.windowRange(group, anchor) : null;
+  // график окна (конкретный день, неделя, год) считается отдельно; плитки, сравнение и журнал — за период
+  const cs = useMemo(() => (win ? F.medStats(store.feast, win.from, win.to) : st), [st, win?.from, win?.to]);
   const sel = st.meds.find((m) => m.key === pick) || null;
-  const color = colorMap(st.meds);
-  // единицы, которые есть за период: у «Количества» по всем — только лекарства одной единицы
-  const units = [...new Set(st.meds.map((m) => m.unit))];
-  const unit = sel ? sel.unit : unitPick && units.includes(unitPick) ? unitPick : (st.meds.find((m) => m.amount) || st.meds[0])?.unit;
+  const color = colorMap([...catalog.map((f) => ({ key: f.id, name: f.name })), ...st.meds, ...cs.meds]);
+  // единицы, которые есть на графике: у «Количества» по всем — только лекарства одной единицы
+  const units = [...new Set(cs.meds.map((m) => m.unit))];
+  const unit = sel ? sel.unit : unitPick && units.includes(unitPick) ? unitPick : (cs.meds.find((m) => m.amount) || cs.meds[0] || st.meds[0])?.unit;
+  const selInWin = sel ? cs.meds.find((m) => m.key === sel.key) || { ...sel, count: 0, amount: 0 } : null;
   // порядок рядов — по названию, как и цвета: соседние части столбика — соседние цвета палитры
-  let shown = (sel ? [sel] : metric === 'amount' ? st.meds.filter((m) => m.unit === unit) : st.meds).slice().sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  let shown = (selInWin ? [selInWin] : metric === 'amount' ? cs.meds.filter((m) => m.unit === unit) : cs.meds).slice().sort((a, b) => a.name.localeCompare(b.name, 'ru'));
   // больше 8 рядов — остальные в «Другое»
   let series = shown.map((m) => ({ key: m.key, label: m.name, color: color(m.key), unit: m.unit }));
   let fold = null;
@@ -165,7 +173,8 @@ function MedsTab() {
   }
   const buckets = useMemo(() => {
     const keys = shown.map((m) => m.key);
-    const list = trimLead(F.medBuckets({ log: st.log, extra: st.extra, from, to: today, group, metric, keys }), group);
+    const raw = F.medBuckets({ log: cs.log, extra: cs.extra, from: win ? win.from : from, to: win ? win.to : today, group, metric, keys });
+    const list = win ? raw : TW.trimLead(raw, group);
     if (!fold) return list;
     return list.map((b) => {
       const values = { ...b.values };
@@ -175,7 +184,7 @@ function MedsTab() {
       }
       return { ...b, values };
     });
-  }, [st, from, today, group, metric, shown.map((m) => m.key).join()]);
+  }, [cs, from, today, group, metric, win?.from, shown.map((m) => m.key).join()]);
   const fmtValue = (v, s) => (metric === 'amount' ? `${dec(r2(v))} ${unitShort(s?.unit || unit)}` : timesLabel(v));
   const groupTitle = { day: tr('по дням'), month: tr('по месяцам'), hour: tr('по часам суток'), year: tr('по годам') }[group];
   const log = (sel ? st.log.filter((l) => l.key === sel.key) : st.log).slice(0, 60);
@@ -210,20 +219,23 @@ function MedsTab() {
             <small>${st.log[0]?.name || ''}</small></div>`}
       </div>
       <section class="card-block">
-        <h2 class="block-title">${metric === 'amount' ? tr('Количество') : tr('Приёмы')} ${groupTitle}</h2>
+        <h2 class="block-title">${metric === 'amount' ? tr('Количество') : tr('Приёмы')} ${groupTitle}${win ? ' · ' + windowLabel(group, anchor, today) : ''}</h2>
         ${st.meds.length > 1 ? html`<${Chips} label=${tr('Лекарство')} value=${sel ? sel.key : 'all'} onChange=${setPick}
-          list=${[['all', tr('Все')], ...st.meds.map((m) => [m.key, '💊 ' + m.name])]}/>` : null}
+          list=${[['all', tr('Все')], ...st.meds.map((m) => [m.key, medIcon(m.key) + ' ' + m.name])]}/>` : null}
         <div class="med-controls">
           <${Chips} label=${tr('Группировка')} value=${group} onChange=${setGroup} list=${GROUPS}/>
           <${Chips} label=${tr('Что считать')} value=${metric} onChange=${setMetric} list=${METRICS}/>
         </div>
+        <${TimeWindow} group=${group} anchor=${anchor} setAnchor=${setAnchor} today=${today}/>
         ${!sel && metric === 'amount' && units.length > 1 ? html`<div class="med-units">
           <span class="muted small">${tr('В чём показывать:')}</span>
           <${Chips} label=${tr('Единица')} value=${unit} onChange=${setUnitPick} list=${units.map((u) => [u, unitShort(u)])}/>
         </div>` : null}
-        <${StackedBars} buckets=${buckets} series=${series} fmtValue=${fmtValue} grouped=${series.length > 1}
+        <${StackedBars} buckets=${buckets} series=${series} fmtValue=${fmtValue} grouped=${series.length > 1} integer=${metric === 'count'}
           label=${(metric === 'amount' ? tr('Количество') : tr('Приёмы')) + ' ' + groupTitle}/>
-        ${group === 'hour' ? html`<p class="muted small">${tr('Сумма за период по часу приёма; приёмы без времени и старые дни из сводок не учитываются.')}</p>` : null}
+        ${group === 'hour' ? html`<p class="muted small">${win ? tr('Приёмы этого дня по часу приёма; приёмы без времени не учитываются.')
+          : tr('Сумма за период по часу приёма; приёмы без времени и старые дни из сводок не учитываются.')}</p>` : null}
+        ${win && !cs.intakes ? html`<p class="muted small">${tr('В это время приёмов нет — листай стрелками.')}</p>` : null}
         ${!sel && metric === 'amount' ? html`<p class="muted small">${tr('На одном графике — лекарства в одной единице ({u}), чтобы их можно было сравнить.', { u: unitShort(unit) })}</p>` : null}
       </section>
       <section class="card-block">
@@ -248,13 +260,14 @@ function MedsTab() {
           <p class="med-log-date">${humanDate(d.date, today)}${d.date !== today && d.date !== addDays(today, -1) ? '' : ' · ' + longDate(d.date)}</p>
           ${d.items.map((l, i) => html`<button type="button" class="med-log-row" key=${l.entryId + i} onClick=${() => openSheet('entry', { id: l.entryId })}>
             <span class="er-time">${l.time || '—'}</span>
-            <span class="er-main"><span class="er-name">💊 ${l.name} · ${amountLabel(l)}</span>
+            <span class="er-main"><span class="er-name">${medIcon(l.key)} ${l.name} · ${amountLabel(l)}</span>
               ${l.foods.length ? html`<small class="muted">вместе с: ${l.foods.join(', ')}</small>` : null}
               ${l.note ? html`<small class="er-item-note">${l.note}</small>` : null}</span>
           </button>`)}
         </div>`) : html`<p class="muted small">В журнале — только дни, которые ещё хранятся в дневнике (старые сводятся в итоги дня).</p>`}
         ${(sel ? st.log.filter((l) => l.key === sel.key) : st.log).length > log.length ? html`<p class="muted small">Показаны последние ${log.length}.</p>` : null}
-      </section>`}`;
+      </section>`}
+    <${FeastHistorySection}/>`;
 }
 
 /**

@@ -86,3 +86,67 @@ test('тепловая карта: столбцы по неделям с пон�
   assert.equal(heatLevel(3, 3), 3);
   assert.equal(datesBetween('2026-09-30', '2026-10-02').length, 3);
 });
+
+// ---------- 0.14: «По времени», окно графика, срок хранения выполненных ----------
+
+test('По времени (0.14): журнал с местным временем, ряды по спискам и приоритетам, час чаще всего', async () => {
+  const { doneLog, timeSeries, busiestHour, timeBuckets } = await import('../src/core/analytics.js');
+  const d = makeData();
+  const c = makeCtx();
+  const [l1, l2] = [...d.lists.values()];
+  doneTask(d, c, 'A', '2026-10-01T07:15:00.000Z', { listIds: [l1.id], priorityId: HIGH });
+  doneTask(d, c, 'B', '2026-10-01T07:40:00.000Z', { listIds: [l1.id, l2.id] });
+  doneTask(d, c, 'C', '2026-10-02T15:00:00.000Z');
+  doneTask(d, c, 'Раньше', '2026-09-20T10:00:00.000Z');
+  const log = doneLog(d, TZ, '2026-10-01', TODAY);
+  assert.deepEqual(log.map((e) => [e.title, e.date, e.time]), [['C', '2026-10-02', '18:00'], ['B', '2026-10-01', '10:40'], ['A', '2026-10-01', '10:15']], 'новые сверху, время — по поясу');
+  assert.equal(busiestHour(log), 10);
+  const byList = timeSeries(d, log, 'list');
+  assert.equal(byList.log.length, 4, 'задача в двух списках — в каждом');
+  assert.equal(byList.series[0].key, l1.id);
+  assert.ok(byList.series.some((s) => s.key === 'inbox'), 'без списка — «Входящие»');
+  const total = timeSeries(d, log, 'total');
+  assert.deepEqual(total.series.map((s) => [s.key, s.n]), [['total', 3]]);
+  const hours = timeBuckets({ log: total.log, from: '2026-10-01', to: TODAY, group: 'hour' });
+  assert.equal(hours[10].values.total, 2);
+  const days = timeBuckets({ log: total.log, from: '2026-10-01', to: TODAY, group: 'day' });
+  assert.deepEqual(days.map((b) => b.values.total || 0), [2, 1]);
+  assert.equal(timeSeries(d, log, 'priority').series.find((s) => s.key === HIGH).n, 1);
+});
+
+test('Окно графика (0.14): день, неделя с понедельника, год; стрелки; пустое начало обрезается', async () => {
+  const TW = await import('../src/core/timeWindow.js');
+  assert.equal(TW.anchorOf('hour', '2026-10-09'), '2026-10-09');
+  assert.equal(TW.anchorOf('day', '2026-10-09'), '2026-10-05', 'неделя — с понедельника');
+  assert.equal(TW.anchorOf('month', '2026-10-09'), '2026-01-01');
+  assert.equal(TW.anchorOf('year', '2026-10-09'), null, 'по годам — без окна');
+  assert.deepEqual(TW.windowRange('day', '2026-10-05'), { from: '2026-10-05', to: '2026-10-11' });
+  assert.deepEqual(TW.windowRange('month', '2025-01-01'), { from: '2025-01-01', to: '2025-12-31' });
+  assert.equal(TW.shiftWindow('day', '2026-10-05', -1), '2026-09-28');
+  assert.equal(TW.shiftWindow('month', '2026-01-01', -1), '2025-01-01');
+  assert.equal(TW.shiftWindow('hour', '2026-03-01', -1), '2026-02-28');
+  assert.ok(!TW.canGoNext('day', '2026-10-05', '2026-10-09'), 'текущая неделя — дальше нельзя');
+  assert.ok(TW.canGoNext('day', '2026-09-28', '2026-10-09'));
+  const list = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'].map((k, i) => ({ key: k, values: i === 8 ? { x: 1 } : {} }));
+  assert.equal(TW.trimLead(list, 'day').length, 7, 'по дням — не меньше недели');
+  assert.equal(TW.trimLead(list, 'month')[0].key, 'h', 'по месяцам — не меньше трёх');
+  assert.equal(TW.trimLead(list, 'hour').length, 10, 'по часам не обрезается');
+});
+
+test('Срок хранения выполненных (0.14): старше срока — удаляются со сводкой, без срока — только лимит', async () => {
+  const RT = await import('../src/core/retention.js');
+  const d = makeData();
+  const c = makeCtx();
+  const now = Date.parse('2026-10-02T09:00:00.000Z');
+  doneTask(d, c, 'Старая', '2026-08-01T10:00:00.000Z');
+  doneTask(d, c, 'Свежая', '2026-09-30T10:00:00.000Z');
+  assert.equal(RT.retentionPlan(d, now).count, 0, 'срока нет, лимит не превышен');
+  assert.equal(RT.completedDaysOf({ completedDays: 3 }), 7, 'не меньше недели');
+  assert.equal(RT.completedDaysOf({ completedDays: null }), null);
+  d.settings = { ...d.settings, completedDays: 30 };
+  const plan = RT.retentionPlan(d, now);
+  assert.equal(plan.count, 1);
+  assert.equal(plan.days, 30);
+  const changes = RT.applyPurge(d, plan, c);
+  assert.ok(changes.some((x) => x.coll === 'doneArchive'), 'статистика остаётся в сводке');
+});

@@ -1955,7 +1955,8 @@ a.msr-name:hover { color: var(--accent); }
 .meal-top li, .meal-days li { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; padding: 4px 0; border-bottom: 1px solid var(--border); }
 .meal-days .link-btn.current { color: var(--text); font-weight: 700; }
 .meal-form.inline .meal-icons { max-width: 640px; }
-.calc-row { align-items: center; margin-top: 8px; }
+.calc-row { flex-direction: column; align-items: flex-start; justify-content: flex-start; gap: 6px; margin-top: 12px; }
+.calc-row .muted { margin: 0; }
 .custom-activities { margin: 4px 0 12px; }
 .activity-list { margin: 0 0 8px; padding: 0; list-style: none; }
 .activity-list li { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 4px 0; border-bottom: 1px solid var(--border); }
@@ -2065,3 +2066,40 @@ a.msr-name:hover { color: var(--accent); }
 .bf-shorts { fill: var(--surface-3); stroke: var(--text); stroke-opacity: .35; stroke-width: 1; }
 .figure-legend { justify-content: center; margin: -4px 0 8px; }
 .figure-legend .swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+
+/* ---------- 0.14: окно графика, корзина Crimson Harvest, порции, значки, проверка КБЖУ ---------- */
+.time-window { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin: 8px 0 4px; }
+.tw-step { display: inline-flex; align-items: center; gap: 4px; }
+.tw-arrow { min-width: 40px; justify-content: center; font-size: 18px; line-height: 1; }
+.tw-label { min-width: 120px; justify-content: center; }
+.trash-keep { max-width: 520px; margin: 4px 0 12px; }
+.trash-keep .num-field { max-width: 220px; }
+.trash-search { width: 100%; max-width: 420px; margin: 8px 0; }
+.trash-list { display: flex; flex-direction: column; gap: 8px; margin: 8px 0; padding: 0; list-style: none; }
+.trash-row { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
+.tr-icon { flex: none; width: 32px; font-size: 22px; text-align: center; }
+.tr-main { display: flex; flex: 1; flex-direction: column; gap: 2px; min-width: 0; }
+.tr-main b { overflow-wrap: anywhere; }
+.tr-actions { display: flex; flex: none; align-items: center; gap: 6px; }
+@media (max-width: 560px) {
+  .trash-row { flex-wrap: wrap; }
+  .tr-actions { width: 100%; justify-content: flex-end; }
+}
+.servings-editor { margin: 10px 0; }
+.servings-list { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; padding: 0; list-style: none; }
+.serving-row { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; align-items: end; gap: 8px; }
+.serving-row .field { margin: 0; }
+.serving-row .icon-btn.small, .serving-row .btn.small { height: 40px; }
+.serving-add { margin-top: 6px; }
+.serving-chip small { margin-left: 4px; color: var(--muted); }
+.icon-picker .ip-current { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 10px;
+  background: var(--surface-2); font-size: 22px; }
+.icon-picker .emoji-grid { grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); max-width: 520px; }
+.kcal-check { margin: 4px 2px 8px; font-size: 13px; }
+.kcal-check.ok { color: var(--ok); }
+.kcal-check.warn { color: var(--warn); }
+.kcal-check .link-btn { margin-left: 4px; font-size: 13px; }
+.diary-add { margin: 10px 0 4px; }
+.diary-more { margin-top: 4px; }
+.servings-list li + li .field > span { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+.trash-search { box-sizing: border-box; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface-2); color: var(--text); font: inherit; }

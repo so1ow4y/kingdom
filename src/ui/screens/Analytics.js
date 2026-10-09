@@ -1,12 +1,20 @@
 // Экран «Аналитика» (обновление 0.3, п. 2.9): периоды, графики по дням, разбивки, серии, тепловая карта как на GitHub.
 // Все графики — свой SVG, без библиотек. Считает core/analytics.js.
 
-import { html, useState } from '../html.js';
+import { html, useState, useMemo } from '../html.js';
 import { store } from '../../store/appState.js';
 import * as AN from '../../core/analytics.js';
-import { addDays, daysBetween, dayLabel, longDate, WEEKDAY_SHORT } from '../../core/dates.js';
+import { addDays, daysBetween, dayLabel, longDate, humanDate, WEEKDAY_SHORT } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { readLocal, writeLocal } from '../hooks.js';
+import { navigate } from '../router.js';
+import { StackedBars } from '../components/FeastCharts.js';
+import { OptNumField } from '../components/FeastParts.js';
+import { TimeWindow, windowLabel, regroupAnchor } from '../components/TimeWindow.js';
+import { setCompletedDays } from '../components/DataSettings.js';
+import * as TW from '../../core/timeWindow.js';
+import * as RT from '../../core/retention.js';
+import { RETENTION } from '../../config.js';
 import { tr, locale } from '../../core/i18n.js';
 
 const TASKS = ['задача', 'задачи', 'задач'];
@@ -118,7 +126,119 @@ function Stat({ label, value, sub = null }) {
   return html`<div class="stat"><div class="stat-value">${value}</div><div class="stat-label">${label}</div>${sub ? html`<div class="stat-sub">${sub}</div>` : null}</div>`;
 }
 
-export function AnalyticsScreen() {
+const GROUPS = [['hour', tr('По часам')], ['day', tr('По дням')], ['month', tr('По месяцам')], ['year', tr('По годам')]];
+const BY = [['list', tr('По спискам')], ['priority', tr('По приоритетам')], ['total', tr('Всего')]];
+const TABS = [['overview', tr('Обзор'), '/analytics'], ['time', tr('По времени'), '/analytics/time']];
+
+function Chips({ list, value, onChange, label }) {
+  return html`<div class="chip-row wrap" role="tablist" aria-label=${label}>
+    ${list.map(([k, l]) => html`<button type="button" role="tab" key=${k} aria-selected=${value === k} class=${'chip' + (value === k ? ' selected' : '')} onClick=${() => onChange(k)}>${l}</button>`)}
+  </div>`;
+}
+
+/**
+ * «По времени» (0.14) — как графики лекарств в Crimson Harvest: выполненные по часам суток, дням, месяцам, годам;
+ * за период или за конкретный день, неделю, год; по спискам (столбики рядом), по приоритетам или всего; журнал.
+ */
+function TimeTab({ from, to, today, tz }) {
+  const [group, setGroupState] = useState('day');
+  const [anchor, setAnchor] = useState(null);
+  const [by, setByState] = useState(() => readLocal('analyticsBy', 'list'));
+  const setGroup = (g) => {
+    setAnchor(regroupAnchor(group, anchor, g, today));
+    setGroupState(g);
+  };
+  const setBy = (b) => {
+    setByState(b);
+    writeLocal('analyticsBy', b);
+  };
+  const win = anchor ? TW.windowRange(group, anchor) : null;
+  const wFrom = win ? win.from : from;
+  const wTo = win ? win.to : to;
+  const log = useMemo(() => AN.doneLog(store.data, tz, wFrom, wTo), [store.version, wFrom, wTo, tz]);
+  const { series: all, log: slog } = useMemo(() => AN.timeSeries(store.data, log, by), [log, by]);
+  // больше 8 рядов — остальные в «Другое»; цвета — свои у списков и приоритетов
+  let series = all.map((s) => ({ key: s.key, label: s.label, color: s.color }));
+  let fold = null;
+  if (series.length > 8) {
+    fold = new Set(all.slice(7).map((s) => s.key));
+    series = [...series.slice(0, 7), { key: 'other', label: tr('Другое'), color: 'var(--muted)' }];
+  }
+  const buckets = useMemo(() => {
+    const src = fold ? slog.map((e) => (fold.has(e.key) ? { ...e, key: 'other' } : e)) : slog;
+    const raw = AN.timeBuckets({ log: src, from: wFrom, to: wTo, group, metric: 'count' });
+    return win ? raw : TW.trimLead(raw, group);
+  }, [slog, wFrom, wTo, group, !!win, series.length]);
+  const days = daysBetween(wFrom, wTo) + 1;
+  const hour = AN.busiestHour(log);
+  const perDay = new Map();
+  for (const e of log) perDay.set(e.date, (perDay.get(e.date) || 0) + 1);
+  let best = null;
+  for (const [date, n] of perDay) if (!best || n > best.n) best = { date, n };
+  const byDay = [];
+  for (const e of log.slice(0, 80)) {
+    const last = byDay.at(-1);
+    if (last?.date === e.date) last.items.push(e);
+    else byDay.push({ date: e.date, items: [e] });
+  }
+  const groupTitle = { hour: tr('по часам суток'), day: tr('по дням'), month: tr('по месяцам'), year: tr('по годам') }[group];
+  const listName = (id) => {
+    const l = store.data.lists.get(id);
+    return l && !l.deletedAt ? (l.emoji ? l.emoji + ' ' : '') + l.name : null;
+  };
+  return html`
+    <div class="stat-tiles">
+      <div class="stat-tile"><span>Выполнено</span><b>${log.length}</b><small>${win ? windowLabel(group, anchor, today) : tr('за период')}</small></div>
+      <div class="stat-tile"><span>В среднем в день</span><b>${fmt1(log.length / Math.max(1, days))}</b><small>${countLabel(days, ['день', 'дня', 'дней'])}</small></div>
+      <div class="stat-tile"><span>Чаще всего</span><b>${hour == null ? '—' : `${String(hour).padStart(2, '0')}:00`}</b><small>${hour == null ? tr('нет выполненных') : tr('час, когда закрываешь больше всего')}</small></div>
+      <div class="stat-tile"><span>Лучший день</span><b>${best ? best.n : '—'}</b><small>${best ? dayLabel(best.date) : ''}</small></div>
+    </div>
+    <section class="card-block">
+      <h2 class="block-title">${tr('Выполнено')} ${groupTitle}${win ? ' · ' + windowLabel(group, anchor, today) : ''}</h2>
+      <div class="med-controls">
+        <${Chips} label=${tr('Группировка')} value=${group} onChange=${setGroup} list=${GROUPS}/>
+        <${Chips} label=${tr('Разбивка')} value=${by} onChange=${setBy} list=${BY}/>
+      </div>
+      <${TimeWindow} group=${group} anchor=${anchor} setAnchor=${setAnchor} today=${today}/>
+      <${StackedBars} buckets=${buckets} series=${series} grouped=${series.length > 1} integer empty=${tr('нет выполненных')}
+        fmtValue=${(v) => countLabel(v, TASKS)} label=${tr('Выполнено') + ' ' + groupTitle}/>
+      ${group === 'hour' ? html`<p class="muted small">${win ? tr('Задачи этого дня по часу выполнения.') : tr('Сумма за период по часу выполнения.')}</p>` : null}
+      ${by === 'list' ? html`<p class="muted small">${tr('Задача в нескольких списках считается в каждом.')}</p>` : null}
+    </section>
+    <section class="card-block">
+      <h2 class="block-title">Журнал выполненных${win ? ' · ' + windowLabel(group, anchor, today) : ''}</h2>
+      ${byDay.length ? byDay.map((d) => html`<div class="med-log-day" key=${d.date}>
+        <p class="med-log-date">${humanDate(d.date, today)}${d.date !== today && d.date !== addDays(today, -1) ? '' : ' · ' + longDate(d.date)}</p>
+        ${d.items.map((e) => {
+          const live = e.taskId && store.data.tasks.get(e.taskId) && !store.data.tasks.get(e.taskId).deletedAt;
+          const lists = (e.listIds || []).map(listName).filter(Boolean);
+          return html`<button type="button" class="med-log-row" key=${e.key} disabled=${!live} onClick=${() => live && navigate('/task/' + e.taskId)}>
+            <span class="er-time">${e.time}</span>
+            <span class="er-main"><span class="er-name">${e.archived ? tr('Задача удалена лимитом — осталась статистика') : e.title}</span>
+              <small class="muted">${lists.length ? lists.join(', ') : tr('Входящие')}</small></span>
+          </button>`;
+        })}
+      </div>`) : html`<p class="muted small">${tr('Выполненных задач здесь нет.')}</p>`}
+      ${log.length > 80 ? html`<p class="muted small">${tr('Показаны последние 80.')}</p>` : null}
+    </section>`;
+}
+
+/** Хранение выполненных (0.14) — те же настройки, что в «Настройках → Данные»: лимит и срок. */
+function KeepCard() {
+  const s = store.data.settings;
+  const ro = !!store.ui.readOnly;
+  return html`<section class="card-block">
+    <h2 class="block-title">Хранение</h2>
+    <div class="ne-main">
+      <${OptNumField} label=${tr('Хранить выполненные, дней')} value=${RT.completedDaysOf(s)} placeholder=${tr('всегда')} unit=${tr('дн.')} disabled=${ro}
+        min=${0} max=${RETENTION.historyMax} onCommit=${(v) => setCompletedDays(v)}/>
+    </div>
+    <p class="muted small">${tr('Выполненные старше срока удаляются (вместе с лимитом {limit}), а их статистика остаётся: по ней считаются графики, серии, уровни навыков, достижения и дружба жителей. Пусто — без срока, от {min} дней.', { limit: s.completedLimit ?? '—', min: RETENTION.historyMin })}</p>
+  </section>`;
+}
+
+export function AnalyticsScreen({ tab: param = null }) {
+  const tab = param === 'time' ? 'time' : 'overview';
   const today = store.now.today;
   const tz = store.data.settings.timeZone;
   const [period, setPeriodState] = useState(() => readLocal('analyticsPeriod', '30d'));
@@ -140,6 +260,10 @@ export function AnalyticsScreen() {
 
   return html`
     <div class="screen analytics">
+      <div class="section-tabs" role="tablist" aria-label="Аналитика">
+        ${TABS.map(([k, l, to]) => html`<button type="button" role="tab" key=${k} aria-selected=${tab === k}
+          class=${'section-tab' + (tab === k ? ' active' : '')} onClick=${() => navigate(to, { replace: true })}>${l}</button>`)}
+      </div>
       <div class="chip-row wrap" role="tablist" aria-label="Период">
         ${AN.PERIODS.map((p) => html`<button type="button" role="tab" aria-selected=${period === p.id}
           class=${'chip' + (period === p.id ? ' selected' : '')} onClick=${() => setPeriod(p.id)}>${p.label}</button>`)}
@@ -149,6 +273,7 @@ export function AnalyticsScreen() {
         <label class="field"><span>По</span><input type="date" value=${custom.to} max=${today} onChange=${(e) => e.target.value && changeCustom({ to: e.target.value })}/></label>
       </div>` : null}
       <p class="muted small">${longDate(from)} ${from.slice(0, 4)} — ${longDate(to)} ${to.slice(0, 4)} · ${countLabel(a.days, ['день', 'дня', 'дней'])}</p>
+      ${tab === 'time' ? html`<${TimeTab} from=${from} to=${to} today=${today} tz=${tz}/><${KeepCard}/>` : html`
 
       <div class="stats-grid">
         <${Stat} label="Выполнено" value=${a.total}/>
@@ -178,5 +303,6 @@ export function AnalyticsScreen() {
         <h2 class="block-title">По приоритетам</h2>
         <${Breakdown} rows=${a.byPriority} total=${a.total}/>
       </section>
+      <${KeepCard}/>`}
     </div>`;
 }

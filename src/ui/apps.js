@@ -21,7 +21,7 @@ export const APPS = {
   },
   feast: {
     id: 'feast', name: 'Crimson Harvest', letter: 'CH', what: tr('еда и калории'), home: '/diary',
-    routes: ['diary', 'meals', 'meal', 'foods', 'food', 'nutrition', 'body'],
+    routes: ['diary', 'meals', 'meal', 'foods', 'food', 'nutrition', 'body', 'bin'],
   },
 };
 

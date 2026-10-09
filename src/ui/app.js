@@ -18,6 +18,7 @@ import { ArchiveScreen, TrashScreen, TasksScreen } from './screens/ArchiveTrash.
 import { SettingsScreen, MoreScreen } from './screens/Settings.js';
 import { JournalScreen } from './screens/Journal.js';
 import { AnalyticsScreen } from './screens/Analytics.js';
+import { FeastTrashScreen } from './screens/FeastTrash.js';
 import { ShopScreen } from './screens/Shop.js';
 import { StartScreen, RedirectingScreen } from './components/Sync.js';
 import { Dock } from './components/Dock.js';
@@ -66,7 +67,8 @@ function titleFor(route) {
     case 'settings': return tr('Настройки');
     case 'more': return tr('Ещё');
     case 'journal': return tr('Журнал');
-    case 'analytics': return tr('Аналитика');
+    case 'analytics': return route.param === 'time' ? tr('Аналитика · по времени') : tr('Аналитика');
+    case 'bin': return tr('Корзина');
     case 'shop': return tr('Магазин');
     case 'village': return tr('Деревня');
     case 'diary': return tr('Дневник · ') + humanDate(planningDate(route.query.date, store.now.today), store.now.today).toLowerCase();
@@ -95,7 +97,8 @@ function Screen({ route }) {
     case 'settings': return html`<${SettingsScreen} query=${route.query}/>`;
     case 'more': return html`<${MoreScreen}/>`;
     case 'journal': return html`<${JournalScreen}/>`;
-    case 'analytics': return html`<${AnalyticsScreen}/>`;
+    case 'analytics': return html`<${AnalyticsScreen} tab=${route.param}/>`;
+    case 'bin': return html`<${FeastTrashScreen}/>`;
     case 'shop': return html`<${ShopScreen}/>`;
     case 'village': return html`<${VillageScreen}/>`;
     case 'diary': return html`<${DiaryScreen} query=${route.query}/>`;

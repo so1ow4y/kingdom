@@ -10,34 +10,40 @@
 //   body       — замеры: вес, обхваты, процент жира.
 
 import { uuidv7 } from './ids.js';
-import { touch, touchNested, removeNested } from './model.js';
+import { touch, touchNested, removeNested, revert } from './model.js';
 import { keyBetween, byOrder } from './order.js';
 import {
   cleanNutrients, num, entryNutrients, itemNutrients, sumNutrients, addNutrients, nv, MEALS, NUTRIENT_KEYS, MED_UNIT,
 } from './nutrition.js';
-import { addDays, daysBetween, longDate, MONTH_NOM } from './dates.js';
+import { addDays, daysBetween } from './dates.js';
 import { normalizeBarcode } from './barcode.js';
 import { DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, FEAST_RETENTION } from '../config.js';
 import { tr } from './i18n.js';
 import { isMeasure, cleanUnit, cleanParts, cleanRanges, cleanValues, partCount } from './measures.js';
+import { timeBuckets } from './timeWindow.js';
 
 export const FEAST_SETTINGS_ID = '00000000-0000-7000-8000-00000000f001';
-export const FEAST_COLLECTIONS = ['settings', 'foods', 'entries', 'dayArchive', 'body', 'meals', 'mealNotes'];
+// trash (0.14) — корзина: снимки удалённых записей, продуктов, замеров тела и рационов (вернуть можно N дней)
+export const FEAST_COLLECTIONS = ['settings', 'foods', 'entries', 'dayArchive', 'body', 'meals', 'mealNotes', 'trash'];
 
 // 0.12: награды за еду по умолчанию (rewardXp, rewardCoins, rewardGems) и настройка рекомендации калорий
 // (loseKcal — дефицит для похудения, gainKcal — профицит для набора, minKcal — нижняя граница, recKcal — своя рекомендация).
 export const FEAST_SETTINGS_FIELDS = ['kcalGoal', 'proteinGoal', 'fatGoal', 'carbsGoal', 'entryLimit',
   'rewardXp', 'rewardCoins', 'rewardGems', 'loseKcal', 'gainKcal', 'minKcal', 'recKcal',
   'macroMode', 'proteinPct', 'fatPct', 'carbsPct', 'activities',
-  'sex', 'birthDate', 'heightCm', 'activity', 'goal', 'targetWeightKg', 'deletedAt'];
+  'sex', 'birthDate', 'heightCm', 'activity', 'goal', 'targetWeightKg', 'trashDays', 'historyDays', 'deletedAt'];
 // rewards (0.12) — опыт, монеты и 💎 за каждую запись продукта; не задано — по умолчанию из настроек
 // 0.12.5: каталог общий — продукты и лекарства (kind: 'food' | 'med'; нет поля — продукт). У лекарства: unit — форма
 // (MED_UNITS), dose — обычная доза; у продукта meds — лекарства, которые записываются вместе с ним ({ medId, amount }).
 // 0.13: третий вид — замер (kind: 'measure'): unit — свободный текст, parts — части значения, ranges — нормы;
 // у всех — desc (скрытое описание) и measures — замеры, которые предлагаются при записи ({ measureId }).
 // У лекарства могут быть КБЖУ, витамины и минералы — на 1 единицу формы (сироп, витамины).
+// 0.14: servings — сколько угодно своих порций [{ id, name, size }]; первая дублируется в servingName / servingSize
+// (их видят старые версии). icon — и у лекарства (шприцы, таблетки и витамины различаются значком).
 export const FOOD_FIELDS = ['name', 'brand', 'unit', 'servingName', 'servingSize', 'nutrients', 'favorite', 'note', 'rewards',
-  'kind', 'dose', 'meds', 'parts', 'ranges', 'desc', 'measures', 'icon', 'deletedAt'];
+  'kind', 'dose', 'meds', 'parts', 'ranges', 'desc', 'measures', 'icon', 'servings', 'deletedAt'];
+export const TRASH_FIELDS = ['coll', 'entityId', 'trashedAt', 'snapshot', 'deletedAt'];
+export const SERVINGS_MAX = 20;
 // Записи 0.11 хранили один продукт в своих полях (foodId, name, amount, unit, nutrients) — они читаются как есть;
 // с 0.12 продукты — во вложенном массиве items (сливается поэлементно), у записи — время и заметка.
 export const ENTRY_FIELDS = ['date', 'meal', 'time', 'note', 'deletedAt'];
@@ -51,7 +57,8 @@ export const MEAL_NOTE_FIELDS = ['date', 'meal', 'text', 'deletedAt'];
 // 0.13: ещё обхваты — грудь, бицепс, бедро (для фигуры)
 export const BODY_FIELDS = ['date', 'weightKg', 'waistCm', 'neckCm', 'hipCm', 'chestCm', 'armCm', 'thighCm', 'bodyFatPct', 'note', 'deletedAt'];
 export const BODY_NUM_FIELDS = ['weightKg', 'waistCm', 'neckCm', 'hipCm', 'chestCm', 'armCm', 'thighCm', 'bodyFatPct'];
-export const DAY_ARCHIVE_FIELDS = ['date', 'count', 'totals', 'meals', 'foods', 'meds', 'measures', 'rewards', 'deletedAt'];
+// stripped (0.14) — история дня удалена по сроку хранения, остались только награды (монеты и 💎 не пропадают)
+export const DAY_ARCHIVE_FIELDS = ['date', 'count', 'totals', 'meals', 'foods', 'meds', 'measures', 'rewards', 'stripped', 'deletedAt'];
 export const DESC_MAX = 4000;
 
 export const FOOD_NAME_MAX = 120;
@@ -116,6 +123,8 @@ export function defaultFeastSettings() {
     fatPct: null,
     carbsPct: null,
     activities: [], // 0.12.2: свои активности { id: 'c:…', name, hint, kcal }
+    trashDays: FEAST_RETENTION.trashDefault, // 0.14: сколько дней хранится корзина
+    historyDays: null, // 0.14: сколько дней хранить историю дневника и статистику (null — всегда)
   };
 }
 
@@ -200,21 +209,23 @@ export function feastRewards(data) {
 
 // ---------- Продукты ----------
 
-export function newFood({ name, brand = '', unit = 'g', servingName = '', servingSize = null, nutrients = {}, note = '', barcodes = [], rewards = {}, kind = 'food', dose = null, parts = [], ranges = [], desc = '', icon = '' }, ctx) {
+export function newFood({ name, brand = '', unit = 'g', servingName = '', servingSize = null, servings = null, nutrients = {}, note = '', barcodes = [], rewards = {}, kind = 'food', dose = null, parts = [], ranges = [], desc = '', icon = '' }, ctx) {
   const n = normalizeName(name);
   if (!n) throw new Error('newFood: пустое название');
   const med = kind === 'med';
   const measure = kind === 'measure';
   const ps = measure ? cleanParts(parts) : [];
+  const sv = med || measure ? [] : cleanServings(servings ?? (num(servingSize) ? [{ name: servingName, size: servingSize }] : []), ctx);
   let f = create(uuidv7(ctx.now), {
     name: n,
     brand: normalizeName(brand),
     unit: med ? medUnit(unit) : measure ? cleanUnit(unit) : unit === 'ml' ? 'ml' : 'g',
-    ...(med ? { kind: 'med', dose: num(dose) || 1 } : {}),
+    ...(med ? { kind: 'med', dose: num(dose) || 1, ...(cleanIcon(icon) ? { icon: cleanIcon(icon) } : {}) } : {}),
     ...(measure ? { kind: 'measure', parts: ps, ranges: cleanRanges(ranges, Math.max(1, ps.length)), icon: cleanIcon(icon) } : {}),
     ...(String(desc || '').trim() ? { desc: String(desc).slice(0, DESC_MAX) } : {}),
-    servingName: normalizeName(servingName).slice(0, 40),
-    servingSize: num(servingSize) || null,
+    servingName: sv[0]?.name || '',
+    servingSize: sv[0]?.size || null,
+    ...(sv.length ? { servings: sv } : {}),
     nutrients: cleanNutrients(nutrients),
     favorite: false,
     note: String(note || '').slice(0, 2000),
@@ -237,6 +248,12 @@ export function editFood(food, changes, ctx) {
   if ('name' in c) c.name = normalizeName(c.name) || food.name;
   if ('brand' in c) c.brand = normalizeName(c.brand);
   if ('nutrients' in c) c.nutrients = cleanNutrients(c.nutrients);
+  if ('servings' in c) {
+    // первая порция — и в старых полях: её видят версии до 0.14
+    c.servings = cleanServings(c.servings, ctx);
+    c.servingName = c.servings[0]?.name || '';
+    c.servingSize = c.servings[0]?.size || null;
+  }
   if ('servingSize' in c) c.servingSize = num(c.servingSize) || null;
   if ('servingName' in c) c.servingName = normalizeName(c.servingName).slice(0, 40);
   if ('unit' in c) c.unit = isMed(food) ? medUnit(c.unit) : isMeasure(food) ? cleanUnit(c.unit) : c.unit === 'ml' ? 'ml' : 'g';
@@ -273,8 +290,30 @@ export function findByBarcode(data, raw) {
   return null;
 }
 
-/** Порция в граммах (или мл), если задана. */
-export const servingOf = (food) => (num(food?.servingSize) ? food.servingSize : null);
+/** Порции продукта (0.14): свои, сколько угодно; у продукта до 0.14 — одна из servingName / servingSize. */
+export function servingsOf(food) {
+  if (Array.isArray(food?.servings) && food.servings.length) return food.servings.filter((s) => s && num(s.size) > 0);
+  return num(food?.servingSize) ? [{ id: 'legacy', name: food.servingName || '', size: food.servingSize }] : [];
+}
+
+/** Порции: имя до 40 символов, размер > 0 (граммы или мл), без пустых, до SERVINGS_MAX; id — у каждой. */
+export function cleanServings(list, ctx = null) {
+  const out = [];
+  for (const s of Array.isArray(list) ? list : []) {
+    const size = num(s?.size);
+    if (!(size > 0)) continue;
+    const id = typeof s.id === 'string' && s.id && s.id !== 'legacy' ? s.id : 's' + (ctx ? ctx.stamp().toString(36) : '') + out.length;
+    out.push({ id, name: normalizeName(s.name).slice(0, 40), size: Math.round(size * 100) / 100 });
+    if (out.length >= SERVINGS_MAX) break;
+  }
+  return out;
+}
+
+/** Порция в граммах (или мл), если задана (первая из порций). */
+export const servingOf = (food) => servingsOf(food)[0]?.size ?? null;
+
+/** Значок лекарства или замера (0.14): свой или по умолчанию 💊 / 📏. */
+export const kindIcon = (f) => f?.icon || (isMed(f) ? '💊' : isMeasure(f) ? '📏' : '');
 
 // ---------- Рационы (0.12) ----------
 
@@ -682,12 +721,12 @@ export function dayTotals(data, date) {
   }
   let totals = sumNutrients(Object.values(meals));
   const arch = data.dayArchive.get(archiveId(date));
-  if (arch && !arch.deletedAt) {
+  if (arch && !arch.deletedAt && !arch.stripped) {
     totals = addNutrients(totals, arch.totals || {});
     for (const [k, kcal] of Object.entries(arch.meals || {})) meals[k] = addNutrients(meals[k] || {}, { kcal: kcal || 0 });
     count += arch.count || 0;
   }
-  return { totals, meals, count, entries: byMeal, archived: !!arch && !arch.deletedAt };
+  return { totals, meals, count, entries: byMeal, archived: !!arch && !arch.deletedAt && !arch.stripped };
 }
 
 /** Как часто ели продукт (для «Недавних» и «Частых»): foodId → { count, last, amount }. */
@@ -852,7 +891,7 @@ export function dailySeries(data, from, to) {
     d.meals[m] = (d.meals[m] || 0) + nv(n, 'kcal');
   }
   for (const a of data.dayArchive.values()) {
-    if (a.deletedAt || a.date < from || a.date > to) continue;
+    if (a.deletedAt || a.stripped || a.date < from || a.date > to) continue;
     const d = get(a.date);
     d.totals = addNutrients(d.totals, a.totals || {});
     d.count += a.count || 0;
@@ -953,48 +992,14 @@ export function measureStats(data, from, to) {
 /** Группировки графиков лекарств (0.13): по часам — суммарно за период по часу суток; по дням, месяцам и годам — по времени. */
 export const MED_GROUPS = ['hour', 'day', 'month', 'year'];
 
-/**
- * Корзины графика лекарств: [{ key, label, title, values: { ключ лекарства: число } }].
- * log — журнал приёмов (medStats().log, с временем), extra — приёмы из сводок дней ({ date, key, count, amount });
- * metric — 'count' (приёмы) или 'amount' (количество в единицах лекарства).
- */
-export function medBuckets({ log = [], extra = [], from, to, group = 'day', metric = 'count', keys = null }) {
-  const want = (k) => !keys || keys.includes(k);
-  const val = (x) => (metric === 'amount' ? x.amount || 0 : x.count ?? 1);
-  const buckets = new Map();
-  const order = [];
-  const ensure = (key, label, title) => {
-    if (!buckets.has(key)) {
-      buckets.set(key, { key, label, title, values: {} });
-      order.push(key);
-    }
-    return buckets.get(key);
-  };
-  if (group === 'hour') {
-    for (let h = 0; h < 24; h++) ensure(String(h).padStart(2, '0'), String(h), `${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59`);
-  } else if (group === 'day') {
-    for (let d = from; d <= to; d = addDays(d, 1)) ensure(d, `${+d.slice(8)}.${d.slice(5, 7)}`, longDate(d, '0000')); // в подсказке — с годом
-  } else if (group === 'month') {
-    for (let d = from.slice(0, 7) + '-01'; d.slice(0, 7) <= to.slice(0, 7); d = addDays(d.slice(0, 7) + '-28', 4).slice(0, 7) + '-01') ensure(d.slice(0, 7), `${d.slice(5, 7)}.${d.slice(2, 4)}`, `${MONTH_NOM[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`);
-  } else {
-    for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) ensure(String(y), String(y), String(y));
-  }
-  const keyOf = (date, time) => (group === 'hour' ? (time ? time.slice(0, 2) : null) : group === 'day' ? date : group === 'month' ? date.slice(0, 7) : date.slice(0, 4));
-  const put = (k, medKey, v) => {
-    const b = k && buckets.get(k);
-    if (!b) return;
-    b.values[medKey] = Math.round(((b.values[medKey] || 0) + v) * 1000) / 1000;
-  };
-  for (const l of log) if (want(l.key)) put(keyOf(l.date, l.time), l.key, val({ count: 1, amount: l.amount }));
-  if (group !== 'hour') for (const x of extra) if (want(x.key)) put(keyOf(x.date, null), x.key, val(x));
-  return order.map((k) => buckets.get(k));
-}
+/** Корзины графика лекарств — общие корзины графиков по времени (0.14: core/timeWindow.js, и у задач). */
+export const medBuckets = timeBuckets;
 
 /** Самый ранний день с записями (или сводкой). */
 export function firstDay(data) {
   let first = null;
   for (const e of data.entries.values()) if (isLiveEntry(e) && (!first || e.date < first)) first = e.date;
-  for (const a of data.dayArchive.values()) if (!a.deletedAt && (!first || a.date < first)) first = a.date;
+  for (const a of data.dayArchive.values()) if (!a.deletedAt && !a.stripped && (!first || a.date < first)) first = a.date;
   return first;
 }
 
@@ -1036,4 +1041,77 @@ export function periodStats(data, from, to, goal) {
     topByKcal: [...top].sort((a, b) => b.kcal - a.kcal).slice(0, 10),
     topByCount: [...top].sort((a, b) => b.count - a.count || b.kcal - a.kcal).slice(0, 10),
   };
+}
+
+// ---------- Корзина (0.14) ----------
+
+/** id записи корзины: одна на удалённую сущность (удалили, вернули и снова удалили — та же запись). */
+export const trashId = (coll, id) => `x:${coll}:${id}`;
+
+/** Запись корзины: снимок сущности целиком (надгробие в своей коллекции его не хранит). */
+export function newTrashRecord(coll, entity, ctx) {
+  return create(trashId(coll, entity.id), { coll, entityId: entity.id, trashedAt: iso(ctx), snapshot: entity }, TRASH_FIELDS, ctx);
+}
+
+/** Вид записи корзины для показа и фильтра: entry | food | med | measure | body | meal. */
+export function trashKind(r) {
+  if (r.coll === 'foods') return isMed(r.snapshot) ? 'med' : isMeasure(r.snapshot) ? 'measure' : 'food';
+  return { entries: 'entry', body: 'body', meals: 'meal' }[r.coll] || r.coll;
+}
+
+/** Живые записи корзины, новые сверху. */
+export function trashList(data) {
+  return [...(data.trash?.values() || [])].filter((r) => !r.deletedAt && r.snapshot && r.entityId)
+    .sort((a, b) => (a.trashedAt < b.trashedAt ? 1 : a.trashedAt > b.trashedAt ? -1 : 0));
+}
+
+/** Срок хранения корзины в днях (настройка, 1…365). */
+export const trashDaysOf = (settings) => Math.max(FEAST_RETENTION.trashMin, Math.min(FEAST_RETENTION.trashMax, Math.round(num(settings?.trashDays)) || FEAST_RETENTION.trashDefault));
+
+/** Записи корзины старше срока — удаляются навсегда. */
+export function trashExpired(data, nowMs, days = trashDaysOf(data.settings)) {
+  const limit = nowMs - days * 86400000;
+  return trashList(data).filter((r) => Date.parse(r.trashedAt) < limit);
+}
+
+/**
+ * Вернуть сущность из корзины: снимок со свежими метками поверх надгробия (правка после удаления «воскрешает» —
+ * на всех устройствах). current — что сейчас в коллекции (надгробие или ничего).
+ */
+export function restoreEntity(current, snapshot, ctx) {
+  const base = current || { id: snapshot.id, createdAt: snapshot.createdAt, deletedAt: iso(ctx), fieldTimes: { deletedAt: 0 } };
+  const next = revert(base, { ...snapshot, deletedAt: null }, ctx);
+  return { ...next, deletedAt: null };
+}
+
+// ---------- Срок хранения истории (0.14) ----------
+
+/** Сколько дней хранить историю дневника и статистику: null — всегда, иначе 30…36 500. */
+export function historyDaysOf(settings) {
+  const n = Math.round(num(settings?.historyDays));
+  return n > 0 ? Math.max(FEAST_RETENTION.historyMin, Math.min(FEAST_RETENTION.historyMax, n)) : null;
+}
+
+/**
+ * Что удалить по сроку хранения истории: записи и сводки дней старше days дней (включая сегодня: days = 30 —
+ * остаются последние 30 дней). → { cutoff, entries, archives }.
+ */
+export function historyPlan(data, today, days = historyDaysOf(data.settings)) {
+  if (!days) return { cutoff: null, entries: [], archives: [] };
+  const cutoff = addDays(today, -(days - 1));
+  return {
+    cutoff,
+    entries: [...data.entries.values()].filter((e) => isLiveEntry(e) && e.date < cutoff),
+    archives: [...data.dayArchive.values()].filter((a) => !a.deletedAt && a.date < cutoff),
+  };
+}
+
+/**
+ * Сводка дня после срока хранения истории: статистика убирается, награды остаются (баланс игры не меняется).
+ * entries — живые записи этого дня (тоже удаляются), prev — прежняя сводка. Без наград — null (сводка не нужна).
+ */
+export function strippedArchive(date, entries, prev, ctx) {
+  const full = archiveFor(date, entries, prev, ctx);
+  if (!hasRewards(full.rewards)) return null;
+  return touch(full, { count: 0, totals: {}, meals: {}, foods: {}, meds: {}, measures: {}, stripped: true }, ctx);
 }

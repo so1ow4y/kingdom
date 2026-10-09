@@ -5,7 +5,7 @@ import { Icon } from '../icons.js';
 import { store } from '../../store/appState.js';
 import * as F from '../../core/feast.js';
 import {
-  NUTRIENTS, NUTRIENT, NUTRIENT_GROUPS, MACROS, nv, fmt, dayGoals, remaining, signed, rdiPct, kcalFromMacros, macroSplit,
+  NUTRIENTS, NUTRIENT, NUTRIENT_GROUPS, MACROS, nv, fmt, dayGoals, remaining, signed, rdiPct, kcalFromMacros, macroSplit, kcalCheck, num,
 } from '../../core/nutrition.js';
 import { tr, dec } from '../../core/i18n.js';
 
@@ -112,16 +112,23 @@ export function NumField({ label, value, unit = '', onCommit, step = 'any', disa
  */
 export function NutrientEditor({ nutrients, unit = 'g', onChange, disabled = false, open = false, per = null }) {
   const [shown, setShown] = useState(open);
-  const set = (key, raw) => onChange({ ...nutrients, [key]: raw });
-  const auto = kcalFromMacros(nutrients);
+  // 0.14: калории не указаны (или уже посчитаны по БЖУ) — пересчитываются сами при вводе белков, жиров, углеводов
+  const macrosOf = (n) => Object.fromEntries(MACROS.map((k) => [k, num(n[k])]));
+  const set = (key, raw) => {
+    const next = { ...nutrients, [key]: raw };
+    const auto = !num(nutrients.kcal) || num(nutrients.kcal) === kcalFromMacros(macrosOf(nutrients));
+    if (MACROS.includes(key) && auto) next.kcal = kcalFromMacros(macrosOf(next)) || nutrients.kcal || 0;
+    onChange(next);
+  };
+  const check = kcalCheck(Object.fromEntries(['kcal', 'fiber', ...MACROS].map((k) => [k, num(nutrients[k])])));
   const base = per || (unit === 'ml' ? tr('100 мл') : tr('100 г'));
   return html`<div class="nutrient-editor">
     <div class="ne-main">
       ${['kcal', ...MACROS].map((k) => html`<${NumField} key=${k} big label=${NUTRIENT[k].label} unit=${NUTRIENT[k].unit}
         value=${nv(nutrients, k)} disabled=${disabled} onCommit=${(v) => set(k, v)}/>`)}
     </div>
-    <p class="hint">Значения на ${base}.${!nv(nutrients, 'kcal') && auto ? html` По БЖУ выходит ${auto} ккал —
-      <button type="button" class="link-btn" disabled=${disabled} onClick=${() => set('kcal', auto)}>подставить</button>` : null}</p>
+    <p class="hint">Значения на ${base}.</p>
+    <${KcalCheck} check=${check} disabled=${disabled} onFix=${() => onChange({ ...nutrients, kcal: check.auto })}/>
     <button type="button" class="link-btn ne-more" onClick=${() => setShown(!shown)} aria-expanded=${shown}>
       <${Icon} name=${shown ? 'chevronDown' : 'chevron'} size=${16}/> Подробнее, витамины и минералы</button>
     ${shown ? NUTRIENT_GROUPS.filter((g) => g.key !== 'main').map((g) => html`
@@ -208,4 +215,52 @@ export function OptNumField({ label, value, placeholder = '', unit = '', disable
       ${unit ? html`<small>${unit}</small>` : null}
     </span>
   </label>`;
+}
+
+/**
+ * Проверка калорий по БЖУ (0.14): сходится — ✓; не сходится — ⚠ и «Посчитать по БЖУ»; есть только калории — просьба
+ * указать белки, жиры и углеводы. Статус — словами и значком, не только цветом.
+ */
+export function KcalCheck({ check, onFix, disabled = false }) {
+  const { state, kcal, auto } = check;
+  if (state === 'empty') return null;
+  if (state === 'ok') return html`<p class="kcal-check ok" role="status">✓ ${tr('Калории сходятся с БЖУ (по БЖУ — {auto} ккал).', { auto })}</p>`;
+  if (state === 'noMacros') return html`<p class="kcal-check warn" role="status">⚠ ${tr('Укажи белки, жиры и углеводы — по ним проверяются калории.')}</p>`;
+  if (state === 'noKcal') {
+    return html`<p class="kcal-check warn" role="status">⚠ ${tr('Калории не указаны, по БЖУ выходит {auto} ккал.', { auto })}
+      <button type="button" class="link-btn" disabled=${disabled} onClick=${onFix}>${tr('Подставить')}</button></p>`;
+  }
+  return html`<p class="kcal-check warn" role="status">⚠ ${state === 'low'
+    ? tr('Калорий указано {kcal}, а по БЖУ выходит {auto} — проверь цифры на упаковке.', { kcal: fmt(kcal, 'kcal'), auto })
+    : tr('Калорий указано {kcal}, а по БЖУ выходит {auto} — проверь цифры (больше бывает у продуктов с алкоголем).', { kcal: fmt(kcal, 'kcal'), auto })}
+    <button type="button" class="link-btn" disabled=${disabled} onClick=${onFix}>${tr('Посчитать калории по БЖУ')}</button></p>`;
+}
+
+/** Значки для лекарств и замеров (0.14): разные шприцы, таблетки и витамины различаются с одного взгляда. */
+export const ICON_CHOICES = ['💊', '💉', '🩸', '🧴', '🍯', '🧪', '💧', '🌿', '🍋', '🐟', '☀️', '🌙', '🩹', '🫀', '🫁', '🦴',
+  '🔴', '🟠', '🟡', '🟢', '🔵', '🟣', '🟤', '⚫', '⚪', '❤️', '💛', '💚', '💙', '💜', '🌡️', '📏'];
+
+/** Выбор значка: свой (любой эмодзи) или из готовых; пусто — по умолчанию (fallback). */
+export function IconPicker({ value = '', onChange, disabled = false, fallback = '💊', label = tr('Значок') }) {
+  const [draft, setDraft] = useState(null);
+  const shown = draft ?? value ?? '';
+  const commit = () => {
+    if (draft === null) return;
+    onChange(draft.trim());
+    setDraft(null);
+  };
+  const first = [...String(value || '')][0] || '';
+  return html`<div class="field icon-picker">
+    <span>${label}</span>
+    <div class="emoji-row">
+      <span class="ip-current" aria-hidden="true">${value || fallback}</span>
+      <input class="emoji-input" value=${shown} maxLength="8" placeholder=${fallback} aria-label=${label} disabled=${disabled}
+        onInput=${(e) => setDraft(e.target.value)} onBlur=${commit} onKeyDown=${(e) => { if (e.key === 'Enter') { e.preventDefault(); e.target.blur(); } }}/>
+      ${value ? html`<button type="button" class="link-btn" disabled=${disabled} onClick=${() => onChange('')}>${tr('По умолчанию')}</button>` : null}
+    </div>
+    <div class="emoji-grid">
+      ${ICON_CHOICES.map((x) => html`<button type="button" key=${x} class=${'emoji-btn' + (first === [...x][0] && value === x ? ' selected' : '')} disabled=${disabled}
+        aria-label=${x} onClick=${() => onChange(x)}>${x}</button>`)}
+    </div>
+  </div>`;
 }

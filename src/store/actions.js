@@ -792,7 +792,7 @@ export async function commitMedia(updates = [], tombIds = []) {
 // ---------- Лимит хранения выполненных (обновление 0.5) ----------
 
 export function completedPlan() {
-  return RT.purgePlan(store.data, store.data.settings.completedLimit ?? null, Date.now());
+  return RT.retentionPlan(store.data, Date.now());
 }
 
 /** Удалить старые выполненные сверх лимита (статистика остаётся в сводках doneArchive). → сколько удалено. */

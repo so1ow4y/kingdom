@@ -119,3 +119,24 @@ export function doneEntries(data, tz) {
   }
   return out;
 }
+
+/** 0.14: срок хранения выполненных, дней (настройка completedDays): null — без срока, иначе 7…36 500. */
+export function completedDaysOf(settings) {
+  const n = Math.round(+settings?.completedDays || 0);
+  return n > 0 ? Math.max(RETENTION.historyMin, Math.min(RETENTION.historyMax, n)) : null;
+}
+
+/**
+ * Что удалить по лимиту и по сроку (0.14): деревья сверх лимита и деревья, выполненные раньше срока. Статистика
+ * остаётся в сводках doneArchive — по ней считаются уровни навыков, серии, достижения и дружба жителей.
+ */
+export function retentionPlan(data, nowMs) {
+  const s = data.settings || {};
+  const byCount = purgePlan(data, s.completedLimit ?? null, nowMs);
+  const days = completedDaysOf(s);
+  if (!days) return { ...byCount, days: null };
+  const byAge = purgePlan(data, 0, nowMs, days);
+  const seen = new Set(byCount.trees.map((t) => t.rootId));
+  const trees = [...byCount.trees, ...byAge.trees.filter((t) => !seen.has(t.rootId))];
+  return { trees, count: trees.reduce((n, t) => n + t.ids.length, 0), total: byCount.total, over: byCount.over, days };
+}

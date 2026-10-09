@@ -391,6 +391,18 @@
                   "maximum": 1440
                 },
                 "maxItems": 12
+              },
+              "completedDays": {
+                "oneOf": [
+                  {
+                    "type": "integer",
+                    "minimum": 7,
+                    "maximum": 36500
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           }

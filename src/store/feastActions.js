@@ -18,6 +18,16 @@ import { cleanValues, partCount } from '../core/measures.js';
 
 let repo = null;
 let clock = null;
+
+/** Удаление в корзину (0.14): надгробие в своей коллекции и снимок в корзине — вернуть можно trashDays дней. */
+function trashChanges(coll, list, c0) {
+  const out = [];
+  for (const e of list) {
+    out.push({ coll, prev: e, next: tombstone(e, c0) });
+    out.push({ coll: 'trash', prev: D().trash.get(F.trashId(coll, e.id)), next: F.newTrashRecord(coll, e, c0) });
+  }
+  return out;
+}
 let deviceId = null;
 let channel = null;
 
@@ -249,10 +259,9 @@ export async function toggleFavorite(id) {
 export async function deleteFoods(ids) {
   const list = ids.map((id) => D().foods.get(id)).filter((f) => f && !f.deletedAt);
   if (!list.length) return null;
-  const c0 = ctx();
-  const changes = list.map((f) => ({ coll: 'foods', prev: f, next: tombstone(f, c0) }));
+  const changes = trashChanges('foods', list, ctx());
   if (await commit(changes)) {
-    offerUndo(list.length === 1 ? tr('Продукт «{p0}» удалён', { p0: list[0].name }) : tr('Удалено {p0}', { p0: countLabel(list.length, ['продукт', 'продукта', 'продуктов']) }), changes);
+    offerUndo(list.length === 1 ? tr('«{p0}» — в корзине', { p0: list[0].name }) : tr('В корзину: {p0}', { p0: countLabel(list.length, ['позиция', 'позиции', 'позиций']) }), changes);
     return { total: ids.length, succeeded: list.length, failed: [] };
   }
   return null;
@@ -424,9 +433,7 @@ export async function updateEntry(id, changes) {
 }
 
 export async function deleteEntries(ids, text = null) {
-  const c0 = ctx();
-  const changes = ids.map((id) => D().entries.get(id)).filter((e) => e && !e.deletedAt)
-    .map((e) => ({ coll: 'entries', prev: e, next: tombstone(e, c0) }));
+  const changes = trashChanges('entries', ids.map((id) => D().entries.get(id)).filter((e) => e && !e.deletedAt), ctx());
   if (await commit(changes)) {
     offerUndo(text || (changes.length === 1 ? tr('Запись удалена') : tr('Удалено записей: {length}', { length: changes.length })), changes);
     return true;
@@ -525,8 +532,7 @@ export async function deleteMeal(id) {
     if (!ok) return false;
   }
   const c0 = ctx();
-  const changes = [{ coll: 'meals', prev: m, next: tombstone(m, c0) }];
-  for (const e of entries) changes.push({ coll: 'entries', prev: e, next: tombstone(e, c0) });
+  const changes = [...trashChanges('meals', [m], c0), ...trashChanges('entries', entries, c0)];
   for (const n of D().mealNotes.values()) if (!n.deletedAt && n.meal === id) changes.push({ coll: 'mealNotes', prev: n, next: tombstone(n, c0) });
   if (await commit(changes)) {
     offerUndo(tr('Рацион «{name}» удалён', { name: F.mealName(m) }), changes);
@@ -564,7 +570,7 @@ export async function saveBodyLog(date, values) {
 export async function deleteBodyLog(id) {
   const b = D().body.get(id);
   if (!b || b.deletedAt) return;
-  const changes = [{ coll: 'body', prev: b, next: tombstone(b, ctx()) }];
+  const changes = trashChanges('body', [b], ctx());
   if (await commit(changes)) offerUndo(tr('Замер удалён'), changes);
 }
 
@@ -609,3 +615,118 @@ export async function purgeOldEntries({ interactive = false, today = store.now.t
 }
 
 export const entryLimitRange = () => [FEAST_RETENTION.entryMin, FEAST_RETENTION.entryMax];
+
+// ---------- Корзина (0.14) ----------
+
+/** Вернуть из корзины: сущность — со свежими метками (на всех устройствах), запись корзины — убрать. */
+export async function restoreTrash(ids) {
+  const c0 = ctx();
+  const changes = [];
+  let n = 0;
+  for (const id of ids) {
+    const r = D().trash.get(id);
+    if (!r || r.deletedAt || !D()[r.coll]) continue;
+    const cur = D()[r.coll].get(r.entityId);
+    if (!cur || cur.deletedAt) changes.push({ coll: r.coll, prev: cur, next: F.restoreEntity(cur, r.snapshot, c0) });
+    changes.push({ coll: 'trash', prev: r, next: tombstone(r, c0) });
+    n++;
+  }
+  if (!(await commit(changes))) return 0;
+  offerUndo(n === 1 ? tr('Возвращено') : tr('Возвращено: {n}', { n }), changes);
+  return n;
+}
+
+/** Удалить из корзины навсегда (без вопроса — спрашивает экран). */
+export async function deleteTrashForever(ids) {
+  const c0 = ctx();
+  const changes = ids.map((id) => D().trash.get(id)).filter((r) => r && !r.deletedAt).map((r) => ({ coll: 'trash', prev: r, next: tombstone(r, c0) }));
+  return (await commit(changes)) ? changes.length : 0;
+}
+
+/** Очистить корзину целиком (с вопросом). */
+export async function emptyFeastTrash() {
+  const list = F.trashList(D());
+  if (!list.length) return 0;
+  const ok = await confirm({
+    title: tr('Очистить корзину?'),
+    text: tr('{p0} удалятся навсегда — вернуть их будет нельзя.', { p0: countLabel(list.length, ['позиция', 'позиции', 'позиций']) }),
+    confirmLabel: tr('Очистить'),
+    danger: true,
+  });
+  if (!ok) return 0;
+  const n = await deleteTrashForever(list.map((r) => r.id));
+  if (n) showSnackbar(tr('Корзина очищена'));
+  return n;
+}
+
+/** Корзина старше срока — навсегда (при запуске и при открытии корзины). */
+export async function purgeFeastTrash(nowMs = Date.now()) {
+  if (!D().settings || store.ui.feastReadOnly) return 0;
+  const old = F.trashExpired(D(), nowMs);
+  return old.length ? deleteTrashForever(old.map((r) => r.id)) : 0;
+}
+
+/** Срок корзины, дней (1…365). */
+export async function setTrashDays(v) {
+  const n = Math.round(num(v));
+  if (!n) return false;
+  const ok = await updateFeastSettings({ trashDays: Math.max(FEAST_RETENTION.trashMin, Math.min(FEAST_RETENTION.trashMax, n)) });
+  if (ok) purgeFeastTrash();
+  return ok;
+}
+
+// ---------- Срок хранения истории (0.14) ----------
+
+/** Что удалит срок хранения days: записи и сводки дней старше него. */
+export const historyPreview = (days, today = store.now.today) => F.historyPlan(D(), today, days ? F.historyDaysOf({ historyDays: days }) : null);
+
+/**
+ * Применить срок хранения истории: записи и статистика дней старше срока удаляются, награды за еду остаются
+ * (монеты и 💎 не пропадают). interactive — спросить; без вопроса — при запуске, если срок задан.
+ */
+export async function purgeHistory({ interactive = false, today = store.now.today, days = undefined } = {}) {
+  if (!D().settings || store.ui.feastReadOnly) return 0;
+  const plan = days === undefined ? F.historyPlan(D(), today) : historyPreview(days, today);
+  if (!plan.entries.length && !plan.archives.some((a) => !a.stripped)) return 0;
+  if (interactive) {
+    const ok = await confirm({
+      title: tr('Удалить историю старше {p0}?', { p0: plan.cutoff }),
+      text: tr('Удалятся {p0} и статистика {p1}. Монеты и 💎, полученные за еду, останутся. Вернуть нельзя.', {
+        p0: countLabel(plan.entries.length, ['запись', 'записи', 'записей']),
+        p1: countLabel(new Set([...plan.entries.map((e) => e.date), ...plan.archives.filter((a) => !a.stripped).map((a) => a.date)]).size, ['дня', 'дней', 'дней']),
+      }),
+      confirmLabel: tr('Удалить'),
+      danger: true,
+    });
+    if (!ok) return -1;
+  }
+  const c0 = ctx();
+  const byDate = new Map();
+  for (const e of plan.entries) {
+    if (!byDate.has(e.date)) byDate.set(e.date, []);
+    byDate.get(e.date).push(e);
+  }
+  for (const a of plan.archives) if (!a.stripped && !byDate.has(a.date)) byDate.set(a.date, []);
+  const changes = [];
+  for (const [date, list] of byDate) {
+    const prev = D().dayArchive.get(F.archiveId(date));
+    const next = F.strippedArchive(date, list, prev && !prev.deletedAt ? prev : null, c0);
+    if (next) changes.push({ coll: 'dayArchive', prev, next });
+    else if (prev && !prev.deletedAt) changes.push({ coll: 'dayArchive', prev, next: tombstone(prev, c0) });
+    for (const e of list) changes.push({ coll: 'entries', prev: e, next: tombstone(e, c0) });
+  }
+  if (!(await commit(changes))) return 0;
+  if (interactive) showSnackbar(tr('История старше {p0} удалена', { p0: plan.cutoff }));
+  return plan.entries.length + plan.archives.length;
+}
+
+/** Срок хранения истории: пусто или 0 — всегда; меньше — с вопросом, если что-то удалится. */
+export async function setHistoryDays(v) {
+  const raw = Math.round(num(v));
+  const days = raw > 0 ? Math.max(FEAST_RETENTION.historyMin, Math.min(FEAST_RETENTION.historyMax, raw)) : null;
+  if (days) {
+    const r = await purgeHistory({ interactive: true, days });
+    if (r < 0) return false;
+  }
+  return updateFeastSettings({ historyDays: days });
+}

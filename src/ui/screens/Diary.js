@@ -66,7 +66,7 @@ function EntryRow({ e, where = 'diary' }) {
     const st = t && !t.deletedAt ? MS.readingStatus(it.values || [it.amount], t.ranges) : null;
     return html`<small class=${st === 'low' || st === 'high' ? 'tone-danger' : 'muted'}>${MS.readingText(it)}${st === 'low' || st === 'high' ? ' · ⚠ ' + MS.STATUS_LABEL[st] : ''}</small>`;
   };
-  const icon = (it) => (F.isMed(it) ? '💊 ' : F.isMeasure(it) ? (typeOf(it)?.icon || '📏') + ' ' : '');
+  const icon = (it) => (F.isMed(it) || F.isMeasure(it) ? (F.kindIcon(typeOf(it)) || F.kindIcon(it)) + ' ' : '');
   const line = (it) => (F.isMeasure(it) ? reading(it) : F.isMed(it) ? html`<small class="muted">${amountLabel(it)}${nv(itemNutrients(it), 'kcal') ? ' · ' + fmt(nv(itemNutrients(it), 'kcal'), 'kcal') : ''}</small>`
     : html`<small class="muted">${amountLabel(it)} · ${fmt(nv(itemNutrients(it), 'kcal'), 'kcal')}</small>`);
   const badge = !items.length ? '📝' : onlyMeds && !kcal ? (items.every(F.isMeasure) ? '📏' : '💊') : fmt(kcal, 'kcal');
@@ -139,9 +139,7 @@ export function DiaryScreen({ query = {} }) {
         За еду: ${rewardLine(dayReward)}</p>` : null}
       ${day.archived ? html`<p class="hint">Записи этого дня удалены лимитом хранения — итоги остались в аналитике.</p>` : null}
 
-      ${meals.map((m) => html`<${MealBlock} key=${m.id} meal=${m} list=${day.entries[m.id] || []} date=${date} readOnly=${readOnly}/>`)}
-
-      <div class="form-actions wrap">
+      <div class="form-actions wrap diary-add">
         ${!day.count && prevCount ? html`<button type="button" class="btn" disabled=${readOnly}
           onClick=${() => FA.copyEntries(yesterday, date)}><${Icon} name="copy2" size=${16}/> Как ${humanDate(yesterday, store.now.today).toLowerCase()}: ${countLabel(prevCount, ['запись', 'записи', 'записей'])}</button>` : null}
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, scan: true })}><${Icon} name="barcode" size=${16}/> Сканировать</button>
@@ -149,9 +147,14 @@ export function DiaryScreen({ query = {} }) {
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'measure' })}>📏 Замер</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, note: true })}>📝 Заметка</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openSheet('meal', { date })}><${Icon} name="plus" size=${16}/> Рацион</button>
-        ${day.count ? html`<button type="button" class="btn ghost" onClick=${() => setDetails(!details)} aria-expanded=${details}>
-          <${Icon} name=${details ? 'chevronDown' : 'chevron'} size=${16}/> Витамины и минералы за день</button>` : null}
       </div>
+
+      ${meals.map((m) => html`<${MealBlock} key=${m.id} meal=${m} list=${day.entries[m.id] || []} date=${date} readOnly=${readOnly}/>`)}
+
+      ${day.count ? html`<div class="form-actions wrap diary-more">
+        <button type="button" class="btn ghost" onClick=${() => setDetails(!details)} aria-expanded=${details}>
+          <${Icon} name=${details ? 'chevronDown' : 'chevron'} size=${16}/> Витамины и минералы за день</button>
+      </div>` : null}
       ${details ? html`<section class="card-block"><${NutrientTable} values=${day.totals} groups=${['more', 'vitamins', 'minerals']}/>
         ${!Object.keys(day.totals).some((k) => !['kcal', 'protein', 'fat', 'carbs'].includes(k) && day.totals[k] > 0)
           ? html`<p class="muted small">У записанных продуктов витамины и минералы не указаны — их можно заполнить в карточке продукта.</p>` : null}</section>` : null}

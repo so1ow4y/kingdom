@@ -11,7 +11,7 @@ import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { Sheet } from './Sheet.js';
 import { BarcodeScanner } from './Scanner.js';
-import { MealChips, macroLine, NutrientEditor, NumField, rewardLine } from './FeastParts.js';
+import { MealChips, macroLine, NutrientEditor, NumField, rewardLine, IconPicker } from './FeastParts.js';
 import { TimeInput } from './TimeInput.js';
 import { store, closeSheet, openSheet, showSnackbar } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
@@ -72,7 +72,7 @@ function FoodPickRow({ food, onPick }) {
   if (F.isMed(food)) {
     return html`<button type="button" class="food-pick med" onClick=${() => onPick(food)}>
       <span class="fp-main">
-        <span class="fp-name">💊 ${food.favorite ? '★ ' : ''}${food.name}${food.brand ? html` <small class="muted">${food.brand}</small>` : null}</span>
+        <span class="fp-name">${F.kindIcon(food)} ${food.favorite ? '★ ' : ''}${food.name}${food.brand ? html` <small class="muted">${food.brand}</small>` : null}</span>
         <small class="muted">лекарство · обычно ${amountLabel({ unit: food.unit, amount: food.dose || 1 })}</small>
       </span>
     </button>`;
@@ -95,7 +95,7 @@ function basketNutrients(it) {
   return scaleNutrients(f.nutrients || {}, F.isMed(f) ? it.amount || 0 : (it.amount || 0) / 100);
 }
 const basketFood = (it) => (it.quick ? null : store.feast.foods.get(it.foodId));
-const kindIcon = (f) => (F.isMed(f) ? '💊 ' : F.isMeasure(f) ? (f.icon || '📏') + ' ' : '');
+const kindIcon = (f) => (F.kindIcon(f) ? F.kindIcon(f) + ' ' : '');
 const basketName = (it) => (it.quick ? it.quick.name || tr('Быстрая запись') : kindIcon(basketFood(it)) + (basketFood(it)?.name || tr('Продукт')));
 const basketAmount = (it) => (it.quick ? amountLabel({ unit: 'portion', amount: it.amount || 1 })
   : F.isMeasure(basketFood(it)) ? MS.readingText({ values: it.values, unit: basketFood(it).unit })
@@ -228,7 +228,7 @@ function LinkedMeds({ food, picked, setPicked }) {
       const on = picked[l.medId] != null;
       return html`<label class="lm-row" key=${l.medId}>
         <input type="checkbox" checked=${on} onChange=${(e) => setPicked({ ...picked, [l.medId]: e.target.checked ? l.amount : null })}/>
-        <span>💊 ${l.med.name}</span>
+        <span>${F.kindIcon(l.med)} ${l.med.name}</span>
         <input class="lm-amount" inputmode="decimal" value=${dec(on ? picked[l.medId] : l.amount)} disabled=${!on}
           aria-label=${tr('Сколько: ') + l.med.name} onInput=${(e) => setPicked({ ...picked, [l.medId]: num(e.target.value) })}/>
         <small class="muted">${MED_UNIT[l.med.unit]?.short || ''}</small>
@@ -243,7 +243,8 @@ function LinkedMeds({ food, picked, setPicked }) {
  */
 function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
   const med = F.isMed(food);
-  const serving = med ? null : F.servingOf(food);
+  const servings = med ? [] : F.servingsOf(food);
+  const serving = servings[0]?.size ?? null;
   const usage = F.foodUsage(store.feast).get(food.id);
   const [amount, setAmount] = useState(dec(usage?.amount ?? (med ? food.dose || 1 : serving ?? 100)));
   const [itemNote, setItemNote] = useState('');
@@ -253,7 +254,7 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
   const a = num(amount);
   const n = scaleNutrients(food.nutrients || {}, med ? a : a / 100);
   const presets = med ? [...new Set([food.dose || 1, 1, 2, 4, 6, 8, 10].filter(Boolean))].slice(0, 7)
-    : [...new Set([serving, 50, 100, 150, 200, 250].filter(Boolean))];
+    : [50, 100, 150, 200, 250].filter((p) => !servings.some((s) => s.size === p));
   const items = () => [
     { key: ++basketKey, foodId: food.id, amount: a, note: itemNote },
     ...Object.entries(picked).filter(([, v]) => num(v)).map(([medId, v]) => ({ key: ++basketKey, foodId: medId, amount: num(v) })),
@@ -264,7 +265,7 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
   const u = unitLabel(food);
   return html`<div class="add-amount">
     <div class="aa-head">
-      <b>${med ? '💊 ' : ''}${food.name}</b>${food.brand ? html` <span class="muted">${food.brand}</span>` : null}
+      <b>${med ? F.kindIcon(food) + ' ' : ''}${food.name}</b>${food.brand ? html` <span class="muted">${food.brand}</span>` : null}
       <button type="button" class="link-btn" onClick=${() => { closeSheet(); openFood(food.id); }}>Карточка</button>
     </div>
     ${food.note ? html`<p class="muted small aa-food-note">📝 ${food.note}</p>` : null}
@@ -274,9 +275,9 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
         onKeyDown=${(e) => e.key === 'Enter' && save()}/><small>${u}</small></span>
     </label>
     <div class="chip-row wrap">
-      ${presets.map((p) => html`<button type="button" class=${'chip' + (a === p ? ' selected' : '')} onClick=${() => setAmount(String(p))}>
-        ${!med && p === serving && food.servingName ? `${food.servingName} (${fmt(p, 'x')} ${u})` : !med && p === serving ? tr('Порция {p0} {u}', { p0: fmt(p, 'x'), u }) : `${fmt(p, 'x')} ${u}`}</button>`)}
-      ${serving ? html`<button type="button" class="chip" onClick=${() => setAmount(String(serving * 2))}>2 порции</button>` : null}
+      ${servings.map((s) => html`<button type="button" key=${'s' + s.id} class=${'chip serving-chip' + (a === s.size ? ' selected' : '')} onClick=${() => setAmount(dec(s.size))}>
+        ${s.name || tr('Порция')} <small>${fmt(s.size, 'x')} ${u}</small></button>`)}
+      ${presets.map((p) => html`<button type="button" key=${p} class=${'chip' + (a === p ? ' selected' : '')} onClick=${() => setAmount(String(p))}>${`${fmt(p, 'x')} ${u}`}</button>`)}
     </div>
     ${med ? null : html`<${LinkedMeds} food=${food} picked=${picked} setPicked=${setPicked}/>`}
     <${LinkedMeasures} food=${food} values=${measureValues} setValues=${setMeasureValues}/>
@@ -285,7 +286,7 @@ function AmountStep({ food, meta, basket, entryMode, onBack, onAdd, onSave }) {
       : html`<button type="button" class="link-btn item-note-btn" onClick=${() => setNoteOpen(true)}><${Icon} name="edit" size=${14}/> ${med ? tr('Заметка к приёму') : tr('Заметка к продукту')}</button>`}
     ${entryMode ? null : html`<${EntryMeta} ...${meta}/>`}
     <div class="aa-total">
-      ${med ? html`<b>💊 ${amountLabel({ unit: food.unit, amount: a })}</b>${Object.keys(n).length ? html`<span class="muted">${fmt(nv(n, 'kcal'), 'kcal')} ккал · ${macroLine(n)}</span>` : null}` : html`<b>${fmt(nv(n, 'kcal'), 'kcal')} ккал</b>
+      ${med ? html`<b>${F.kindIcon(food)} ${amountLabel({ unit: food.unit, amount: a })}</b>${Object.keys(n).length ? html`<span class="muted">${fmt(nv(n, 'kcal'), 'kcal')} ккал · ${macroLine(n)}</span>` : null}` : html`<b>${fmt(nv(n, 'kcal'), 'kcal')} ккал</b>
       <span class="muted">${macroLine(n)}</span>
       ${store.data.settings?.gameEnabled ? html`<span class="muted">Награда: ${rewardLine(F.rewardsOf(food, store.feast.settings)) || tr('нет')}</span>` : null}`}
       ${total !== null ? html`<span class="muted">Вся запись: ${countLabel(basket.length + 1, ['позиция', 'позиции', 'позиций'])} · ${fmt(total, 'kcal')} ккал</span>` : null}
@@ -323,6 +324,8 @@ function CreateStep({ barcode, name: initialName = '', kind: initialKind = 'food
   const [brand, setBrand] = useState('');
   const [unit, setUnit] = useState(med ? 'tab' : 'g');
   const [serving, setServing] = useState('');
+  const [servingName, setServingName] = useState('');
+  const [icon, setIcon] = useState('');
   const [dose, setDose] = useState('1');
   const [nutr, setNutr] = useState({});
   const [note, setNote] = useState('');
@@ -337,8 +340,8 @@ function CreateStep({ barcode, name: initialName = '', kind: initialKind = 'food
     const f = await FA.createFood(measure
       ? { kind: 'measure', name, unit: mUnit, parts: mParts, ranges: MS.cleanRanges(mRanges, Math.max(1, mParts.length)), icon: mIcon, note }
       : med
-        ? { kind: 'med', name, brand, unit, dose, note, nutrients: nutr, barcode: normalizeBarcode(code) }
-        : { name, brand, unit, servingSize: serving, nutrients: nutr, note, barcode: normalizeBarcode(code) });
+        ? { kind: 'med', name, brand, unit, dose, note, icon, nutrients: nutr, barcode: normalizeBarcode(code) }
+        : { name, brand, unit, servings: num(serving) > 0 ? [{ name: servingName, size: num(serving) }] : [], nutrients: nutr, note, barcode: normalizeBarcode(code) });
     if (f) onCreated(f);
   };
   const mCount = Math.max(1, mParts.length);
@@ -370,21 +373,26 @@ function CreateStep({ barcode, name: initialName = '', kind: initialKind = 'food
         onInput=${(e) => setMRanges(mRanges.map((r, j) => (j === i ? { ...r, min: e.target.value } : r)))}/></label>
       <label class="field"><span>до</span><input inputmode="decimal" value=${mRanges[i]?.max ?? ''} placeholder="—"
         onInput=${(e) => setMRanges(mRanges.map((r, j) => (j === i ? { ...r, max: e.target.value } : r)))}/></label>
-    </div>`)}` : html`
+    </div>`)}
+    <${IconPicker} value=${mIcon} fallback="📏" onChange=${setMIcon}/>` : html`
     <div class="field-row">
-      <label class="field"><span>${med ? tr('Производитель') : tr('Бренд')}</span><input value=${brand} placeholder="необязательно" onInput=${(e) => setBrand(e.target.value)}/></label>
       <label class="field"><span>${med ? tr('Форма') : tr('Единица')}</span>
         <select value=${unit} onChange=${(e) => setUnit(e.target.value)}>${(med ? MED_UNITS : F.UNITS).map((u) => html`<option value=${u.key}>${u.label}</option>`)}</select></label>
-    </div>
-    <div class="field-row">
-      <label class="field"><span>Штрихкод</span><input inputmode="numeric" value=${code} placeholder="необязательно" onInput=${(e) => setCode(e.target.value)}/></label>
       ${med ? html`<label class="field"><span>Обычная доза, ${MED_UNIT[unit]?.short || ''}</span><input inputmode="decimal" value=${dose} onInput=${(e) => setDose(e.target.value)}/></label>`
-        : html`<label class="field"><span>Порция, ${unit === 'ml' ? tr('мл') : tr('г')}</span><input inputmode="decimal" value=${serving} placeholder="необязательно" onInput=${(e) => setServing(e.target.value)}/></label>`}
+        : html`<label class="field"><span>Штрихкод</span><input inputmode="numeric" value=${code} placeholder="необязательно" onInput=${(e) => setCode(e.target.value)}/></label>`}
     </div>
+    ${med ? html`<div class="field-row">
+      <label class="field"><span>Штрихкод</span><input inputmode="numeric" value=${code} placeholder="необязательно" onInput=${(e) => setCode(e.target.value)}/></label>
+    </div>` : html`<div class="field-row">
+      <label class="field"><span>${tr('Порция — название')}</span><input value=${servingName} maxlength="40" placeholder=${tr('например, стакан')} onInput=${(e) => setServingName(e.target.value)}/></label>
+      <label class="field"><span>Порция, ${unit === 'ml' ? tr('мл') : tr('г')}</span><input inputmode="decimal" value=${serving} placeholder="необязательно" onInput=${(e) => setServing(e.target.value)}/></label>
+    </div>`}
     ${warn ? html`<p class="hint warn">${warn}</p>` : null}`}
     <label class="field"><span>Заметка</span>
       <textarea class="note-area" rows="2" maxlength=${F.NOTE_MAX} value=${note} placeholder=${med ? tr('необязательно: как принимать, курс…') : tr('необязательно: где купить, как готовить…')}
         onInput=${(e) => setNote(e.target.value)}></textarea></label>
+    ${measure ? null : html`<label class="field"><span>${med ? tr('Производитель') : tr('Бренд')}</span><input value=${brand} placeholder="необязательно" onInput=${(e) => setBrand(e.target.value)}/></label>`}
+    ${med ? html`<${IconPicker} value=${icon} fallback="💊" onChange=${setIcon}/>` : null}
     ${measure ? null : med ? html`<button type="button" class="link-btn" aria-expanded=${medNutrOpen} onClick=${() => setMedNutrOpen(!medNutrOpen)}>
         <${Icon} name=${medNutrOpen ? 'chevronDown' : 'chevron'} size=${16}/> КБЖУ, витамины и минералы (сироп, витамины)</button>
       ${medNutrOpen ? html`<${NutrientEditor} nutrients=${nutr} unit="g" per=${tr('1 {u}', { u: MED_UNIT[unit]?.short || '' })} onChange=${setNutr}/>` : null}`
@@ -432,7 +440,7 @@ function ReviewStep({ basket, setBasket, meta, entryMode, onMore, onSave }) {
         <span class="ie-name">${basketName(it)}</span>
         ${it.values ? html`<span class="ie-values">${basketAmount(it)}</span>` : html`<${NumField} label="Сколько" value=${it.amount} unit=${it.quick ? tr('порц.') : unitLabel(basketFood(it))}
           onCommit=${(v) => setAmount(it.key, v)}/>`}
-        <b class="ie-kcal">${F.isMeasure(basketFood(it)) ? '' : F.isMed(basketFood(it)) && !nv(basketNutrients(it), 'kcal') ? '💊' : fmt(nv(basketNutrients(it), 'kcal'), 'kcal')}</b>
+        <b class="ie-kcal">${F.isMeasure(basketFood(it)) ? '' : F.isMed(basketFood(it)) && !nv(basketNutrients(it), 'kcal') ? F.kindIcon(basketFood(it)) : fmt(nv(basketNutrients(it), 'kcal'), 'kcal')}</b>
         <button type="button" class="icon-btn small" aria-label=${tr('Убрать ') + basketName(it)} onClick=${() => setBasket(basket.filter((x) => x.key !== it.key))}>
           <${Icon} name="close" size=${16}/></button>
         <input class="item-note-input ie-note" value=${it.note || ''} maxlength=${F.NOTE_MAX} placeholder="Заметка к продукту"
@@ -608,7 +616,7 @@ export function EntrySheet({ id }) {
     <${Sheet} title=${F.entryTitle(e)} onClose=${closeSheet} className="entry-sheet">
       <ul class="item-edit-list">
         ${live.map((it) => html`<li key=${it.id} class="item-edit">
-          <span class="ie-name">${F.isMed(it) ? '💊 ' : F.isMeasure(it) ? (foodOf(it)?.icon || '📏') + ' ' : ''}${foodOf(it) ? html`<button type="button" class="link-btn" onClick=${() => { closeSheet(); openFood(it.foodId); }}>${it.name}</button>` : it.name}</span>
+          <span class="ie-name">${F.isMed(it) || F.isMeasure(it) ? (F.kindIcon(foodOf(it)) || F.kindIcon(it)) + ' ' : ''}${foodOf(it) ? html`<button type="button" class="link-btn" onClick=${() => { closeSheet(); openFood(it.foodId); }}>${it.name}</button>` : it.name}</span>
           ${F.isMeasure(it) ? html`<${MeasureInputs} m=${foodOf(it) || { name: it.name, unit: it.unit, parts: (it.values || []).length > 1 ? it.values.map((_, i) => tr('Значение {n}', { n: i + 1 })) : [] }}
             values=${vals[it.id] || ['']} setValues=${(v) => setVals({ ...vals, [it.id]: v })}/>` : html`<${NumField} label=${it.unit === 'portion' ? tr('Порций') : F.isMed(it) ? tr('Доза') : tr('Сколько')} value=${amountOf(it)} unit=${unitOf(it)}
             onCommit=${(v) => setAmounts({ ...amounts, [it.id]: num(v) })}/>`}

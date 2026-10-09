@@ -11,8 +11,8 @@ const V2_STORES = ['priorities', 'coinEvents', 'rewards']; // формат да�
 const V3_STORES = ['doneArchive']; // формат данных v3 (обновление 0.5)
 export const ENTITY_STORES = [...V1_STORES, ...V2_STORES, ...V3_STORES];
 // Счётчик калорий (0.11) — отдельная база IndexedDB с тем же устройством сторов (без медиа);
-// версия 2 (0.12) — сторы рационов и заметок к ним
-const FEAST_IDB_VERSION = 2;
+// версия 2 (0.12) — сторы рационов и заметок к ним; версия 3 (0.14) — корзина (trash)
+const FEAST_IDB_VERSION = 3;
 export const FEAST_STORES = FEAST_COLLECTIONS;
 
 /** Создаёт все недостающие сторы — независимо от старой версии (переживает и «пустую» базу без сторов). */

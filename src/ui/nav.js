@@ -1,18 +1,18 @@
 // Меню приложения (обновление 0.10) — как buildMenu/visibleMenu в license-store (components/app-shell.tsx):
 // группы с ветками. Ветка раскрывается на месте в развёрнутом доке и выпадающим списком в свёрнутом —
 // так в доке видно меньше значков. Ветка из одного пункта становится просто ссылкой.
-// Деревня, аналитика и магазин — одна ветка «Прогресс»; выполненные и корзина — ветка «Архив и корзина».
+// Деревня и магазин — одна ветка «Прогресс»; выполненные и корзина — ветка «Архив и корзина»; аналитика задач (0.14) —
+// своя ветка (Обзор, По времени), как «Аналитика» в Crimson Harvest.
 // У таких веток наверху экрана — вкладки (SectionTabs), как у «Безопасности» в license-store.
 
 import * as S from '../core/selectors.js';
 import { store } from '../store/appState.js';
-import { activeApp } from './prefs.js';
 import * as F from '../core/feast.js';
 import { tr } from '../core/i18n.js';
 
 /** Разделы из нескольких экранов: пункт дока-ветка и вкладки вверху экрана. */
 export const SECTIONS = {
-  progress: { title: tr('Прогресс'), icon: 'village', routes: ['village', 'analytics', 'shop'] },
+  progress: { title: tr('Прогресс'), icon: 'village', routes: ['village', 'shop'] },
   archive: { title: tr('Архив и корзина'), icon: 'archive', routes: ['archive', 'trash'] },
 };
 
@@ -32,13 +32,20 @@ export function isTargetActive(route, item) {
 /** Ветка подсвечена, если открыт любой её пункт. */
 export const isBranchActive = (route, branch) => branch.items.some((sub) => isTargetActive(route, sub));
 
-/** «Прогресс»: деревня, аналитика задач, магазин. В Crimson Harvest (0.12) — деревня и магазин без аналитики задач. */
-function progressItems(data, app = activeApp()) {
+/** «Прогресс»: деревня и магазин — общие для обоих приложений (аналитика задач с 0.14 — своя ветка). */
+function progressItems(data) {
   return [
     data.settings.gameEnabled ? { title: tr('Деревня'), icon: 'village', to: '/village', match: ['village'], key: 'goVillage' } : null,
-    app === 'feast' ? null : { title: tr('Аналитика'), icon: 'chart', to: '/analytics', match: ['analytics'], key: 'goAnalytics' },
     { title: tr('Магазин'), icon: 'shop', to: '/shop', match: ['shop'], key: 'goShop' },
   ].filter(Boolean);
+}
+
+/** Аналитика задач (0.14): обзор и «По времени» — как у лекарств в Crimson Harvest. */
+function analyticsItems() {
+  return [
+    { title: tr('Обзор'), icon: 'chart', to: '/analytics', match: ['analytics', null], key: 'goAnalytics' },
+    { title: tr('По времени'), icon: 'clock', to: '/analytics/time', match: ['analytics', 'time'] },
+  ];
 }
 
 function archiveItems(trash) {
@@ -104,7 +111,11 @@ function feastMenu() {
     },
     {
       title: tr('Обзор'),
-      items: [{ id: 'progress', title: tr('Деревня'), icon: SECTIONS.progress.icon, items: progressItems(store.data, 'feast') }],
+      items: [
+        { id: 'progress', title: tr('Деревня'), icon: SECTIONS.progress.icon, items: progressItems(store.data) },
+        // корзина (0.14): удалённые записи, продукты, лекарства, замеры и рационы — можно вернуть
+        { title: tr('Корзина'), icon: 'trash', to: '/bin', match: ['bin'], count: F.trashList(store.feast).length || null },
+      ],
     },
     {
       title: tr('Приложение'),
@@ -138,6 +149,7 @@ export function buildMenu(counts, app = 'chronicle') {
     {
       title: tr('Обзор'),
       items: [
+        { id: 'analytics', title: tr('Аналитика'), icon: 'chart', items: analyticsItems() },
         { id: 'progress', title: SECTIONS.progress.title, icon: SECTIONS.progress.icon, items: progressItems(data) },
         { id: 'archive', title: SECTIONS.archive.title, icon: SECTIONS.archive.icon, count: trash, items: archiveItems(trash) },
       ],

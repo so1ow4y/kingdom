@@ -21,7 +21,7 @@ import { formatMoment, localDateOf, longDate, humanDate } from '../../core/dates
 import * as MS from '../../core/measures.js';
 import { countLabel } from '../../core/plural.js';
 import { useSelection } from '../components/Explorer.js';
-import { NutrientEditor, NutrientTable, macroLine, RewardEditor } from '../components/FeastParts.js';
+import { NutrientEditor, NutrientTable, macroLine, RewardEditor, IconPicker } from '../components/FeastParts.js';
 import { openAddFood } from '../components/AddFood.js';
 import { tr, dec } from '../../core/i18n.js';
 
@@ -245,7 +245,7 @@ function FoodsExplorer({ kind, query = {} }) {
                           checked=${selection.has(f.id)} onChange=${() => selection.toggle(f.id)}/></td>
                         <td class="ex-w-chev"><${Icon} name=${isOpen ? 'chevronDown' : 'chevron'} size=${16}/></td>
                         <td class="ex-title-cell">
-                          <button type="button" class="ex-title" onClick=${(e) => { e.stopPropagation(); openFood(f.id); }}>${f.favorite ? '★ ' : ''}${med ? '💊 ' : ''}${f.name}</button>
+                          <button type="button" class="ex-title" onClick=${(e) => { e.stopPropagation(); openFood(f.id); }}>${f.favorite ? '★ ' : ''}${med ? F.kindIcon(f) + ' ' : ''}${f.name}</button>
                           ${f.brand ? html`<button type="button" class="ex-value fd-brand" onClick=${(e) => { e.stopPropagation(); addTerm('бренд', f.brand); }}>${f.brand}</button>` : null}
                           <div class="ex-narrow-meta"><span>${med ? tr('Лекарство · ') + (MED_UNIT[f.unit]?.label || '') : macroLine(f.nutrients)}</span>${codes.length ? html`<span>▮ ${codes.length}</span>` : null}</div>
                         </td>
@@ -260,7 +260,7 @@ function FoodsExplorer({ kind, query = {} }) {
                           ${f.note ? html`<p class="fd-note">${f.note}</p>` : null}
                           ${med ? html`<p class="muted small">${MED_UNIT[f.unit]?.label || ''} · обычная доза ${amountLabel({ amount: f.dose || 1, unit: f.unit })} · принято: ${countLabel(uses, ['раз', 'раза', 'раз'])}</p>` : html`
                           <${NutrientTable} values=${f.nutrients} pct=${false}/>
-                          <p class="muted small">${f.unit === 'ml' ? tr('На 100 мл') : tr('На 100 г')}${f.servingSize ? tr(' · порция {p0} {p1}', { p0: fmt(f.servingSize, 'x'), p1: f.unit === 'ml' ? tr('мл') : tr('г') }) : ''} · в дневнике: ${countLabel(uses, ['раз', 'раза', 'раз'])}</p>`}
+                          <p class="muted small">${f.unit === 'ml' ? tr('На 100 мл') : tr('На 100 г')}${F.servingsOf(f).length ? tr(' · порции: {p0}', { p0: F.servingsOf(f).map((x) => `${x.name ? x.name + ' ' : ''}${fmt(x.size, 'x')} ${f.unit === 'ml' ? tr('мл') : tr('г')}`).join(', ') }) : ''} · в дневнике: ${countLabel(uses, ['раз', 'раза', 'раз'])}</p>`}
                           <div class="ex-details-actions">
                             <button type="button" class="btn small" onClick=${() => openFood(f.id)}><${Icon} name="chevron" size=${16}/> Открыть карточку</button>
                             <button type="button" class="btn small" disabled=${readOnly()} onClick=${() => openAddFood({ foodId: f.id })}><${Icon} name="plus" size=${16}/> ${med ? tr('Записать приём') : tr('В дневник')}</button>
@@ -328,7 +328,7 @@ function LinkedMedsEditor({ f, ro }) {
   return html`
     <h3 class="set-sub">Лекарства вместе с продуктом</h3>
     ${links.length ? html`<ul class="fc-meds">${links.map((l) => html`<li key=${l.medId}>
-      <button type="button" class="link-btn" onClick=${() => openFood(l.medId)}>💊 ${l.med.name}</button>
+      <button type="button" class="link-btn" onClick=${() => openFood(l.medId)}>${F.kindIcon(l.med)} ${l.med.name}</button>
       <input class="lm-amount" inputmode="decimal" value=${dec(l.amount)} disabled=${ro} aria-label=${tr('Доза: ') + l.med.name}
         onChange=${(e) => save(links.map((x) => (x.medId === l.medId ? { ...x, amount: num(e.target.value) || x.amount } : x)))}/>
       <small class="muted">${MED_UNIT[l.med.unit]?.short || ''}</small>
@@ -388,7 +388,6 @@ function MeasureFields({ f, ro, set }) {
   const setRange = (i, k, v) => set({ ranges: ranges.map((r, j) => (j === i ? { ...(r || {}), [k]: v } : r)) });
   return html`
     <div class="field-row">
-      <${TextField} label="Значок" value=${f.icon} placeholder="📏" maxLength=${8} disabled=${ro} onCommit=${(v) => set({ icon: v })}/>
       <label class="field"><span>Единица</span>
         <input list="measure-units" value=${f.unit || ''} maxlength=${MS.MEASURE_UNIT_MAX} disabled=${ro} placeholder="ммоль/л, мм рт. ст., балл…"
           onChange=${(e) => set({ unit: e.target.value })}/>
@@ -409,6 +408,7 @@ function MeasureFields({ f, ro, set }) {
         onCommit=${(v) => setRange(i, 'max', v)}/>
     </div>`)}
     <p class="muted small">Норма — для подсветки: показания вне её отмечаются ⚠ в дневнике и аналитике. Это ориентир, а не диагноз.</p>
+    <${IconPicker} value=${f.icon || ''} fallback="📏" disabled=${ro} onChange=${(v) => set({ icon: v })}/>
     <${HiddenDesc} f=${f} ro=${ro} set=${set}/>
     <${AreaField} label="Заметка" value=${f.note} placeholder="Когда мерить, каким прибором, что важно…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>`;
 }
@@ -419,14 +419,13 @@ function MedFields({ f, ro, set }) {
   const foods = [...store.feast.foods.values()].filter((x) => !x.deletedAt && (x.meds || []).some((l) => l.medId === f.id));
   return html`
     <div class="field-row">
-      <${TextField} label="Производитель" value=${f.brand} placeholder="необязательно" disabled=${ro} onCommit=${(v) => set({ brand: v })}/>
       <label class="field"><span>Форма</span>
         <select value=${unit.key} disabled=${ro} onChange=${(e) => set({ unit: e.target.value })}>${MED_UNITS.map((u) => html`<option value=${u.key}>${u.label}</option>`)}</select></label>
-    </div>
-    <div class="field-row">
       <${TextField} label=${tr('Обычная доза, {short}', { short: unit.short })} value=${dec(f.dose || 1)} maxLength=${8} disabled=${ro} onCommit=${(v) => set({ dose: num(v) || 1 })}/>
     </div>
     <${AreaField} label="Заметка" value=${f.note} placeholder="Как принимать, назначение, что важно помнить…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>
+    <${TextField} label="Производитель" value=${f.brand} placeholder="необязательно" disabled=${ro} onCommit=${(v) => set({ brand: v })}/>
+    <${IconPicker} value=${f.icon || ''} fallback="💊" disabled=${ro} onChange=${(v) => set({ icon: v })}/>
     <${HiddenDesc} f=${f} ro=${ro} set=${set}/>
     <${MedNutrients} f=${f} ro=${ro} set=${set}/>
     ${foods.length ? html`<p class="muted small">Предлагается вместе с: ${foods.map((x, i) => html`${i ? ', ' : ''}<button type="button" class="link-btn" key=${x.id} onClick=${() => openFood(x.id)}>${x.name}</button>`)}</p>` : null}`;
@@ -442,6 +441,38 @@ function MedNutrients({ f, ro, set }) {
       <${Icon} name=${open ? 'chevronDown' : 'chevron'} size=${16}/> ${tr('КБЖУ, витамины и минералы')}${has ? '' : tr(' (необязательно)')}</button>
     ${open ? html`<${NutrientEditor} key=${'m' + f.id} nutrients=${f.nutrients || {}} unit="g" per=${tr('1 {u}', { u: short })} disabled=${ro} onChange=${(n) => set({ nutrients: n })}/>
       <p class="muted small">${tr('Для сиропов, витаминов и всего, что даёт калории или вещества: значения на 1 {u}. В дневнике они складываются с едой.', { u: short })}</p>` : null}
+  </div>`;
+}
+
+/** Порции продукта (0.14): сколько угодно своих — название и граммы (мл); первая предлагается при записи первой. */
+function ServingsEditor({ f, ro }) {
+  const list = F.servingsOf(f);
+  const [name, setName] = useState('');
+  const [size, setSize] = useState('');
+  const u = f.unit === 'ml' ? tr('мл') : tr('г');
+  const save = (next) => FA.updateFood(f.id, { servings: next });
+  const add = (e) => {
+    e?.preventDefault();
+    if (!(num(size) > 0)) return;
+    save([...list, { id: null, name, size: num(size) }]);
+    setName('');
+    setSize('');
+  };
+  return html`<div class="servings-editor">
+    <h3 class="set-sub">${tr('Порции')}</h3>
+    ${list.length ? html`<ul class="servings-list">${list.map((s, i) => html`<li key=${s.id + ':' + i} class="serving-row">
+      <${TextField} label=${tr('Название')} value=${s.name} placeholder=${tr('например, стакан')} maxLength=${40} disabled=${ro}
+        onCommit=${(v) => save(list.map((x, j) => (j === i ? { ...x, name: v } : x)))}/>
+      <${TextField} label=${u} value=${dec(s.size)} maxLength=${8} disabled=${ro}
+        onCommit=${(v) => (num(v) > 0 ? save(list.map((x, j) => (j === i ? { ...x, size: num(v) } : x))) : null)}/>
+      <button type="button" class="icon-btn small" disabled=${ro} title=${tr('Убрать порцию')} aria-label=${tr('Убрать порцию {p0}', { p0: s.name || dec(s.size) })}
+        onClick=${() => save(list.filter((_, j) => j !== i))}><${Icon} name="close" size=${16}/></button>
+    </li>`)}</ul>` : html`<p class="muted small">${tr('Порций нет — при записи можно ввести граммы. Добавь свои: «стакан», «ложка», «пачка»…')}</p>`}
+    ${list.length >= F.SERVINGS_MAX ? null : html`<form class="serving-row serving-add" onSubmit=${add}>
+      <label class="field"><span>${tr('Новая порция')}</span><input value=${name} maxlength="40" placeholder=${tr('например, стакан')} disabled=${ro} onInput=${(e) => setName(e.target.value)}/></label>
+      <label class="field"><span>${u}</span><input inputmode="decimal" value=${size} placeholder="250" disabled=${ro} onInput=${(e) => setSize(e.target.value)}/></label>
+      <button type="submit" class="btn small" disabled=${ro || !(num(size) > 0)}><${Icon} name="plus" size=${14}/> ${tr('Добавить')}</button>
+    </form>`}
   </div>`;
 }
 
@@ -474,7 +505,7 @@ export function FoodCard({ id, panel = false, onClose }) {
   const head = html`
       <div class="task-header">
         <button class="icon-btn" onClick=${onClose} aria-label="Закрыть"><${Icon} name=${panel ? 'close' : 'back'}/></button>
-        <span class="fc-kind">${med ? tr('💊 Лекарство') : measure ? tr('📏 Замер') : tr('Продукт')}</span>
+        <span class="fc-kind">${med ? F.kindIcon(f) + ' ' + tr('Лекарство') : measure ? F.kindIcon(f) + ' ' + tr('Замер') : tr('Продукт')}</span>
         <span class="ds-spacer"></span>
         <button class=${'icon-btn' + (f.favorite ? ' fav' : '')} disabled=${ro} onClick=${() => FA.toggleFavorite(f.id)}
           aria-pressed=${!!f.favorite} title=${f.favorite ? tr('Убрать из избранного') : tr('В избранное')} aria-label="Избранное"><${Icon} name="star" filled=${!!f.favorite}/></button>
@@ -498,15 +529,12 @@ export function FoodCard({ id, panel = false, onClose }) {
       ${head}
       ${med ? html`<${MedFields} f=${f} ro=${ro} set=${set}/><${LinkedMeasuresEditor} f=${f} ro=${ro}/>` : html`
       <div class="field-row">
-        <${TextField} label="Бренд" value=${f.brand} placeholder="необязательно" disabled=${ro} onCommit=${(v) => set({ brand: v })}/>
         <label class="field"><span>Единица</span>
           <select value=${f.unit} disabled=${ro} onChange=${(e) => set({ unit: e.target.value })}>${F.UNITS.map((u) => html`<option value=${u.key}>${u.label}</option>`)}</select></label>
       </div>
-      <div class="field-row">
-        <${TextField} label="Порция — название" value=${f.servingName} placeholder="например, стакан" maxLength=${40} disabled=${ro} onCommit=${(v) => set({ servingName: v })}/>
-        <${TextField} label=${tr('Порция, {p0}', { p0: f.unit === 'ml' ? tr('мл') : tr('г') })} value=${f.servingSize ? String(f.servingSize) : ''} placeholder="—" maxLength=${8} disabled=${ro} onCommit=${(v) => set({ servingSize: v })}/>
-      </div>
       <${AreaField} label="Заметка к продукту" value=${f.note} placeholder="Например, сколько единиц инсулина обычно нужно, где покупать…" disabled=${ro} onCommit=${(v) => set({ note: v })}/>
+      <${TextField} label="Бренд" value=${f.brand} placeholder="необязательно" disabled=${ro} onCommit=${(v) => set({ brand: v })}/>
+      <${ServingsEditor} f=${f} ro=${ro}/>
 
       <h3 class="set-sub">Пищевая ценность</h3>
       <${NutrientEditor} key=${f.id} nutrients=${f.nutrients} unit=${f.unit} disabled=${ro} onChange=${(n) => set({ nutrients: n })}/>

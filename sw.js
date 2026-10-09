@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.13.0';
+const VERSION = '0.14.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -44,6 +44,7 @@ const PRECACHE = [
   './src/core/selectors.js',
   './src/core/sessions.js',
   './src/core/skills.js',
+  './src/core/timeWindow.js',
   './src/core/treeDrop.js',
   './src/core/village.js',
   './src/data/envelope.js',
@@ -115,6 +116,7 @@ const PRECACHE = [
   './src/ui/components/TaskRow.js',
   './src/ui/components/TaskTree.js',
   './src/ui/components/TimeInput.js',
+  './src/ui/components/TimeWindow.js',
   './src/ui/components/VillageDialog.js',
   './src/ui/components/VillageView.js',
   './src/ui/dayContext.js',
@@ -130,6 +132,7 @@ const PRECACHE = [
   './src/ui/screens/ArchiveTrash.js',
   './src/ui/screens/Body.js',
   './src/ui/screens/Diary.js',
+  './src/ui/screens/FeastTrash.js',
   './src/ui/screens/Foods.js',
   './src/ui/screens/Inbox.js',
   './src/ui/screens/Journal.js',

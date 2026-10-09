@@ -13,7 +13,7 @@ import { takeOAuthFragment } from './google/auth.js';
 import { startSync } from './sync/syncEngine.js';
 import { startNotifier } from './ui/notifier.js';
 import { runRetention } from './ui/components/DataSettings.js';
-import { purgeOldEntries } from './store/feastActions.js';
+import { purgeOldEntries, purgeFeastTrash, purgeHistory } from './store/feastActions.js';
 import { tr } from './core/i18n.js';
 
 // Самым первым: забрать токен из адреса и убрать его оттуда (до роутера и до любых логов).
@@ -51,6 +51,8 @@ try {
   setTimeout(() => runRetention().catch((e) => console.warn('retention', e)), 4000);
   // Feast (0.11): лимит записей дневника — старые дни уходят в сводки
   setTimeout(() => purgeOldEntries().catch((e) => console.warn('feast retention', e)), 6000);
+  // 0.14: корзина старше срока и история дневника старше срока хранения (если задан)
+  setTimeout(() => purgeFeastTrash().then(() => purgeHistory()).catch((e) => console.warn('feast trash/history', e)), 7000);
   navigator.storage?.persist?.().catch(() => {});
   startSync(oauth, { navigate: (route) => navigate(route, { replace: true }) }).catch((e) => console.error('startSync', e));
 } catch (e) {

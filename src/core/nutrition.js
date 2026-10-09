@@ -110,6 +110,24 @@ export function sumNutrients(list) {
 /** Калории по БЖУ (если на этикетке их не указали). */
 export const kcalFromMacros = (n) => Math.round(nv(n, 'protein') * 4 + nv(n, 'fat') * 9 + nv(n, 'carbs') * 4);
 
+/**
+ * Сходятся ли калории с БЖУ (0.14): белки и углеводы — 4 ккал/г, жиры — 9, клетчатка — до 2 (на упаковках её
+ * считают по-разному); допуск — 10 ккал или 10 %. → { state, kcal, auto }; state: 'empty' — ничего не указано,
+ * 'noKcal' — есть только БЖУ, 'noMacros' — есть только калории, 'low' / 'high' — калорий меньше / больше, чем по БЖУ, 'ok'.
+ */
+export function kcalCheck(n) {
+  const kcal = nv(n, 'kcal');
+  const auto = kcalFromMacros(n);
+  const macros = nv(n, 'protein') + nv(n, 'fat') + nv(n, 'carbs') > 0;
+  if (!kcal && !macros) return { state: 'empty', kcal, auto };
+  if (!macros) return { state: 'noMacros', kcal, auto };
+  if (!kcal) return { state: 'noKcal', kcal, auto };
+  const tol = Math.max(10, kcal * 0.1);
+  if (kcal < auto - tol) return { state: 'low', kcal, auto };
+  if (kcal > auto + 2 * nv(n, 'fiber') + tol) return { state: 'high', kcal, auto };
+  return { state: 'ok', kcal, auto };
+}
+
 /** Доли калорий от белков, жиров и углеводов (0…1; сумма 1, если есть хоть что-то). */
 export function macroSplit(n) {
   const e = { protein: nv(n, 'protein') * 4, fat: nv(n, 'fat') * 9, carbs: nv(n, 'carbs') * 4 };

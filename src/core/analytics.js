@@ -1,9 +1,10 @@
 // Аналитика (обновление 0.3, п. 2.9): периоды, выполненные и монеты по дням, разбивки, лучший день, серии,
 // тепловая карта. Чистые функции — графики рисует ui/screens/Analytics.js (SVG без библиотек).
 
-import { localDateOf, addDays, daysBetween, mondayOf } from './dates.js';
+import { localDateOf, addDays, daysBetween, mondayOf, nowTimeIn } from './dates.js';
 import { doneByDay, streaks } from './game.js';
 import { doneEntries } from './retention.js';
+import { taskListIds } from './model.js';
 import { PRIORITY_NONE_ID } from './priorities.js';
 import { tr } from './i18n.js';
 import { priorityLabel } from './priorities.js';
@@ -150,3 +151,70 @@ export function heatGrid(from, to) {
   return weeks;
 }
 
+
+// ---------- Вкладка «По времени» (0.14): как графики лекарств — по часам, дням, месяцам, годам ----------
+
+export { timeBuckets } from './timeWindow.js';
+
+/**
+ * Выполненные за [from, to] с местным временем: [{ key, taskId, title, date, time, listIds, priorityId, archived }],
+ * новые сверху. Задачи, экземпляры повторов и сводки удалённых лимитом (у сводки нет названия — archived).
+ */
+export function doneLog(data, tz, from, to) {
+  const out = [];
+  const push = (key, task, at, listIds, priorityId, archived = false) => {
+    const date = localDateOf(at, tz);
+    if (date < from || date > to) return;
+    out.push({ key, taskId: task?.id || null, title: task?.title || '', date, time: nowTimeIn(tz, new Date(at)), listIds, priorityId, archived });
+  };
+  for (const t of data.tasks.values()) {
+    if (t.deletedAt || t.trashedAt) continue;
+    if (!t.repeat && t.status === 'done' && t.completedAt) push(t.id, t, t.completedAt, taskListIds(t), t.priorityId);
+    for (const [k, o] of Object.entries(t.occurrences || {})) {
+      if (o && o.state === 'done' && o.doneAt) push(`${t.id}:${k}`, t, o.doneAt, taskListIds(t), t.priorityId);
+    }
+  }
+  for (const a of data.doneArchive?.values() || []) {
+    if (a.deletedAt || !a.completedAt) continue;
+    const live = data.tasks.get(a.id);
+    if (live && !live.deletedAt) continue;
+    push(a.id, null, a.completedAt, a.listIds || [], a.priorityId, true);
+  }
+  return out.sort((x, y) => (x.date + x.time < y.date + y.time ? 1 : x.date + x.time > y.date + y.time ? -1 : 0));
+}
+
+/**
+ * Ряды графика: по спискам (задача в нескольких — в каждом; без списка — «Входящие»), по приоритетам или всего.
+ * → { series: [{ key, label, color, n }], log: [{ key: ряд, date, time }] }; ряды — по убыванию числа.
+ */
+export function timeSeries(data, log, by = 'list') {
+  const out = [];
+  const meta = new Map();
+  const add = (key, label, color, e) => {
+    if (!meta.has(key)) meta.set(key, { key, label, color, n: 0 });
+    meta.get(key).n++;
+    out.push({ key, date: e.date, time: e.time });
+  };
+  for (const e of log) {
+    if (by === 'total') add('total', tr('Выполнено'), 'var(--accent)', e);
+    else if (by === 'priority') {
+      const p = data.priorities.get(e.priorityId) || data.priorities.get(PRIORITY_NONE_ID);
+      add(p?.id || PRIORITY_NONE_ID, priorityLabel(p) || tr('Без приоритета'), p?.color || '#9E9E9E', e);
+    } else {
+      const ids = (e.listIds || []).filter((id) => data.lists.get(id) && !data.lists.get(id).deletedAt);
+      for (const id of ids.length ? ids : [null]) {
+        const l = id ? data.lists.get(id) : null;
+        add(id || 'inbox', l ? (l.emoji ? l.emoji + ' ' : '') + l.name : tr('Входящие'), l?.color || '#9E9E9E', e);
+      }
+    }
+  }
+  return { series: [...meta.values()].sort((a, b) => b.n - a.n || a.label.localeCompare(b.label, 'ru')), log: out };
+}
+
+/** Час, в который выполняют чаще всего (0…23), или null. */
+export function busiestHour(log) {
+  const n = new Array(24).fill(0);
+  for (const e of log) if (e.time) n[+e.time.slice(0, 2)]++;
+  const max = Math.max(...n);
+  return max ? n.indexOf(max) : null;
+}

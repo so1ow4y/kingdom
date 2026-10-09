@@ -12,6 +12,7 @@ import * as S from '../../core/selectors.js';
 import { allTimeZones, deviceTimeZone, formatMoment } from '../../core/dates.js';
 import { countLabel } from '../../core/plural.js';
 import { APP_VERSION, SCHEMA_VERSION } from '../../version.js';
+import { RETENTION } from '../../config.js';
 import { checkForUpdate } from '../../pwa/swClient.js';
 import { PrioritiesSection } from '../components/PrioritiesEditor.js';
 import { AppearanceSection } from '../components/Appearance.js';
@@ -183,11 +184,10 @@ function TasksSection() {
           ${zones.map((z) => html`<option value=${z}>${z}</option>`)}
         </select>
       <//>
-      <${Row} label="Корзина очищается через">
-        <select value=${String(s.trashRetentionDays)} disabled=${readOnly}
-          onChange=${(e) => A.updateSettings({ trashRetentionDays: +e.target.value })}>
-          ${[7, 14, 30, 60, 90, 180, 365].map((d) => html`<option value=${String(d)}>${d} дн.</option>`)}
-        </select>
+      <${Row} label="Корзина очищается через, дней" hint=${tr('От {min} до {max}', { min: RETENTION.trashMin, max: RETENTION.trashMax })}>
+        <input type="number" min=${RETENTION.trashMin} max=${RETENTION.trashMax} step="1" value=${s.trashRetentionDays || 30} disabled=${readOnly}
+          style="width: 96px" aria-label="Корзина очищается через, дней"
+          onChange=${(e) => { const n = Math.round(+e.target.value); if (n) A.updateSettings({ trashRetentionDays: Math.max(RETENTION.trashMin, Math.min(RETENTION.trashMax, n)) }); }}/>
       <//>
     </section>`;
 }

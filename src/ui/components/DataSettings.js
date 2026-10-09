@@ -3,7 +3,7 @@
 import { html, useState, useEffect } from '../html.js';
 import { store, ask, showSnackbar, setUi } from '../../store/appState.js';
 import * as A from '../../store/actions.js';
-import { doneCount } from '../../core/retention.js';
+import { doneCount, completedDaysOf } from '../../core/retention.js';
 import { formatBytes, mediaUsage } from '../../core/media.js';
 import { countLabel } from '../../core/plural.js';
 import { buildDb, COLLECTIONS } from '../../data/envelope.js';
@@ -72,13 +72,14 @@ export async function runRetention({ interactive = false } = {}) {
   if (store.ui.readOnly) return 0;
   const plan = A.completedPlan();
   if (!plan.count) {
-    if (interactive) showSnackbar(store.data.settings.completedLimit == null ? tr('Лимит выключен') : tr('Удалять нечего — выполненных не больше лимита'));
+    if (interactive) showSnackbar(plan.days ? tr('Удалять нечего — выполненных старше срока нет') : store.data.settings.completedLimit == null ? tr('Лимит выключен') : tr('Удалять нечего — выполненных не больше лимита'));
     return 0;
   }
   if (!readLocal('retentionConfirmed', false) || interactive) {
     const v = await ask({
       title: tr('Будет удалено {p0}', { p0: countLabel(plan.count, ['старая выполненная задача', 'старые выполненные задачи', 'старых выполненных задач']) }),
-      text: tr('Хранится {total} выполненных, лимит — {completedLimit}. Удаляются самые старые (выполненные за последние {keepRecentDays} дней остаются). ', { total: plan.total, completedLimit: store.data.settings.completedLimit, keepRecentDays: RETENTION.keepRecentDays })
+      text: (plan.days ? tr('Хранится {total} выполненных, срок хранения — {days} дней. ', { total: plan.total, days: plan.days })
+        : tr('Хранится {total} выполненных, лимит — {completedLimit}. Удаляются самые старые (выполненные за последние {keepRecentDays} дней остаются). ', { total: plan.total, completedLimit: store.data.settings.completedLimit, keepRecentDays: RETENTION.keepRecentDays }))
         + tr('Статистика, серии, уровни и монеты не изменятся. Задачи удаляются навсегда — можно сначала скачать архив со всеми данными.'),
       buttons: [
         { label: tr('Не сейчас'), value: null },
@@ -101,6 +102,15 @@ export async function runRetention({ interactive = false } = {}) {
   const n = await A.purgeCompleted(A.completedPlan());
   if (n) showSnackbar(tr('Удалено {p0} · статистика сохранена', { p0: countLabel(n, ['старая выполненная', 'старые выполненные', 'старых выполненных']) }));
   return n;
+}
+
+/** Срок хранения выполненных (0.14): пусто — без срока, иначе 7…36 500 дней; что старше — удаляется (с вопросом). */
+export async function setCompletedDays(v) {
+  const raw = Math.round(+v || 0);
+  const n = raw > 0 ? Math.max(RETENTION.historyMin, Math.min(RETENTION.historyMax, raw)) : null;
+  if (!(await A.updateSettings({ completedDays: n }))) return false;
+  if (n) await runRetention({ interactive: true });
+  return true;
 }
 
 function Row({ label, hint, children }) {
@@ -138,8 +148,12 @@ export function DataSection() {
         ${limit != null ? html`<input type="number" min=${RETENTION.completedMin} max=${RETENTION.completedMax} step="100" value=${draft} disabled=${readOnly}
           style="width: 96px" aria-label="Лимит выполненных" onInput=${(e) => setDraft(e.target.value)} onChange=${(e) => saveLimit(e.target.value)}/>` : null}
       <//>
+      <${Row} label="Хранить выполненные, дней" hint=${tr('Пусто — без срока. Старше срока — удаляются, статистика (графики, уровни, достижения) остаётся. От {min} дней.', { min: RETENTION.historyMin })}>
+        <input type="number" min=${RETENTION.historyMin} max=${RETENTION.historyMax} step="1" value=${completedDaysOf(s) ?? ''} placeholder=${tr('всегда')} disabled=${readOnly}
+          style="width: 96px" aria-label="Срок хранения выполненных, дней" onChange=${(e) => setCompletedDays(e.target.value)}/>
+      <//>
       <div class="btn-row">
-        <button class="btn" onClick=${() => runRetention({ interactive: true })} disabled=${readOnly || limit == null}>Очистить сейчас</button>
+        <button class="btn" onClick=${() => runRetention({ interactive: true })} disabled=${readOnly || (limit == null && !completedDaysOf(s))}>Очистить сейчас</button>
         <button class="btn" onClick=${exportNow}>Скачать архив (zip)</button>
       </div>
       <h3 class="set-sub">Вложения</h3>

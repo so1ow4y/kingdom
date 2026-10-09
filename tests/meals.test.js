@@ -594,3 +594,111 @@ test('Активность «Без надбавки» (0.13): расход — 
   assert.equal(B.tdee(p), B.bmr(p));
   assert.equal(B.activityOf('нет такой').key, 'light', 'неизвестная — по-прежнему лёгкая');
 });
+
+// ---------- 0.14: проверка КБЖУ, порции, значки, корзина, срок хранения истории ----------
+
+test('Калории и БЖУ (0.14): сходятся, не сходятся, нет БЖУ, нет калорий; клетчатка и допуск', () => {
+  assert.equal(N.kcalCheck({ kcal: 75, protein: 1.7, fat: 6.1, carbs: 3.3 }).state, 'ok', 'молоко с упаковки');
+  assert.equal(N.kcalCheck({ kcal: 120, protein: 6, fat: 20, carbs: 60 }).state, 'low');
+  assert.equal(N.kcalCheck({ kcal: 120, protein: 6, fat: 20, carbs: 60 }).auto, 444);
+  assert.equal(N.kcalCheck({ kcal: 43, carbs: 3.6 }).state, 'high', 'пиво: калории от алкоголя');
+  assert.equal(N.kcalCheck({ kcal: 250, protein: 9, fat: 3, carbs: 45, fiber: 7 }).state, 'ok', 'клетчатка — до 2 ккал/г');
+  assert.equal(N.kcalCheck({ kcal: 100 }).state, 'noMacros');
+  assert.equal(N.kcalCheck({ protein: 10 }).state, 'noKcal');
+  assert.equal(N.kcalCheck({}).state, 'empty');
+  assert.equal(N.kcalCheck({ kcal: 1, carbs: 0.2 }).state, 'ok', 'мелкие числа — в допуске');
+});
+
+test('Порции (0.14): сколько угодно своих, первая — в старых полях; продукт 0.13 — одна порция', () => {
+  const c = makeCtx(NOW);
+  const milk = F.newFood({ name: 'Молоко', unit: 'ml', servings: [{ name: 'Стакан', size: '250' }, { name: '', size: 0 }, { name: 'Чашка', size: '180,5' }] }, c);
+  assert.deepEqual(F.servingsOf(milk).map((s) => [s.name, s.size]), [['Стакан', 250], ['Чашка', 180.5]], 'пустые и нулевые — отбрасываются');
+  assert.equal(milk.servingName, 'Стакан');
+  assert.equal(milk.servingSize, 250, 'первую видят старые версии');
+  assert.ok(F.servingsOf(milk).every((s) => s.id && s.id !== 'legacy'));
+  const ids = F.servingsOf(milk).map((s) => s.id);
+  const edited = F.editFood(milk, { servings: [F.servingsOf(milk)[1], { name: 'Ложка', size: 15 }] }, c);
+  assert.equal(edited.servingName, 'Чашка');
+  assert.equal(F.servingsOf(edited)[0].id, ids[1], 'id порции сохраняется');
+  assert.equal(F.servingOf(edited), 180.5);
+  const none = F.editFood(edited, { servings: [] }, c);
+  assert.deepEqual([none.servingName, none.servingSize, F.servingsOf(none).length], ['', null, 0]);
+  const old = F.newFood({ name: 'Йогурт', servingName: 'Баночка', servingSize: 125 }, c);
+  assert.deepEqual(F.servingsOf(old).map((s) => [s.name, s.size]), [['Баночка', 125]], 'порция 0.13 читается');
+  const legacy = { ...old };
+  delete legacy.servings;
+  assert.equal(F.servingsOf(legacy)[0].id, 'legacy');
+  assert.equal(F.cleanServings(Array.from({ length: 30 }, (_, i) => ({ size: i + 1 })), c).length, F.SERVINGS_MAX);
+});
+
+test('Значок лекарства (0.14): свой или 💊; у замера — 📏', () => {
+  const c = makeCtx(NOW);
+  const pen = F.newFood({ kind: 'med', name: 'Ручка', unit: 'iu', icon: '🔵' }, c);
+  assert.equal(pen.icon, '🔵');
+  assert.equal(F.kindIcon(pen), '🔵');
+  assert.equal(F.kindIcon(F.editFood(pen, { icon: '' }, c)), '💊');
+  assert.equal(F.kindIcon(F.newFood({ kind: 'measure', name: 'Пульс', unit: 'уд/мин' }, c)), '📏');
+  assert.equal(F.kindIcon(F.newFood({ name: 'Хлеб' }, c)), '');
+});
+
+test('Корзина (0.14): снимок удалённого, вернуть со свежими метками — побеждает надгробие на других устройствах', () => {
+  const c = makeCtx(NOW);
+  const other = { ...makeCtx(NOW + 1000), deviceId: OTHER };
+  const d = feastData();
+  d.trash = new Map();
+  const oat = put(d, 'foods', F.newFood({ name: 'Овсянка', nutrients: { kcal: 350 } }, c));
+  const e = F.newEntry({ date: TODAY, meal: 'breakfast', time: '08:00', notes: ['раз', 'два'], items: [{ food: oat, amount: 60, note: 'с мёдом' }] }, c);
+  const rec = F.newTrashRecord('entries', e, c);
+  const tomb = tombstone(e, c);
+  put(d, 'entries', tomb);
+  put(d, 'trash', rec);
+  assert.equal(rec.id, F.trashId('entries', e.id));
+  assert.equal(F.trashKind(rec), 'entry');
+  assert.equal(F.trashKind(F.newTrashRecord('foods', F.newFood({ kind: 'med', name: 'Т' }, c), c)), 'med');
+  assert.deepEqual(F.trashList(d).map((r) => r.id), [rec.id]);
+  const back = F.restoreEntity(tomb, rec.snapshot, other);
+  assert.ok(!back.deletedAt);
+  assert.deepEqual(F.entryItems(back).map((it) => [it.name, it.amount, it.note]), [['Овсянка', 60, 'с мёдом']]);
+  assert.deepEqual(F.entryNoteList(back).map((n) => n.text), ['раз', 'два']);
+  const merged = mergeEntity(tomb, back);
+  assert.ok(!merged.deletedAt, 'возврат новее удаления — запись жива и после слияния');
+  assert.equal(nv(entryNutrients(mergeEntity(back, tomb)), 'kcal'), 210);
+  const fresh = F.restoreEntity(undefined, rec.snapshot, other);
+  assert.ok(!fresh.deletedAt && F.entryItems(fresh).length === 1, 'надгробия уже нет — тоже возвращается');
+  assert.equal(F.trashExpired(d, Date.parse(rec.trashedAt) + 29 * 86400000).length, 0);
+  assert.equal(F.trashExpired(d, Date.parse(rec.trashedAt) + 31 * 86400000).length, 1, 'по умолчанию — 30 дней');
+  d.settings = { ...d.settings, trashDays: 2 };
+  assert.equal(F.trashExpired(d, Date.parse(rec.trashedAt) + 3 * 86400000).length, 1);
+  assert.equal(F.trashDaysOf({ trashDays: 9999 }), 365);
+});
+
+test('Срок хранения истории (0.14): старые записи и статистика уходят, награды за еду остаются', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  const apple = put(d, 'foods', F.newFood({ name: 'Яблоко', nutrients: { kcal: 50 }, rewards: { xp: 2, coins: 1 } }, c));
+  const old = put(d, 'entries', F.newEntry({ date: '2026-08-01', meal: 'snack', items: [{ food: apple, amount: 100, rewards: F.rewardsOf(apple, d.settings) }] }, c));
+  put(d, 'entries', F.newEntry({ date: TODAY, meal: 'snack', items: [{ food: apple, amount: 100, rewards: F.rewardsOf(apple, d.settings) }] }, c));
+  const arch = put(d, 'dayArchive', F.archiveFor('2026-07-01', [F.newEntry({ date: '2026-07-01', meal: 'lunch', items: [{ food: apple, amount: 200, rewards: F.rewardsOf(apple, d.settings) }] }, c)], null, c));
+  const before = F.feastRewards(d);
+  assert.equal(F.historyDaysOf({ historyDays: 5 }), 30, 'не меньше 30 дней');
+  assert.equal(F.historyDaysOf({ historyDays: null }), null);
+  assert.equal(F.historyPlan(d, TODAY, null).entries.length, 0, 'без срока — ничего');
+  const plan = F.historyPlan(d, TODAY, 30);
+  assert.equal(plan.cutoff, addDays(TODAY, -29));
+  assert.deepEqual(plan.entries.map((e) => e.id), [old.id]);
+  assert.deepEqual(plan.archives.map((a) => a.id), [arch.id]);
+  // как purgeHistory: день — «заглушка» с наградами, записи — надгробия
+  const s1 = F.strippedArchive('2026-08-01', [old], null, c);
+  const s2 = F.strippedArchive('2026-07-01', [], arch, c);
+  put(d, 'entries', tombstone(old, c));
+  put(d, 'dayArchive', s1);
+  put(d, 'dayArchive', s2);
+  assert.ok(s1.stripped && s2.stripped);
+  assert.deepEqual([s2.totals, s2.foods, s2.count], [{}, {}, 0], 'статистики нет');
+  assert.deepEqual(F.feastRewards(d), before, 'монеты, опыт и 💎 за еду не пропали');
+  assert.equal(F.dailySeries(d, '2026-06-01', TODAY).length, 1, 'в аналитике — только живой день');
+  assert.equal(F.firstDay(d), TODAY, '«Всё время» начинается с живых данных');
+  assert.ok(!F.dayTotals(d, '2026-07-01').archived);
+  const plain = F.newFood({ name: 'Вода' }, c);
+  assert.equal(F.strippedArchive(TODAY, [F.newEntry({ date: TODAY, meal: 'snack', items: [{ food: plain, amount: 100 }] }, c)], null, c), null, 'без наград сводка не нужна');
+});

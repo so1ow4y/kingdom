@@ -12,11 +12,13 @@ const W = 640;
 const PAD = { l: 44, r: 12, t: 12, b: 26 };
 
 /** «Круглые» деления оси: 0, 500, 1 000… */
-function ticks(max, count = 4) {
+function ticks(max, count = 4, integer = false) {
   if (max <= 0) return [0];
   const raw = max / count;
   const mag = 10 ** Math.floor(Math.log10(raw));
-  const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || raw;
+  let step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || raw;
+  // счётчики (приёмы, задачи) — только целые деления (0.14)
+  if (integer) step = Math.max(1, Math.ceil(step));
   // последнее деление — не ниже максимума, иначе столбик вылезает за график (0.13)
   const out = [0];
   while (out.at(-1) < max - 1e-9) out.push(Math.round((out.at(-1) + step) * 100) / 100);
@@ -276,13 +278,13 @@ export const SERIES = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 
  * Зазор 2 px между частями, скруглён верх столбика, подсказка — по каждому ряду и
  * сумма, легенда для двух и более рядов, «Таблицей». fmtValue(v, ряд) — подпись значения («3 ед.»).
  */
-export function StackedBars({ buckets, series, fmtValue = (v) => String(v), label = tr('График'), height = 180, empty = tr('нет приёмов'), grouped = false }) {
+export function StackedBars({ buckets, series, fmtValue = (v) => String(v), label = tr('График'), height = 180, empty = tr('нет приёмов'), grouped = false, integer = false }) {
   const box = useRef(null);
   const [tip, setTip] = useState(null);
   const [table, setTable] = useState(false);
   const sum = (b) => series.reduce((s, x) => s + (b.values[x.key] || 0), 0);
   const peak = (b) => (grouped ? Math.max(0, ...series.map((x) => b.values[x.key] || 0)) : sum(b));
-  const tk = ticks(Math.max(1, ...buckets.map(peak)), 3);
+  const tk = ticks(Math.max(1, ...buckets.map(peak)), 3, integer);
   const top = tk.at(-1) || 1;
   const ih = height - PAD.t - PAD.b;
   const iw = W - PAD.l - PAD.r;

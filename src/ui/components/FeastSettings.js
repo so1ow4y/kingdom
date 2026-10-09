@@ -2,7 +2,7 @@
 
 import { html, useState, useMemo, useEffect } from '../html.js';
 import { Icon } from '../icons.js';
-import { NumField, RewardEditor, rewardLine } from './FeastParts.js';
+import { NumField, OptNumField, RewardEditor, rewardLine } from './FeastParts.js';
 import { Link } from '../router.js';
 import { getPrefs, setPrefs } from '../prefs.js';
 import { store, showSnackbar } from '../../store/appState.js';
@@ -201,7 +201,30 @@ export function FeastDataSection() {
         <button type="button" class="btn" disabled=${ro || count <= limit} onClick=${() => FA.purgeOldEntries({ interactive: true })}>Очистить сейчас</button>
         <button type="button" class="btn" onClick=${exportFeast}><${Icon} name="download" size=${18}/> Скачать данные Crimson Harvest (JSON)</button>
       </div>
+    </section>
+    <${FeastHistorySection}/>
+    <section class="set-section">
+      <h2>Корзина</h2>
+      <div class="ne-main">
+        <${NumField} big label=${tr('Хранить в корзине')} unit=${tr('дн.')} value=${F.trashDaysOf(s)} disabled=${ro} onCommit=${FA.setTrashDays}/>
+      </div>
+      <p class="muted small">${tr('Удалённые записи, продукты, лекарства, замеры и рационы можно вернуть из корзины этот срок (от {min} до {max} дней), потом они удаляются навсегда.', { min: FEAST_RETENTION.trashMin, max: FEAST_RETENTION.trashMax })}
+        <${Link} to="/bin">${tr('Открыть корзину')}<//></p>
     </section>`;
+}
+
+/** Срок хранения истории дневника и статистики (0.14): и в настройках, и в «Аналитике». */
+export function FeastHistorySection({ title = tr('Хранение истории и статистики') }) {
+  const s = store.feast.settings || {};
+  const ro = !!store.ui.feastReadOnly;
+  return html`<section class="set-section">
+    <h2>${title}</h2>
+    <div class="ne-main">
+      <${OptNumField} label=${tr('Хранить, дней')} value=${F.historyDaysOf(s)} placeholder=${tr('всегда')} unit=${tr('дн.')} disabled=${ro}
+        min=${0} max=${FEAST_RETENTION.historyMax} onCommit=${FA.setHistoryDays}/>
+    </div>
+    <p class="muted small">${tr('Пусто — всегда. Записи дневника и статистика дней старше срока (калории, БЖУ, продукты, лекарства, замеры) удаляются навсегда, а монеты и 💎, полученные за еду, остаются. От {min} дней; перед удалением — вопрос.', { min: FEAST_RETENTION.historyMin })}</p>
+  </section>`;
 }
 
 /** Настройки → Crimson Harvest → Награды за еду (0.12): опыт, монеты и 💎 за запись продукта по умолчанию. */
