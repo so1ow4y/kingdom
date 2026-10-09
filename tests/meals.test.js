@@ -16,6 +16,7 @@ import { gemBalance } from '../src/core/village.js';
 import { setExtraEarnings } from '../src/core/earnings.js';
 import { makeData } from './helpers.js';
 import { addDays } from '../src/core/dates.js';
+import * as M from '../src/core/measures.js';
 
 const NOW = Date.parse('2026-10-08T09:00:00.000Z');
 const TODAY = '2026-10-08';
@@ -344,7 +345,7 @@ test('Активности: калории в день у каждой, свои
   assert.ok(B.activityLabel(B.activityOf('moderate'), base).endsWith('· +979 ккал в день'));
   assert.ok(B.activityLabel(B.activityOf('moderate'), null).endsWith('· обмен × 1,55'), 'без обмена — коэффициент');
   const custom = [{ id: 'c:1', name: 'Курьер', hint: 'весь день на ногах', kcal: 1200 }, { id: 'bad' }];
-  assert.equal(B.activityList(custom).length, 6, 'битые записи отбрасываются');
+  assert.equal(B.activityList(custom).length, 7, 'битые записи отбрасываются (6 своих вариантов с «Без надбавки» и одна своя)');
   assert.equal(B.tdee({ ...p, activity: 'c:1', activities: custom }), 2980, 'своя — обмен + ккал');
   assert.equal(B.tdee({ ...p, activity: 'c:удалена', activities: custom }), B.tdee(p), 'удалённая своя — как лёгкая');
   assert.equal(B.tdee({ ...p, activity: 'moderate' }), 2759, 'как раньше');
@@ -389,7 +390,7 @@ test('Заметка к продукту в записи (0.12.4): при зап
 test('Лекарства (0.12.5): в общем каталоге, доза и форма, без КБЖУ и наград, к продукту и отдельной записью', () => {
   const c = makeCtx(NOW);
   const d = feastData();
-  const ins = put(d, 'foods', F.newFood({ name: 'Инсулин', kind: 'med', unit: 'iu', dose: 4, nutrients: { kcal: 100 } }, c));
+  const ins = put(d, 'foods', F.newFood({ name: 'Инсулин', kind: 'med', unit: 'iu', dose: 4 }, c));
   assert.ok(F.isMed(ins) && ins.unit === 'iu' && ins.dose === 4);
   assert.equal(F.newFood({ name: 'Капли', kind: 'med', unit: 'g' }, c).unit, 'tab', 'неизвестная форма — таблетки');
   assert.equal(F.editFood(ins, { unit: 'drop', dose: '2,5' }, c).dose, 2.5);
@@ -400,7 +401,7 @@ test('Лекарства (0.12.5): в общем каталоге, доза и �
   const [, med] = F.entryItems(e);
   assert.equal(med.kind, 'med');
   assert.equal(N.amountLabel(med), '6 ед.');
-  assert.equal(nv(entryNutrients(e), 'kcal'), 350, 'лекарство не добавляет калорий');
+  assert.equal(nv(entryNutrients(e), 'kcal'), 350, 'лекарство без КБЖУ не добавляет калорий');
   assert.equal(med.note, 'перед едой');
   const only = put(d, 'entries', F.newEntry({ date: TODAY, meal: 'snack', items: [{ med: ins }] }, c));
   assert.equal(F.entryItems(only)[0].amount, 4, 'без дозы — обычная доза');
@@ -442,4 +443,154 @@ test('Заметки записи (0.12.5): сколько угодно, пер�
   const legacy = { ...F.newEntry({ date: TODAY, meal: 'lunch', note: 'старая', items: [{ food: oat, amount: 1 }] }, c) };
   delete legacy.notes;
   assert.deepEqual(F.entryNoteList(legacy).map((n) => n.text), ['старая'], 'запись без массива заметок');
+});
+
+// ---------- 0.13: замеры, заметка без продуктов, КБЖУ лекарств, графики лекарств ----------
+
+test('Замеры (0.13): части значения, нормы с запятой, значения, статус и подписи', () => {
+  assert.deepEqual(M.cleanParts(['Верхнее']), [], 'одна часть — одно значение');
+  assert.deepEqual(M.cleanParts(['Верхнее', '']), ['Верхнее', 'Значение 2']);
+  assert.equal(M.cleanParts(['a', 'b', 'c', 'd']).length, 3, 'не больше трёх частей');
+  assert.deepEqual(M.cleanRanges([{ min: '3,9', max: '7,8' }], 1), [{ min: 3.9, max: 7.8 }]);
+  assert.deepEqual(M.cleanRanges([{ min: 9, max: 5 }, { min: '', max: '' }], 2), [{ min: 5, max: 9 }, null], 'перепутанные — меняются местами, пустая — нет нормы');
+  assert.deepEqual(M.cleanValues(['120', '80,5'], 2), [120, 80.5]);
+  assert.deepEqual(M.cleanValues(['', '80'], 2), [null, 80]);
+  assert.equal(M.cleanValues(['', ''], 2), null, 'ни одного числа — нет показания');
+  assert.deepEqual(M.cleanValues('5,6'), [5.6], 'одно значение — не массивом');
+  const bp = [{ min: 90, max: 139 }, { min: 60, max: 89 }];
+  assert.equal(M.readingStatus([145, 80], bp), 'high');
+  assert.equal(M.readingStatus([120, 55], bp), 'low');
+  assert.equal(M.readingStatus([120, 80], bp), 'ok');
+  assert.equal(M.readingStatus([120, 80], [null, null]), null, 'без нормы — без статуса');
+  assert.equal(M.readingStatus([null, 95], bp), 'high', 'пустая часть не мешает');
+  assert.equal(M.valuesText([120, 80]), '120/80');
+  assert.equal(M.normText({ unit: 'ммоль/л', ranges: [{ min: 3.9, max: 7.8 }] }), '3,9–7,8 ммоль/л');
+  assert.equal(M.rangeText({ min: null, max: 5.2 }), '≤ 5,2');
+  assert.ok(M.MEASURE_PRESETS.every((p) => p.name && p.unit && (p.parts || [null]).length === (p.ranges || [null]).length), 'у известных замеров норма на каждую часть');
+});
+
+test('Замеры (0.13): вид замера в каталоге, правка частей, показание в записи, правка значений', () => {
+  const c = makeCtx(NOW);
+  const p = M.presetOf('pressure');
+  const bp = F.newFood({ kind: 'measure', name: p.name, unit: p.unit, parts: p.parts, ranges: p.ranges, icon: '❤️ лишнее' }, c);
+  assert.ok(F.isMeasure(bp) && bp.unit === 'мм рт. ст.');
+  assert.deepEqual(bp.parts, ['Верхнее', 'Нижнее']);
+  assert.equal(bp.ranges.length, 2);
+  assert.ok([...bp.icon].length <= 4, 'значок — коротко');
+  const one = F.editFood(bp, { parts: [] }, c);
+  assert.deepEqual(one.parts, []);
+  assert.deepEqual(one.ranges, [{ min: 90, max: 139 }], 'норма — по числу частей');
+  const glu = F.newFood({ kind: 'measure', name: 'Глюкоза', unit: '  ммоль/л ', ranges: [{ min: 3.9, max: 7.8 }] }, c);
+  assert.equal(glu.unit, 'ммоль/л');
+  const e = F.newEntry({ date: TODAY, meal: 'breakfast', time: '08:00', items: [{ measure: bp, values: ['145', '92'], note: 'после кофе' }, { food: glu, values: '5,4' }] }, c);
+  const [a, b] = F.entryItems(e);
+  assert.equal(a.kind, 'measure');
+  assert.deepEqual(a.values, [145, 92]);
+  assert.equal(a.amount, 145, 'amount — первое значение (для старых версий)');
+  assert.equal(a.note, 'после кофе');
+  assert.equal(N.amountLabel(a), '145/92 мм рт. ст.');
+  assert.deepEqual(b.values, [5.4]);
+  assert.deepEqual(entryNutrients(e), {}, 'у замера нет калорий');
+  assert.ok(!F.hasFood(e), 'замер — не еда');
+  const x = F.setItemValues(e, a.id, ['128', '84'], c);
+  assert.deepEqual(F.entryItems(x)[0].values, [128, 84]);
+  assert.equal(F.entryItems(x)[0].amount, 128);
+  assert.equal(F.setItemValues(e, a.id, ['', ''], c), e, 'пустые значения — без изменений');
+  const copy = F.newEntry({ date: '2026-10-09', meal: 'breakfast', items: F.entryItems(x).map((it) => ({ snapshot: it })) }, c);
+  assert.deepEqual(F.entryItems(copy)[0].values, [128, 84], 'копия записи — с показанием');
+});
+
+test('Заметка без продуктов (0.13): запись только с заметкой, название, не еда', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  const e = put(d, 'entries', F.newEntry({ date: TODAY, meal: 'snack', time: '09:00', items: [], notes: ['Голова болит с утра'] }, c));
+  assert.equal(F.entryItems(e).length, 0);
+  assert.equal(F.entryTitle(e), 'Заметка');
+  assert.ok(!F.hasFood(e));
+  assert.deepEqual(entryNutrients(e), {});
+  assert.equal(F.entryTitle(F.newEntry({ date: TODAY, meal: 'snack', items: [] }, c)), 'Пустая запись');
+  assert.equal(F.dailySeries(d, TODAY, TODAY).length, 0, 'в калориях дня заметки нет');
+});
+
+test('Лекарства с КБЖУ (0.13): сироп — калории и витамины на 1 единицу, складываются с едой', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  const syrup = put(d, 'foods', F.newFood({ kind: 'med', name: 'Сироп', unit: 'mlm', dose: 5, nutrients: { kcal: 3, carbs: 0.7, vitC: 2 } }, c));
+  const oat = put(d, 'foods', F.newFood({ name: 'Овсянка', nutrients: { kcal: 350 } }, c));
+  const e = put(d, 'entries', F.newEntry({ date: TODAY, meal: 'breakfast', items: [{ med: syrup }] }, c));
+  const it = F.entryItems(e)[0];
+  assert.equal(it.amount, 5, 'обычная доза');
+  assert.equal(nv(N.itemNutrients(it), 'kcal'), 15);
+  assert.equal(nv(N.itemNutrients(it), 'vitC'), 10);
+  assert.ok(!F.hasFood(e));
+  const day = F.dailySeries(d, TODAY, TODAY);
+  assert.equal(day.length, 1, 'сироп виден в калориях дня');
+  assert.equal(nv(day[0].totals, 'kcal'), 15);
+  assert.equal(day[0].count, 0, 'но записью еды не считается');
+  put(d, 'entries', F.newEntry({ date: TODAY, meal: 'breakfast', items: [{ food: oat, amount: 100 }, { med: syrup, amount: 10 }] }, c));
+  assert.equal(nv(F.dailySeries(d, TODAY, TODAY)[0].totals, 'kcal'), 15 + 350 + 30);
+  const desc = F.editFood(syrup, { desc: 'Детский, 3 раза в день', measures: [{ measureId: 'm1' }, { measureId: 'm1' }, { measureId: '' }] }, c);
+  assert.equal(desc.desc, 'Детский, 3 раза в день');
+  assert.equal(desc.measures.length, 1, 'привязанные замеры — без повторов и пустых');
+});
+
+test('Замеры за период (0.13): показания по времени, среднее и разброс по частям, сводки старых дней', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  const bp = put(d, 'foods', F.newFood({ kind: 'measure', name: 'Давление', unit: 'мм рт. ст.', parts: ['Верхнее', 'Нижнее'] }, c));
+  const ins = put(d, 'foods', F.newFood({ kind: 'med', name: 'Инсулин', unit: 'iu', dose: 4 }, c));
+  put(d, 'entries', F.newEntry({ date: TODAY, meal: 'breakfast', time: '08:00', items: [{ measure: bp, values: [130, 85] }, { med: ins }] }, c));
+  put(d, 'entries', F.newEntry({ date: TODAY, meal: 'dinner', time: '20:00', items: [{ measure: bp, values: [120, 75], note: 'вечером' }] }, c));
+  const old = F.newEntry({ date: '2026-09-01', meal: 'lunch', time: '13:00', items: [{ measure: bp, values: [140, 90] }] }, c);
+  put(d, 'dayArchive', F.archiveFor('2026-09-01', [old], null, c));
+  const st = F.measureStats(d, '2026-09-01', TODAY);
+  assert.equal(st.count, 3);
+  const t = st.types[0];
+  assert.equal(t.name, 'Давление');
+  assert.deepEqual(t.readings.map((r) => r.values), [[140, 90], [130, 85], [120, 75]], 'по времени, старые — из сводки');
+  assert.ok(t.readings[0].archived);
+  assert.deepEqual(t.readings[1].meds, ['Инсулин'], 'с лекарствами той же записи');
+  assert.equal(t.readings[2].note, 'вечером');
+  assert.deepEqual(t.last.values, [120, 75]);
+  assert.equal(t.stat[0].avg, 130);
+  assert.deepEqual([t.stat[1].min, t.stat[1].max], [75, 90]);
+  assert.equal(F.measureStats(d, TODAY, TODAY).count, 2, 'только период');
+});
+
+test('Графики лекарств (0.13): по часам, дням, месяцам и годам; приёмы и количество; сводки дней', () => {
+  const c = makeCtx(NOW);
+  const d = feastData();
+  const a = put(d, 'foods', F.newFood({ kind: 'med', name: 'Лантус', unit: 'iu', dose: 20 }, c));
+  const b = put(d, 'foods', F.newFood({ kind: 'med', name: 'Фиасп', unit: 'iu', dose: 6 }, c));
+  put(d, 'entries', F.newEntry({ date: TODAY, meal: 'snack', time: '22:00', items: [{ med: a, amount: 18 }] }, c));
+  put(d, 'entries', F.newEntry({ date: TODAY, meal: 'breakfast', time: '08:10', items: [{ med: b, amount: 5 }] }, c));
+  put(d, 'entries', F.newEntry({ date: '2026-10-07', meal: 'breakfast', time: '08:40', items: [{ med: b, amount: 7 }] }, c));
+  const old = F.newEntry({ date: '2025-12-31', meal: 'snack', time: '22:00', items: [{ med: a, amount: 20 }] }, c);
+  put(d, 'dayArchive', F.archiveFor('2025-12-31', [old], null, c));
+  const st = F.medStats(d, '2025-12-01', TODAY);
+  const args = { log: st.log, extra: st.extra, from: '2025-12-01', to: TODAY };
+  const hours = F.medBuckets({ ...args, group: 'hour' });
+  assert.equal(hours.length, 24);
+  assert.deepEqual(hours[8].values, { [b.id]: 2 }, 'по часу суток — за весь период');
+  assert.equal(hours[22].values[a.id], 1, 'сводки старых дней без времени — не по часам');
+  const days = F.medBuckets({ ...args, group: 'day', metric: 'amount' });
+  assert.equal(days.at(-1).key, TODAY);
+  assert.deepEqual(days.at(-1).values, { [a.id]: 18, [b.id]: 5 });
+  assert.equal(days.find((x) => x.key === '2025-12-31').values[a.id], 20, 'старый день — из сводки');
+  assert.equal(days.at(-1).title, '8 октября 2026');
+  const months = F.medBuckets({ ...args, group: 'month', metric: 'amount', keys: [b.id] });
+  assert.deepEqual(months.map((x) => x.key), ['2025-12', '2026-01', '2026-02', '2026-03', '2026-04', '2026-05', '2026-06', '2026-07', '2026-08', '2026-09', '2026-10']);
+  assert.deepEqual(months.at(-1).values, { [b.id]: 12 }, 'только выбранные лекарства');
+  assert.equal(months.at(-1).title, 'Октябрь 2026');
+  const years = F.medBuckets({ ...args, group: 'year' });
+  assert.deepEqual(years.map((x) => [x.key, x.values[a.id] || 0]), [['2025', 1], ['2026', 1]]);
+  assert.deepEqual(F.MED_GROUPS, ['hour', 'day', 'month', 'year']);
+});
+
+test('Активность «Без надбавки» (0.13): расход — только базовый обмен', () => {
+  const p = { sex: 'male', weightKg: 80, heightCm: 180, age: 30, activity: 'none', goal: 'keep' };
+  assert.equal(B.ACTIVITY[0].key, 'none');
+  assert.equal(B.activityBurn(B.activityOf('none'), 1780), 0);
+  assert.equal(B.tdee(p), B.bmr(p));
+  assert.equal(B.activityOf('нет такой').key, 'light', 'неизвестная — по-прежнему лёгкая');
 });

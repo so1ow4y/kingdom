@@ -105,7 +105,15 @@ const whenLabel = (last, today) => {
   return d ? `${humanDate(d, today)}${t ? tr(' в ') + t : ''}` : '—';
 };
 const unitShort = (u) => MED_UNIT[u]?.short || u || '';
-const GROUPS = [['day', tr('По дням')], ['month', tr('По месяцам')], ['hour', tr('По часам')], ['year', tr('По годам')]];
+const GROUPS = [['hour', tr('По часам')], ['day', tr('По дням')], ['month', tr('По месяцам')], ['year', tr('По годам')]];
+// пустые столбики в начале периода не показываем (у «по дням» — не меньше недели): видны сами приёмы
+const MIN_BUCKETS = { day: 7, month: 3, year: 1 };
+function trimLead(list, group) {
+  if (group === 'hour') return list;
+  const first = list.findIndex((b) => Object.values(b.values).some(Boolean));
+  if (first < 0) return list.slice(-MIN_BUCKETS[group]);
+  return list.slice(Math.max(0, Math.min(first, list.length - MIN_BUCKETS[group])));
+}
 const METRICS = [['count', tr('Приёмы')], ['amount', tr('Количество')]];
 const r2 = (v) => Math.round(v * 100) / 100;
 
@@ -123,19 +131,16 @@ function Chips({ list, value, onChange, label }) {
 
 /**
  * Вкладка «Лекарства» (0.12.5, графики — 0.13): приёмы или количество по дням, месяцам, часам суток или годам;
- * одно лекарство или все сразу (ряды наложены, у количества — только лекарства одной единицы), по каждому — сколько
+ * одно лекарство или все сразу (столбики рядом, у количества — только лекарства одной единицы), по каждому — сколько
  * всего, средняя доза, в среднем в день; журнал приёмов.
  */
 function MedsTab() {
   const { period, setPeriod, from, today } = usePeriod();
   const [pick, setPick] = useState('all');
-  const [group, setGroupState] = useState(() => readLocal('feastMedGroup', 'day'));
+  // группировка всегда открывается «по дням»; что считать — запоминается
+  const [group, setGroup] = useState('day');
   const [metric, setMetricState] = useState(() => readLocal('feastMedMetric', 'count'));
   const [unitPick, setUnitPick] = useState(null);
-  const setGroup = (g) => {
-    setGroupState(g);
-    writeLocal('feastMedGroup', g);
-  };
   const setMetric = (m) => {
     setMetricState(m);
     writeLocal('feastMedMetric', m);
@@ -160,7 +165,7 @@ function MedsTab() {
   }
   const buckets = useMemo(() => {
     const keys = shown.map((m) => m.key);
-    const list = F.medBuckets({ log: st.log, extra: st.extra, from, to: today, group, metric, keys });
+    const list = trimLead(F.medBuckets({ log: st.log, extra: st.extra, from, to: today, group, metric, keys }), group);
     if (!fold) return list;
     return list.map((b) => {
       const values = { ...b.values };
@@ -216,7 +221,7 @@ function MedsTab() {
           <span class="muted small">${tr('В чём показывать:')}</span>
           <${Chips} label=${tr('Единица')} value=${unit} onChange=${setUnitPick} list=${units.map((u) => [u, unitShort(u)])}/>
         </div>` : null}
-        <${StackedBars} buckets=${buckets} series=${series} fmtValue=${fmtValue}
+        <${StackedBars} buckets=${buckets} series=${series} fmtValue=${fmtValue} grouped=${series.length > 1}
           label=${(metric === 'amount' ? tr('Количество') : tr('Приёмы')) + ' ' + groupTitle}/>
         ${group === 'hour' ? html`<p class="muted small">${tr('Сумма за период по часу приёма; приёмы без времени и старые дни из сводок не учитываются.')}</p>` : null}
         ${!sel && metric === 'amount' ? html`<p class="muted small">${tr('На одном графике — лекарства в одной единице ({u}), чтобы их можно было сравнить.', { u: unitShort(unit) })}</p>` : null}

@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.12.5';
+const VERSION = '0.13.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -28,6 +28,7 @@ const PRECACHE = [
   './src/core/i18n.en.js',
   './src/core/i18n.js',
   './src/core/ids.js',
+  './src/core/measures.js',
   './src/core/media.js',
   './src/core/merge.js',
   './src/core/model.js',

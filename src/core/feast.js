@@ -15,7 +15,7 @@ import { keyBetween, byOrder } from './order.js';
 import {
   cleanNutrients, num, entryNutrients, itemNutrients, sumNutrients, addNutrients, nv, MEALS, NUTRIENT_KEYS, MED_UNIT,
 } from './nutrition.js';
-import { addDays, daysBetween } from './dates.js';
+import { addDays, daysBetween, longDate, MONTH_NOM } from './dates.js';
 import { normalizeBarcode } from './barcode.js';
 import { DEFAULTS_CREATED_AT, DEFAULTS_DEVICE_ID, FEAST_RETENTION } from '../config.js';
 import { tr } from './i18n.js';
@@ -950,8 +950,8 @@ export function measureStats(data, from, to) {
   return { types: list, count: list.reduce((s, t) => s + t.count, 0) };
 }
 
-/** Группировки графиков лекарств (0.13): по дням, месяцам, годам — по времени; по часам — суммарно за период по часу суток. */
-export const MED_GROUPS = ['day', 'month', 'hour', 'year'];
+/** Группировки графиков лекарств (0.13): по часам — суммарно за период по часу суток; по дням, месяцам и годам — по времени. */
+export const MED_GROUPS = ['hour', 'day', 'month', 'year'];
 
 /**
  * Корзины графика лекарств: [{ key, label, title, values: { ключ лекарства: число } }].
@@ -973,9 +973,9 @@ export function medBuckets({ log = [], extra = [], from, to, group = 'day', metr
   if (group === 'hour') {
     for (let h = 0; h < 24; h++) ensure(String(h).padStart(2, '0'), String(h), `${String(h).padStart(2, '0')}:00–${String(h).padStart(2, '0')}:59`);
   } else if (group === 'day') {
-    for (let d = from; d <= to; d = addDays(d, 1)) ensure(d, `${+d.slice(8)}.${d.slice(5, 7)}`, d);
+    for (let d = from; d <= to; d = addDays(d, 1)) ensure(d, `${+d.slice(8)}.${d.slice(5, 7)}`, longDate(d, '0000')); // в подсказке — с годом
   } else if (group === 'month') {
-    for (let d = from.slice(0, 7) + '-01'; d.slice(0, 7) <= to.slice(0, 7); d = addDays(d.slice(0, 7) + '-28', 4).slice(0, 7) + '-01') ensure(d.slice(0, 7), `${d.slice(5, 7)}.${d.slice(2, 4)}`, d.slice(0, 7));
+    for (let d = from.slice(0, 7) + '-01'; d.slice(0, 7) <= to.slice(0, 7); d = addDays(d.slice(0, 7) + '-28', 4).slice(0, 7) + '-01') ensure(d.slice(0, 7), `${d.slice(5, 7)}.${d.slice(2, 4)}`, `${MONTH_NOM[+d.slice(5, 7) - 1]} ${d.slice(0, 4)}`);
   } else {
     for (let y = +from.slice(0, 4); y <= +to.slice(0, 4); y++) ensure(String(y), String(y), String(y));
   }

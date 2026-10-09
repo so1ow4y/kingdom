@@ -3,7 +3,7 @@
 // легенда для двух и более рядов, таблица вместо графика по кнопке. Цвета рядов — проверенная категориальная
 // палитра (--series-1…3), «сверх лимита» — статусный цвет и значок ⚠ (не только цвет).
 
-import { html, useState, useRef } from '../html.js';
+import { html, useState, useRef, useLayoutEffect } from '../html.js';
 import { addDays, daysBetween, longDate } from '../../core/dates.js';
 import { fmt } from '../../core/nutrition.js';
 import { tr, locale } from '../../core/i18n.js';
@@ -17,8 +17,9 @@ function ticks(max, count = 4) {
   const raw = max / count;
   const mag = 10 ** Math.floor(Math.log10(raw));
   const step = [1, 2, 2.5, 5, 10].map((m) => m * mag).find((s) => s >= raw) || raw;
-  const out = [];
-  for (let v = 0; v <= max + 1e-9; v += step) out.push(Math.round(v * 100) / 100);
+  // последнее деление — не ниже максимума, иначе столбик вылезает за график (0.13)
+  const out = [0];
+  while (out.at(-1) < max - 1e-9) out.push(Math.round((out.at(-1) + step) * 100) / 100);
   return out;
 }
 const num = (v) => Math.round(v).toLocaleString(locale());
@@ -31,9 +32,18 @@ function barPath(x, y, w, h) {
   return `M${x},${y + h}V${y + r}Q${x},${y} ${x + r},${y}H${x + w - r}Q${x + w},${y} ${x + w},${y + r}V${y + h}Z`;
 }
 
+/** Подсказка над точкой; у краёв графика сдвигается внутрь, чтобы не обрезалась и не уезжала за карточку (0.13). */
 function Tip({ tip }) {
+  const ref = useRef(null);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el || !tip) return;
+    const w = el.offsetWidth;
+    const box = el.parentElement.clientWidth;
+    el.style.left = Math.max(w / 2, Math.min(box - w / 2, tip.x)) + 'px';
+  });
   if (!tip) return null;
-  return html`<div class="fchart-tip" style=${{ left: tip.x + 'px', top: tip.y + 'px' }} role="status">${tip.body}</div>`;
+  return html`<div class="fchart-tip" ref=${ref} style=${{ left: tip.x + 'px', top: tip.y + 'px' }} role="status">${tip.body}</div>`;
 }
 
 /**
@@ -261,21 +271,27 @@ export function DayBars({ points, from, to, unitLabel = (v) => String(v), label 
 export const SERIES = ['var(--series-1)', 'var(--series-2)', 'var(--series-3)', 'var(--series-4)', 'var(--series-5)', 'var(--series-6)', 'var(--series-7)', 'var(--series-8)'];
 
 /**
- * Столбики с наложением рядов (0.13, лекарства): buckets — [{ key, label, title, values: { ключ ряда: число } }],
- * series — [{ key, label, color }]. Зазор 2 px между частями, скруглён верх столбика, подсказка — по каждому ряду и
+ * Столбики рядов (0.13, лекарства): друг на друге или рядом (grouped — у каждого ряда своё место в периоде).
+ * buckets — [{ key, label, title, values: { ключ ряда: число } }], series — [{ key, label, color }].
+ * Зазор 2 px между частями, скруглён верх столбика, подсказка — по каждому ряду и
  * сумма, легенда для двух и более рядов, «Таблицей». fmtValue(v, ряд) — подпись значения («3 ед.»).
  */
-export function StackedBars({ buckets, series, fmtValue = (v) => String(v), label = tr('График'), height = 180, empty = tr('нет приёмов') }) {
+export function StackedBars({ buckets, series, fmtValue = (v) => String(v), label = tr('График'), height = 180, empty = tr('нет приёмов'), grouped = false }) {
   const box = useRef(null);
   const [tip, setTip] = useState(null);
   const [table, setTable] = useState(false);
   const sum = (b) => series.reduce((s, x) => s + (b.values[x.key] || 0), 0);
-  const tk = ticks(Math.max(1, ...buckets.map(sum)), 3);
+  const peak = (b) => (grouped ? Math.max(0, ...series.map((x) => b.values[x.key] || 0)) : sum(b));
+  const tk = ticks(Math.max(1, ...buckets.map(peak)), 3);
   const top = tk.at(-1) || 1;
   const ih = height - PAD.t - PAD.b;
   const iw = W - PAD.l - PAD.r;
   const slot = iw / Math.max(1, buckets.length);
   const bw = Math.max(1, Math.min(24, slot - 2));
+  // рядом: у каждого ряда своё место в группе, между столбиками группы — 2 px, между группами — просвет
+  const n = Math.max(1, series.length);
+  const gw = Math.min(slot * 0.8, n * 16 + (n - 1) * 2);
+  const one = Math.max(1, (gw - (n - 1) * 2) / n);
   const y = (v) => PAD.t + ih - (v / top) * ih;
   const labelEvery = Math.ceil(buckets.length / 8);
   const show = (i, e) => {
@@ -284,7 +300,7 @@ export function StackedBars({ buckets, series, fmtValue = (v) => String(v), labe
     const total = sum(b);
     const parts = series.filter((x) => b.values[x.key]);
     setTip({
-      x: ((PAD.l + slot * i + slot / 2) / W) * rect.width, y: (y(total) / height) * rect.height,
+      x: ((PAD.l + slot * i + slot / 2) / W) * rect.width, y: (y(peak(b)) / height) * rect.height,
       body: html`<b>${b.title}</b>${!total ? html`<span>${empty}</span>` : parts.map((x) => html`<span key=${x.key}><i class="swatch" style=${{ background: x.color }}></i> ${x.label}: ${fmtValue(b.values[x.key], x)}</span>`)}
         ${parts.length > 1 ? html`<span class="muted">${tr('Всего')}: ${fmtValue(total, series[0])}</span>` : null}`,
     });
@@ -301,7 +317,12 @@ export function StackedBars({ buckets, series, fmtValue = (v) => String(v), labe
     <div class="fchart-box" ref=${box} onPointerLeave=${() => setTip(null)}>
       <svg viewBox=${`0 0 ${W} ${height}`} preserveAspectRatio="none" class="fchart-svg" style=${{ height: height + 'px' }} role="img" aria-label=${label}>
         ${tk.map((t) => html`<line key=${'g' + t} class="grid" x1=${PAD.l} x2=${W - PAD.r} y1=${y(t)} y2=${y(t)}/>`)}
-        ${buckets.map((b, i) => {
+        ${grouped ? buckets.map((b, i) => series.map((x, j) => {
+          const v = b.values[x.key] || 0;
+          if (!v) return null;
+          const xx = PAD.l + slot * i + (slot - gw) / 2 + j * (one + 2);
+          return html`<path key=${b.key + x.key} class="bar" d=${barPath(xx, y(v), one, PAD.t + ih - y(v))} fill=${x.color}/>`;
+        })) : buckets.map((b, i) => {
           let acc = 0;
           const present = series.filter((x) => b.values[x.key] > 0);
           return present.map((x, j) => {

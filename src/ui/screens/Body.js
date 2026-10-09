@@ -45,43 +45,68 @@ function figureColor() {
 }
 
 /**
- * Цветная шкала со ступенями (0.13: и для процента жира, и для ИМТ): границы — числами над полосой, подписи — под
- * полосой в два ряда (соседние не наезжают), текущая ступень выделена, отметка — где ты сейчас.
+ * Цветная шкала со ступенями (0.13: процент жира, ИМТ и вес): сверху — название, ступень и значение, на полосе —
+ * отметка «сейчас» (и кружок цели), под полосой — границы числами, ниже — легенда ступеней с диапазонами
+ * (переносится по строкам, подписи не наезжают друг на друга и не обрезаются). Ступень видна и словом, не только цветом.
  */
-export function RangeScale({ title, list, value, unit = '', fmtV = (v) => String(v) }) {
+export function RangeScale({ title, list, value, unit = '', fmtV = (v) => String(v), target = null, note = null }) {
   const lo = list[0].from;
   const hi = list.at(-1).to;
   const pos = (v) => ((Math.min(hi, Math.max(lo, v)) - lo) / (hi - lo)) * 100;
   const cur = Number.isFinite(value) ? list.find((c) => value < c.to) || list.at(-1) : null;
-  return html`<div class="bf-scale" role="img" aria-label=${`${title}: ${Number.isFinite(value) ? fmtV(value) + (unit ? ' ' + unit : '') : '—'}${cur ? ' — ' + cur.label : ''}`}>
-    ${title ? html`<p class="bf-title">${title}${cur ? html` · <b>${cur.label}</b>` : null}</p>` : null}
-    <div class="bf-bounds">${list.slice(1).map((c) => html`<span key=${c.key} style=${{ left: pos(c.from) + '%' }}>${fmtV(c.from)}</span>`)}</div>
+  const u = unit ? (unit === '%' ? ' %' : ' ' + unit) : '';
+  const range = (c, i) => (i === 0 ? tr('до {v}', { v: fmtV(c.to) }) : i === list.length - 1 ? tr('от {v}', { v: fmtV(c.from) }) : `${fmtV(c.from)}–${fmtV(c.to)}`) + u;
+  return html`<div class="bf-scale" role="img" aria-label=${`${title}: ${Number.isFinite(value) ? fmtV(value) + u : '—'}${cur ? ' — ' + cur.label : ''}`}>
+    <p class="bf-title"><span>${title}${cur ? html` · <b>${cur.label}</b>` : null}</span>
+      ${Number.isFinite(value) ? html`<b class="bf-value">${fmtV(value)}${u}</b>` : null}</p>
     <div class="bf-track">
-      ${list.map((c) => html`<span key=${c.key} class=${'bf-seg bf-' + c.key + (cur?.key === c.key ? ' on' : '')} style=${{ left: pos(c.from) + '%', width: pos(c.to) - pos(c.from) + '%' }}
-        title=${`${c.label}: ${fmtV(c.from)}–${fmtV(c.to)}${unit ? ' ' + unit : ''}`}></span>`)}
+      ${list.map((c, i) => html`<span key=${c.key} class=${'bf-seg bf-' + c.key + (cur?.key === c.key ? ' on' : '') + (i === list.length - 1 ? ' last' : '')}
+        style=${{ left: pos(c.from) + '%', width: `calc(${pos(c.to) - pos(c.from)}% - ${i < list.length - 1 ? 2 : 0}px)` }}></span>`)}
+      ${Number.isFinite(target) ? html`<i class="bf-target" style=${{ left: pos(target) + '%' }} aria-hidden="true"></i>` : null}
       ${Number.isFinite(value) ? html`<i class="bf-mark" style=${{ left: pos(value) + '%' }} aria-hidden="true"></i>` : null}
     </div>
-    <div class="bf-labels">${list.map((c, i) => html`<span key=${c.key} class=${(cur?.key === c.key ? 'on ' : '') + (i % 2 ? 'lane2' : '')}
-      style=${{ left: pos((c.from + c.to) / 2) + '%' }}>${c.label}</span>`)}</div>
+    <div class="bf-bounds" aria-hidden="true">${list.slice(1).map((c) => html`<span key=${c.key} style=${{ left: pos(c.from) + '%' }}>${fmtV(c.from)}</span>`)}</div>
+    <ul class="bf-legend">${list.map((c, i) => html`<li key=${c.key} class=${cur?.key === c.key ? 'on' : ''}>
+      <i class=${'bf-dot bf-' + c.key}></i><span>${c.label}</span> <small>${range(c, i)}</small></li>`)}
+      ${Number.isFinite(target) ? html`<li class="bf-target-key"><i class="bf-target"></i><span>${tr('цель')}</span> <small>${fmtV(target)}${u}</small></li>` : null}
+    </ul>
+    ${note ? html`<p class="muted small bf-note">${note}</p>` : null}
   </div>`;
 }
 
 /** Шкала процента жира: ступени для пола и отметка. */
-export function BodyFatScale({ sex, pct }) {
+export function BodyFatScale({ sex, pct, target = null }) {
   const list = B.BF_CLASSES[sex] || B.BF_CLASSES.male;
-  return html`<${RangeScale} title=${tr('Процент жира')} list=${list} value=${pct} unit="%" fmtV=${(v) => f1(v)}/>`;
+  return html`<${RangeScale} title=${tr('Процент жира')} list=${list} value=${pct} unit="%" fmtV=${(v) => f1(v)} target=${target}/>`;
+}
+
+/** Ступени ИМТ: 15 (начало шкалы) — 18,5 — 25 — 30 — 40 (конец шкалы). */
+function bmiSteps(scale = 1) {
+  const keys = ['bmi-low', 'bmi-ok', 'bmi-over', 'bmi-high'];
+  let from = 15;
+  return B.BMI_CLASSES.map((c, i) => {
+    const seg = { key: keys[i], label: c.label, from: from * scale, to: (Number.isFinite(c.max) ? c.max : 40) * scale };
+    from = seg.to / scale;
+    return seg;
+  });
 }
 
 /** Шкала ИМТ (0.13): недостаток, норма, избыточный вес, ожирение — с границами 18,5 / 25 / 30. */
-export function BmiScale({ bmi }) {
-  const keys = ['bmi-low', 'bmi-ok', 'bmi-over', 'bmi-high'];
-  let from = 15;
-  const list = B.BMI_CLASSES.map((c, i) => {
-    const seg = { key: keys[i], label: c.label, from, to: Number.isFinite(c.max) ? c.max : 40 };
-    from = seg.to;
-    return seg;
-  });
-  return html`<${RangeScale} title=${tr('ИМТ')} list=${list} value=${bmi} fmtV=${(v) => f1(v)}/>`;
+export function BmiScale({ bmi, target = null }) {
+  return html`<${RangeScale} title=${tr('ИМТ')} list=${bmiSteps()} value=${bmi} fmtV=${(v) => f1(v)} target=${target}/>`;
+}
+
+/** Шкала веса (0.13): те же ступени ИМТ, пересчитанные в килограммы для твоего роста, и сколько до нормы. */
+export function WeightScale({ weightKg, heightCm, target = null }) {
+  if (!weightKg || !heightCm) return null;
+  const h2 = (heightCm / 100) ** 2;
+  const list = bmiSteps(h2).map((c) => ({ ...c, from: Math.round(c.from * 10) / 10, to: Math.round(c.to * 10) / 10 }));
+  const lo = list[1].from;
+  const hi = list[1].to;
+  const gap = weightKg < lo ? lo - weightKg : weightKg > hi ? weightKg - hi : 0;
+  const note = tr('Норма для роста {h} см — {a}–{b} кг', { h: f1(heightCm), a: f1(lo), b: f1(hi) })
+    + (gap >= 0.1 ? '; ' + (weightKg > hi ? tr('до неё −{d} кг', { d: f1(gap) }) : tr('до неё +{d} кг', { d: f1(gap) })) : '') + '.';
+  return html`<${RangeScale} title=${tr('Вес')} list=${list} value=${weightKg} unit=${tr('кг')} fmtV=${(v) => f1(v)} target=${target} note=${note}/>`;
 }
 
 /** «Знаю свой процент жира» (0.13): замер на сегодня — с ним фигура и расчёты точнее. */
@@ -89,7 +114,7 @@ function ManualFat({ st, ro }) {
   const today = store.now.today;
   const cur = F.bodyLogOn(store.feast, today);
   return html`<div class="manual-fat">
-    <${NumField} label=${tr('Знаю свой процент жира')} unit="%" value=${cur?.bodyFatPct} disabled=${ro} onCommit=${(v) => FA.saveBodyLog(today, { bodyFatPct: v })}/>
+    <${NumField} label=${tr('Знаю свой процент жира')} unit="%" value=${cur?.bodyFatPct} placeholder=${tr('например, 18')} disabled=${ro} onCommit=${(v) => FA.saveBodyLog(today, { bodyFatPct: v })}/>
     <p class="muted small">${tr('Если известен по весам с анализатором, калиперу или DEXA — впиши, и фигура нарисуется по нему (сухой — рельефнее).')}${st.est?.method === 'measured' ? ' ' + tr('Сейчас используется он.') : ''}</p>
   </div>`;
 }
@@ -120,8 +145,9 @@ export function CompositionCard({ st, ro = !!store.ui.feastReadOnly }) {
       <div class="stat-tile"><span>Процент жира</span><b>${est ? f1(est.pct) + ' %' : '—'}</b><small>${est ? B.BF_METHOD[est.method] : tr('нужны пол и возраст')}</small></div>
       ${comp ? html`<div class="stat-tile"><span>Жир / остальное</span><b>${f1(comp.fatKg)} / ${f1(comp.leanKg)} кг</b><small>при весе ${f1(p.weightKg)} кг</small></div>` : null}
     </div>
-    ${est ? html`<${BodyFatScale} sex=${sex} pct=${est.pct}/>` : null}
-    <${BmiScale} bmi=${bmi}/>
+    ${est ? html`<${BodyFatScale} sex=${sex} pct=${est.pct} target=${target}/>` : null}
+    <${BmiScale} bmi=${bmi} target=${s.targetWeightKg ? B.bmi(s.targetWeightKg, p.heightCm) : null}/>
+    <${WeightScale} weightKg=${p.weightKg} heightCm=${p.heightCm} target=${s.targetWeightKg || null}/>
     <${ManualFat} st=${st} ro=${ro}/>
     ${est ? html`<div class="figures">
       <${BodyFigure} sex=${sex} bf=${est.pct} heightCm=${p.heightCm} weightKg=${p.weightKg} accent=${figureColor()}

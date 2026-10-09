@@ -1856,23 +1856,37 @@ td.ex-empty-row { padding: 32px 8px; color: var(--muted); text-align: center; }
 .body-figure { display: flex; flex-direction: column; align-items: center; gap: 6px; margin: 0; }
 .body-figure canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
 .body-figure figcaption { color: var(--muted); font-size: 13px; }
-.bf-scale { margin: 14px 0 6px; }
-.bf-track { position: relative; height: 12px; border-radius: 6px; background: var(--surface-3); }
-.bf-seg { position: absolute; top: 0; bottom: 0; opacity: .55; }
+.bf-scale { margin: 16px 0 8px; }
+.bf-scale + .bf-scale { margin-top: 20px; }
+.bf-title { display: flex; flex-wrap: wrap; align-items: baseline; justify-content: space-between; gap: 2px 12px; margin: 0 0 8px; color: var(--muted); font-size: 13px; }
+.bf-title b { color: var(--text); font-weight: 600; }
+.bf-title .bf-value { font-size: 15px; font-variant-numeric: tabular-nums; }
+.bf-track { position: relative; height: 12px; }
+.bf-seg { position: absolute; top: 0; bottom: 0; opacity: .5; }
 .bf-seg:first-child { border-radius: 6px 0 0 6px; }
-.bf-seg:last-child { border-radius: 0 6px 6px 0; }
+.bf-seg.last { border-radius: 0 6px 6px 0; }
 .bf-seg.on { opacity: 1; }
 .bf-essential { background: #c3b9e8; }
 .bf-athlete { background: #7fb5ef; }
 .bf-fitness { background: #78cfa8; }
 .bf-average { background: #f2c66b; }
 .bf-high { background: #ee8f78; }
-.bf-mark { position: absolute; top: -4px; width: 4px; height: 20px; margin-left: -2px; border-radius: 2px; background: var(--text); box-shadow: 0 0 0 2px var(--surface); }
-.bf-labels { position: relative; height: 30px; margin-top: 4px; }
-.bf-labels span { position: absolute; transform: translateX(-50%); max-width: 22%; color: var(--muted); font-size: 11px; line-height: 1.2; text-align: center; }
-.bf-labels span.on { color: var(--text); font-weight: 600; }
-.bf-labels span:first-child { transform: none; left: 0 !important; text-align: left; }
-.bf-labels span:last-child { transform: none; left: auto !important; right: 0; text-align: right; }
+.bf-bmi-low { background: #8fa3d9; }
+.bf-bmi-ok { background: #5fb07f; }
+.bf-bmi-over { background: #f2c66b; }
+.bf-bmi-high { background: #e0745c; }
+.bf-mark { position: absolute; top: -5px; width: 6px; height: 22px; margin-left: -3px; border-radius: 3px; background: var(--text); box-shadow: 0 0 0 2px var(--surface); }
+.bf-target { display: inline-block; width: 12px; height: 12px; border: 2px solid var(--text); border-radius: 50%; background: var(--surface); }
+.bf-track .bf-target { position: absolute; top: 0; margin-left: -6px; box-sizing: border-box; }
+.bf-bounds { position: relative; height: 16px; margin-top: 4px; }
+.bf-bounds span { position: absolute; top: 0; transform: translateX(-50%); color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.bf-legend { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 4px 0 0; padding: 0; list-style: none; color: var(--muted); font-size: 12px; }
+.bf-legend li { display: inline-flex; align-items: center; gap: 5px; }
+.bf-legend li.on { color: var(--text); font-weight: 600; }
+.bf-legend small { font-size: 11px; font-variant-numeric: tabular-nums; opacity: .85; }
+.bf-dot { flex: none; width: 9px; height: 9px; border-radius: 3px; }
+.bf-legend .bf-target { width: 10px; height: 10px; }
+.bf-note { margin: 6px 0 0; }
 .app-pick { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 4px 0 12px; }
 .app-pick .chip { display: inline-flex; align-items: center; gap: 8px; }
 
@@ -2046,18 +2060,6 @@ a.msr-name:hover { color: var(--accent); }
 .measures-table td { vertical-align: top; }
 .food-pick.measure .fp-name { color: var(--text); }
 /* 0.13: шкалы процента жира и ИМТ, фигура-схема */
-.bf-title { margin: 0 0 18px; color: var(--muted); font-size: 13px; }
-.bf-title b { color: var(--text); font-weight: 600; }
-.bf-bounds { position: relative; height: 0; }
-.bf-bounds span { position: absolute; bottom: 4px; transform: translateX(-50%); color: var(--muted); font-size: 10.5px; font-variant-numeric: tabular-nums; }
-.bf-labels { height: 34px; }
-.bf-labels span, .bf-labels span:first-child, .bf-labels span:last-child { left: auto; right: auto; transform: translateX(-50%); max-width: 30%; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.bf-labels span.lane2 { top: 15px; }
-.bf-seg.bmi-low { background: #7b8fc6; }
-.bf-seg.bmi-ok { background: #4c9a6a; }
-.bf-seg.bmi-over { background: #e8b923; }
-.bf-seg.bmi-high { background: #c8553d; }
-.bf-scale + .bf-scale { margin-top: 18px; }
 .manual-fat { display: flex; flex-direction: column; gap: 4px; max-width: 420px; margin: 14px 0 4px; }
 .body-figure-svg svg { display: block; max-width: 44vw; height: auto; }
 .bf-shorts { fill: var(--surface-3); stroke: var(--text); stroke-opacity: .35; stroke-width: 1; }
