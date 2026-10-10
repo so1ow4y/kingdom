@@ -143,7 +143,16 @@ export function buildMenu(counts, app = 'chronicle') {
             ...lists.map((l) => ({ title: l.name, emoji: l.emoji, color: l.color, to: '/list/' + l.id, match: ['list', l.id], count: counts.get(l.id) })),
           ],
         },
-        { title: tr('Поиск'), icon: 'search', to: '/tasks', match: ['tasks'], key: 'goTasks' },
+        // 0.15: поиск — ветка, как «Продукты и лекарства»: все задачи, активные, повторяющиеся и банк задач
+        {
+          id: 'search', title: tr('Поиск'), icon: 'search',
+          items: [
+            { title: tr('Все задачи'), icon: 'search', to: '/tasks', match: ['tasks', null], key: 'goTasks' },
+            { title: tr('Активные'), icon: 'circle', to: '/tasks/active', match: ['tasks', 'active'] },
+            { title: tr('Повторяющиеся'), icon: 'repeat', to: '/tasks/repeat', match: ['tasks', 'repeat'] },
+            { title: tr('Банк задач'), icon: 'bank', to: '/tasks/bank', match: ['tasks', 'bank'], key: 'goBank' },
+          ],
+        },
       ],
     },
     {

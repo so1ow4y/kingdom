@@ -25,6 +25,7 @@ import { planningDate } from '../core/planning.js';
 import * as V from '../core/village.js';
 import * as SK from '../core/skills.js';
 import * as RP from '../core/repeat.js';
+import * as BK from '../core/bank.js';
 import { getFocus, setFocus, claimFocus, focusElapsed } from './focus.js';
 import { bulkSummary } from '../core/explore.js';
 import { buildMap, suggestPlace } from '../village/map.js';
@@ -1391,4 +1392,76 @@ export async function clearLocalData() {
   }
   for (const k of Object.keys(localStorage)) if (k.startsWith('lifetasks.')) localStorage.removeItem(k);
   location.reload();
+}
+
+// ---------- Банк задач (0.15) ----------
+
+/** Новый шаблон в банке задач; input — поля как у «Новой задачи» (без даты). */
+export async function createTemplate(input) {
+  if (!BK.cleanTemplate(input).title || store.ui.readOnly) return null;
+  const t = BK.newTemplate(input, ctx());
+  return (await commit([{ coll: 'templates', prev: undefined, next: t }])) ? t : null;
+}
+
+export async function updateTemplate(id, changes) {
+  return commit([change('templates', id, (t) => BK.editTemplate(t, changes, ctx()))]);
+}
+
+export async function deleteTemplates(ids) {
+  const c0 = ctx();
+  const changes = ids.map((id) => store.data.templates.get(id)).filter((t) => t && !t.deletedAt).map((t) => ({ coll: 'templates', prev: t, next: M.tombstone(t, c0) }));
+  if (!(await commit(changes))) return 0;
+  offerUndo(changes.length === 1 ? tr('Удалено из банка задач') : tr('Удалено из банка задач: {n}', { n: changes.length }), changes);
+  return changes.length;
+}
+
+/** Шаблон использован (счётчик — частые сверху). */
+export async function markTemplateUsed(id) {
+  return commit([change('templates', id, (t) => BK.markUsed(t, ctx()))]);
+}
+
+/** Задача из шаблона в одно касание: date — день (null — во «Входящие» без даты). */
+export async function taskFromTemplate(id, { date = null } = {}) {
+  const tpl = store.data.templates.get(id);
+  if (!tpl || tpl.deletedAt || store.ui.readOnly) return null;
+  const input = BK.taskInput(tpl, { date, today: store.now.today });
+  input.listIds = input.listIds.filter((l) => S.liveList(store.data, l)); // список могли удалить
+  const r = await createTask(input);
+  if (!r) return null;
+  await markTemplateUsed(id);
+  const where = date ? humanDate(date, store.now.today).toLowerCase() : input.listIds.length ? input.listIds.map(listName).join(', ') : tr('«Входящие»');
+  showSnackbar(tr('Создано из банка: «{title}» — {where}', { title: tpl.title, where })
+    + (r.focusRejected ? ' · ' + tr('без ★: главных уже {focusMax}', { focusMax: LIMITS.focusMax }) : ''));
+  return r;
+}
+
+/** Сохранить задачу в банк: шаблон с тем же названием обновляется, иначе — новый. */
+export async function saveTaskToBank(taskId) {
+  const t = getTask(taskId);
+  if (!t || store.ui.readOnly) return null;
+  const input = BK.templateFromTask(store.data, t);
+  const same = BK.findByTitle(store.data, input.title);
+  if (same) {
+    const ok = await updateTemplate(same.id, input);
+    if (ok) showSnackbar(tr('Шаблон «{title}» в банке задач обновлён', { title: same.title }));
+    return ok ? same : null;
+  }
+  const tpl = await createTemplate(input);
+  if (tpl) showSnackbar(tr('«{title}» — в банке задач', { title: tpl.title }));
+  return tpl;
+}
+
+/** Вернуть выполненный экземпляр повтора (0.15, «Выполнено в этот день»): экземпляр снова открыт, монеты за него — назад. */
+export async function reopenRepeatOccurrence(id, key) {
+  const t = getTask(id);
+  if (!t?.occurrences?.[key] || store.ui.readOnly) return false;
+  const c0 = ctx();
+  let next = RP.reopenOccurrence(t, key, c0);
+  if (next.status === 'done') next = M.reopenTask(next, c0);
+  const changes = [{ coll: 'tasks', prev: t, next }];
+  const e = G.revokeEvent(store.data, id, key, c0);
+  if (e) changes.push({ coll: 'coinEvents', prev: store.data.coinEvents.get(e.id), next: e });
+  if (!(await commit(changes))) return false;
+  offerUndo(tr('«{title}» — снова не выполнено', { title: t.title }), changes);
+  return true;
 }

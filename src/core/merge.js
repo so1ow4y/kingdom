@@ -14,7 +14,8 @@ export const NESTED_ARRAYS = ['subtasks', 'notes', 'attachments', 'reminders', '
 // штрихкоды продукта Feast (0.11).
 export const KEYED_MAPS = ['occurrences', 'lists', 'barcodes'];
 const STRUCTURAL = new Set([...SERVICE, ...NESTED_ARRAYS, ...KEYED_MAPS]);
-export const MERGE_COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards', 'doneArchive'];
+// templates (0.15) — банк задач; старые версии хранят его как неизвестную коллекцию и не теряют
+export const MERGE_COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards', 'doneArchive', 'templates'];
 
 const isTomb = (e) => !!e.deletedAt;
 const ft = (e, k) => {

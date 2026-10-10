@@ -31,4 +31,5 @@ await run([
   './keys.test.js',
   './feast.test.js',
   './meals.test.js',
+  './bank.test.js',
 ]);

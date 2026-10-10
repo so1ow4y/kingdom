@@ -13,7 +13,7 @@ import * as A from '../../store/actions.js';
 import * as S from '../../core/selectors.js';
 import {
   KINDS, PLACEHOLDER, RANGES, RANGE_LABEL, HAS_HINT, REPEAT_HINT, fieldChips, rangeFrom, makeContext, search, facets, histogram,
-  eventTime, listNames, priorityName, statusOf, STATUS_LABEL, deviceName, fieldLabel,
+  eventTime, listNames, priorityName, statusOf, STATUS_LABEL, deviceName, fieldLabel, LIVE_KINDS, repeatGroup,
 } from '../../core/explore.js';
 import { withTerm, andQuery } from '../../core/query.js';
 import { formatMoment, localDateOf, humanDate } from '../../core/dates.js';
@@ -163,7 +163,7 @@ function Details({ ctx, t, kind, onFilter, actions }) {
 }
 
 /**
- * kind: 'all' | 'done' | 'trash' (core/explore.js KINDS). initialQ — строка поиска при открытии.
+ * kind: 'all' | 'active' | 'repeat' | 'done' | 'trash' (core/explore.js KINDS). initialQ — строка поиска при открытии.
  */
 export function TaskExplorer({ kind, initialQ = '' }) {
   const K = KINDS[kind];
@@ -239,8 +239,8 @@ export function TaskExplorer({ kind, initialQ = '' }) {
         ${b(tr('Удалить навсегда'), 'trash', () => bulk('purge', null, ids), 'danger-outline')}`;
     }
     return html`
-      ${kind === 'all' && (!t || st === 'active') ? b(tr('Выполнить'), 'check', () => bulk('complete', null, ids), t ? '' : 'primary') : null}
-      ${kind === 'done' || (kind === 'all' && (!t || st === 'done')) ? b(tr('Вернуть в работу'), 'restore', () => bulk('reopen', null, ids), kind === 'done' && !t ? 'primary' : '') : null}
+      ${LIVE_KINDS.includes(kind) && (!t || st === 'active') ? b(tr('Выполнить'), 'check', () => bulk('complete', null, ids), t ? '' : 'primary') : null}
+      ${kind === 'done' || ((kind === 'all' || kind === 'repeat') && (!t || st === 'done')) ? b(tr('Вернуть в работу'), 'restore', () => bulk('reopen', null, ids), kind === 'done' && !t ? 'primary' : '') : null}
       ${b(tr('Список…'), 'lists', (e) => listMenu(e, ids || selection.ids))}
       ${b(tr('Приоритет…'), 'flag', (e) => prioMenu(e, ids || selection.ids))}
       ${b(tr('В корзину'), 'trash', () => bulk('trash', null, ids), 'danger-outline')}`;
@@ -254,7 +254,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
   });
 
   const colFilters = K.columns;
-  const extraCol = kind === 'all' ? tr('Статус') : kind === 'trash' ? tr('Осталось') : null;
+  const extraCol = kind === 'all' ? tr('Статус') : kind === 'trash' ? tr('Осталось') : kind === 'repeat' ? tr('Повтор') : null;
   const span = 6 + (extraCol ? 1 : 0);
   const retention = store.data.settings.trashRetentionDays || 30;
   const leftDays = (t) => Math.max(0, retention - Math.floor((Date.now() - Date.parse(t.trashedAt)) / 86400000));
@@ -336,7 +336,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
                       <td class="ex-title-cell">
                         <button type="button" class=${'ex-title' + (st === 'done' ? ' done' : '')} title="Открыть карточку"
                           onClick=${(e) => { e.stopPropagation(); openTask(t.id); }}>${t.title}</button>
-                        ${t.repeat ? html`<span class="ex-flag" title=${describeRule(t.repeat)}><${Icon} name="repeat" size=${13}/></span>` : null}
+                        ${t.repeat && kind !== 'repeat' ? html`<span class="ex-flag" title=${describeRule(t.repeat)}><${Icon} name="repeat" size=${13}/></span>` : null}
                         <div class="ex-narrow-meta">
                           <span>${formatMoment(eventTime(t, kind), tz)}</span>
                           ${lists.map((n) => html`<${Value} field="список" value=${n} onFilter=${addTerm}/>`)}
@@ -346,6 +346,8 @@ export function TaskExplorer({ kind, initialQ = '' }) {
                       <td class="ex-col-list">${lists.map((n) => html`<${Value} key=${n} field="список" value=${n} onFilter=${addTerm}/>`)}</td>
                       <td class="ex-col-prio"><${Value} field="приоритет" value=${priorityName(store.data, t)} color=${prio?.color} onFilter=${addTerm}/></td>
                       ${kind === 'all' ? html`<td class="ex-col-extra"><${Value} field="статус" value=${STATUS_LABEL[st]} onFilter=${addTerm}/></td>` : null}
+                      ${kind === 'repeat' ? html`<td class="ex-col-extra ex-rule" title=${describeRule(t.repeat)}><${Value} field="повтор" value=${repeatGroup(t)} onFilter=${addTerm}/>
+                        <small class="muted">${st === 'done' ? STATUS_LABEL.done : describeRule(t.repeat)}</small></td>` : null}
                       ${kind === 'trash' ? html`<td class="ex-col-extra ex-left">${leftDays(t)} ${plural(leftDays(t), ['день', 'дня', 'дней'])}</td>` : null}
                     </tr>
                     ${isOpen ? html`<tr class="ex-details" key=${t.id + ':d'}><td colSpan=${span}>

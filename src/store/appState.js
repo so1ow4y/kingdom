@@ -10,6 +10,7 @@ export const store = {
     settings: null, lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map(),
     priorities: new Map(), coinEvents: new Map(), rewards: new Map(), // формат v2
     doneArchive: new Map(), // формат v3: сводки удалённых выполненных задач
+    templates: new Map(), // 0.15: банк задач
   },
   // Feast (0.11): данные счётчика калорий — своя база и своя папка на Диске (core/feast.js)
   feast: {
@@ -197,8 +198,9 @@ export function closeSheet() {
   if (store.ui.sheet) setUi({ sheet: null });
 }
 
+/** «Новая задача»; template (0.15) — заготовка банка задач: 'new' — новая, id — правка. */
 export function openQuickAdd(ctx = {}) {
-  setUi({ quickAdd: { listId: ctx.listId ?? null, scheduledDate: ctx.scheduledDate ?? null } });
+  setUi({ quickAdd: { listId: ctx.listId ?? null, scheduledDate: ctx.scheduledDate ?? null, template: ctx.template ?? null } });
 }
 
 export function closeQuickAdd() {

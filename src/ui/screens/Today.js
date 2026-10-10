@@ -14,7 +14,9 @@ import * as S from '../../core/selectors.js';
 import { countLabel } from '../../core/plural.js';
 import { LIMITS } from '../../config.js';
 import { planningDate } from '../../core/planning.js';
-import { navigate } from '../router.js';
+import { navigate, openTask } from '../router.js';
+import { describeRule } from '../../core/repeat.js';
+import { formatMoment } from '../../core/dates.js';
 import { DayContext } from '../dayContext.js';
 import { DayStrip } from '../components/DayStrip.js';
 import { tr } from '../../core/i18n.js';
@@ -105,9 +107,17 @@ export function TodayScreen({ query = {} }) {
           <p class="muted">Загляни во «Входящие» (${countLabel(inboxCount, ['задача', 'задачи', 'задач'])}) или добавь задачу кнопкой «+».</p>
         </div>` : null}
 
-      ${f.roots.doneToday.length ? html`
-        <${Section} title="Выполнено в этот день" count=${f.roots.doneToday.length} collapsible defaultOpen=${false} storageKey=${'today.done.' + today}>
-          ${tree('doneToday', tr('Порядок здесь по времени выполнения'))}
+      ${f.roots.doneToday.length || v.doneRepeats.length ? html`
+        <${Section} title="Выполнено в этот день" count=${f.roots.doneToday.length + v.doneRepeats.length} collapsible defaultOpen=${false} storageKey=${'today.done.' + today}>
+          ${v.doneRepeats.length ? html`<ul class="done-repeats">${v.doneRepeats.map(({ task, key, doneAt }) => html`<li key=${task.id + key} class="task-row done done-repeat">
+            <button type="button" class="check checked" disabled=${readOnly} title=${tr('Вернуть — снова не выполнено')} aria-label=${tr('Вернуть «{title}»', { title: task.title })}
+              onClick=${() => A.reopenRepeatOccurrence(task.id, key)}><${Icon} name="check" size=${16}/></button>
+            <button type="button" class="task-main dr-main" onClick=${() => openTask(task.id)}>
+              <span class="task-title">${task.title}</span>
+              <small class="muted"><${Icon} name="repeat" size=${12}/> ${describeRule(task.repeat)} · ${formatMoment(doneAt, store.data.settings.timeZone).slice(11)}</small>
+            </button>
+          </li>`)}</ul>` : null}
+          ${f.roots.doneToday.length ? tree('doneToday', tr('Порядок здесь по времени выполнения')) : null}
         <//>` : null}
     <//><//>`;
 }

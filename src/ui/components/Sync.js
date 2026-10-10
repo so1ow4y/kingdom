@@ -82,6 +82,10 @@ function entityName(key) {
     return l ? (l.deletedAt ? tr('Удалённый список') : tr('Список «{name}»', { name: l.name })) : tr('Список');
   }
   if (coll === 'devices') return tr('Устройство «{p0}»', { p0: d.devices.get(id)?.name || '?' });
+  if (coll === 'templates') {
+    const t = d.templates?.get(id);
+    return t && !t.deletedAt ? tr('Банк задач: «{name}»', { name: t.title }) : tr('Банк задач');
+  }
   return key;
 }
 

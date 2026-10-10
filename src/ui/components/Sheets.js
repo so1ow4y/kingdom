@@ -19,6 +19,7 @@ import { RecorderSheet } from './Attachments.js';
 import { FocusStartSheet } from './Focus.js';
 import { RepeatSheet } from './Repeat.js';
 import { describeRule } from '../../core/repeat.js';
+import * as BK from '../../core/bank.js';
 import { ShortcutsSheet } from './Shortcuts.js';
 import { AddFoodSheet, EntrySheet, ScanSheet } from './AddFood.js';
 import { MealSheet, MealNoteSheet } from './Meals.js';
@@ -202,6 +203,8 @@ function TaskMenuSheet({ taskId, date }) {
         const c = await A.duplicateTask(taskId);
         if (c) navigate('/task/' + c.id);
       })}/>
+      <${MenuItem} icon="bank" label="В банк задач" hint=${BK.findByTitle(store.data, t.title) ? tr('обновить заготовку') : tr('заготовка без даты')}
+        onClick=${run(() => A.saveTaskToBank(taskId))}/>
       <${MenuItem} icon="copy" label="Скопировать текст" onClick=${run(async () => {
         try {
           const notes = liveNotes(t).map((n) => n.text).filter(Boolean);

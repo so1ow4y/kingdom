@@ -64,7 +64,8 @@ function titleFor(route) {
     }
     case 'archive': return tr('Выполненные');
     case 'trash': return tr('Корзина');
-    case 'tasks': return tr('Поиск задач');
+    case 'tasks': return route.param === 'bank' ? tr('Банк задач') : route.param === 'active' ? tr('Активные задачи')
+      : route.param === 'repeat' ? tr('Повторяющиеся задачи') : tr('Поиск задач');
     case 'settings': return tr('Настройки');
     case 'more': return tr('Ещё');
     case 'journal': return tr('Журнал');
@@ -94,7 +95,7 @@ function Screen({ route }) {
     case 'task': return html`<${TaskScreen} key=${route.param} taskId=${route.param}/>`;
     case 'archive': return html`<${ArchiveScreen} key=${route.query.list || ''} query=${route.query}/>`;
     case 'trash': return html`<${TrashScreen}/>`;
-    case 'tasks': return html`<${TasksScreen} key=${route.query.q || ''} query=${route.query}/>`;
+    case 'tasks': return html`<${TasksScreen} key=${(route.param || '') + ':' + (route.query.q || '')} query=${route.query} tab=${route.param}/>`;
     case 'settings': return html`<${SettingsScreen} query=${route.query}/>`;
     case 'more': return html`<${MoreScreen}/>`;
     case 'journal': return html`<${JournalScreen}/>`;
@@ -300,6 +301,7 @@ export function App() {
       goInbox: go('/inbox'),
       goLists: go('/lists'),
       goTasks: go('/tasks'),
+      goBank: go('/tasks/bank'),
       goVillage: go('/village'),
       goAnalytics: go('/analytics'),
       goShop: go('/shop'),

@@ -245,6 +245,7 @@ export function LimitsSection() {
       <h3 class="set-sub">Использование</h3>
       <table class="kv">
         <tr><td>Задачи</td><td>активных ${active}, выполненных ${done}, в корзине ${trash}; сводок удалённых выполненных — ${[...data.doneArchive.values()].filter((a) => !a.deletedAt).length}</td></tr>
+        <tr><td>Банк задач</td><td>заготовок: ${[...(data.templates?.values() || [])].filter((t) => !t.deletedAt).length}</td></tr>
         <tr><td>Размер базы</td><td>${db ? tr('{p0} (сжатая на Диске — {p1})', { p0: formatBytes(db.raw), p1: formatBytes(db.gz) }) : '…'}</td></tr>
         <tr><td>Медиа на Диске</td><td>${formatBytes(media.onDrive)}${media.total > media.onDrive ? tr(' · ждут «Пуш»: {p0}', { p0: formatBytes(media.total - media.onDrive) }) : ''} (файлов: ${media.count})</td></tr>
         <tr><td>Кэш медиа на устройстве</td><td>${cache ? tr('{p0} из {p1} МБ', { p0: formatBytes(cache.total), p1: cacheLimitMB() }) : '…'}</td></tr>

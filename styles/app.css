@@ -2153,3 +2153,31 @@ body.entry-dragging, body.entry-dragging * { cursor: grabbing !important; user-s
 .aa-qty { display: flex; flex-wrap: wrap; align-items: flex-end; gap: 10px; }
 .aa-qty .aa-amount { flex: 1 1 180px; }
 .aa-qty .count-stepper { margin-bottom: 4px; }
+/* ---------- 0.15: банк задач, выполненные повторы ---------- */
+.done-repeats { display: flex; flex-direction: column; gap: 6px; margin: 0 0 6px; padding: 0; list-style: none; }
+.done-repeat { cursor: default; }
+.done-repeat .dr-main { display: flex; flex-direction: column; gap: 2px; min-height: 44px; border: 0; background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.done-repeat .dr-main small { display: inline-flex; align-items: center; gap: 4px; }
+.qa-bank { margin: 8px 0 6px; padding: 6px; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); }
+.qa-bank-title { display: flex; align-items: center; gap: 6px; padding: 2px 6px 4px; font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .05em; }
+.qa-bank-row { display: flex; align-items: center; gap: 4px; }
+.qa-bank-pick { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; min-height: 44px; padding: 4px 8px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.qa-bank-pick:hover { background: var(--surface); }
+.qa-bank-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.qa-bank-pick small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.qa-bank-add { flex: none; color: var(--accent); }
+.qa-bank-add:hover:not(:disabled) { background: var(--surface); }
+.qa-bank-note { margin: 0 0 8px; }
+.bank-tools { display: flex; flex-direction: column; gap: 8px; margin: 4px 0 10px; }
+.bank-tools .search-field { max-width: 560px; }
+.bank-list { display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.bank-row { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 4px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }
+.bank-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; min-height: 52px; padding: 6px 8px; border: 0; border-radius: 8px;
+  background: transparent; color: var(--text); font: inherit; text-align: left; cursor: pointer; }
+.bank-main:hover:not(:disabled) { background: color-mix(in srgb, var(--surface) 92%, var(--accent)); }
+.bank-title { display: flex; align-items: center; gap: 6px; font-weight: 600; overflow-wrap: anywhere; }
+.bank-main small { overflow-wrap: anywhere; }
+.bank-actions { display: flex; flex: none; align-items: center; gap: 2px; }
+.bank-empty p { max-width: 520px; margin: 8px auto; }
+.bank-empty { margin-top: 8px; border-radius: var(--radius-sm); background: var(--surface); box-shadow: var(--shadow); }

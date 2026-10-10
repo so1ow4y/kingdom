@@ -26,6 +26,7 @@ export const SHORTCUTS = [
   { id: 'goInbox', group: tr('Переходы'), label: tr('Входящие'), def: 'Digit2' },
   { id: 'goLists', group: tr('Переходы'), label: tr('Списки'), def: 'Digit3' },
   { id: 'goTasks', group: tr('Переходы'), label: tr('Поиск задач (экран)'), def: 'Digit4' },
+  { id: 'goBank', group: tr('Переходы'), label: tr('Банк задач'), def: null },
   { id: 'goVillage', group: tr('Переходы'), label: tr('Деревня'), def: 'Digit5' },
   { id: 'goAnalytics', group: tr('Переходы'), label: tr('Аналитика'), def: 'Digit6' },
   { id: 'goShop', group: tr('Переходы'), label: tr('Магазин'), def: 'Digit7' },

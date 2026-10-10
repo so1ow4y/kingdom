@@ -7,7 +7,7 @@ import { tr } from '../core/i18n.js';
 
 export const DB_FORMAT = 'lifetasks-db';
 export const MANIFEST_FORMAT = 'lifetasks-manifest';
-export const COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards', 'doneArchive'];
+export const COLLECTIONS = ['settings', 'lists', 'tasks', 'media', 'devices', 'priorities', 'coinEvents', 'rewards', 'doneArchive', 'templates'];
 const ENVELOPE_KEYS = new Set(['format', 'schemaVersion', 'createdAt', 'updatedAt', 'writer', 'data']);
 
 export function writer(deviceId) {

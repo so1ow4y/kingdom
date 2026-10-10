@@ -19,7 +19,15 @@ export const KINDS = {
     facets: ['список', 'приоритет', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
   trash: { title: tr('Корзина'), time: 'trashedAt', timeLabel: tr('В корзине'), histogram: tr('Удалено в корзину'),
     facets: ['список', 'приоритет', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
+  // 0.15: «Поиск» на четыре вкладки — все, активные (не выполнены и не в корзине), повторяющиеся и банк задач
+  active: { title: tr('Активные'), time: 'createdAt', timeLabel: tr('Создана'), histogram: tr('Создано задач'),
+    facets: ['список', 'приоритет', 'повтор', 'день', 'устройство'], columns: ['название', 'список', 'приоритет'] },
+  repeat: { title: tr('Повторяющиеся'), time: 'createdAt', timeLabel: tr('Создана'), histogram: tr('Создано задач'),
+    facets: ['повтор', 'статус', 'список', 'приоритет', 'устройство'], columns: ['название', 'список', 'приоритет'] },
 };
+
+/** Виды, где задачи живые (не архив и не корзина): у них действия «Выполнить», «Список…», «Приоритет…». */
+export const LIVE_KINDS = ['all', 'active', 'repeat'];
 
 /** Поля строки поиска и их синонимы (латиницей — чтобы не переключать раскладку ради «list:»). */
 export const FIELDS = {
@@ -37,15 +45,17 @@ export const FIELDS = {
   'устройство': ['device', 'by'],
 };
 
-/** Кнопки полей под строкой поиска (статус — только во «Всех задачах»: у остальных он один). */
+/** Кнопки полей под строкой поиска (статус — во «Всех задачах» и повторах: у остальных он один). */
 export function fieldChips(kind) {
-  return Object.keys(FIELDS).filter((f) => kind === 'all' || f !== 'статус');
+  return Object.keys(FIELDS).filter((f) => kind === 'all' || kind === 'repeat' || f !== 'статус');
 }
 
 export const PLACEHOLDER = {
   all: LANG === 'en' ? 'list:Work -status:done repeat:years has:note text' : 'список:Работа -статус:выполнена повтор:годы есть:заметка текст',
   done: LANG === 'en' ? 'date:2026-10 priority:high -list:Home' : 'дата:2026-10 приоритет:высокий -список:Дом',
   trash: LANG === 'en' ? 'device:phone list:inbox text' : 'устройство:телефон список:входящие текст',
+  active: LANG === 'en' ? 'list:Work priority:high has:deadline text' : 'список:Работа приоритет:высокий есть:срок текст',
+  repeat: LANG === 'en' ? 'repeat:weeks list:Home -status:done text' : 'повтор:недели список:Дом -статус:выполнена текст',
 };
 
 /** Как показать поле запроса: по-английски — первый английский синоним (запрос понимает оба). */
@@ -84,8 +94,10 @@ export const eventTime = (t, kind) => t[KINDS[kind].time] || t.createdAt;
 export function rowsOf(data, kind) {
   if (kind === 'done') return S.archiveView(data);
   if (kind === 'trash') return S.trashView(data);
+  const keep = kind === 'active' ? (t) => !t.trashedAt && t.status !== 'done'
+    : kind === 'repeat' ? (t) => !t.trashedAt && !!t.repeat : () => true;
   const out = [];
-  for (const t of data.tasks.values()) if (S.isAlive(t)) out.push(t);
+  for (const t of data.tasks.values()) if (S.isAlive(t) && keep(t)) out.push(t);
   return out.sort((a, b) => (a.createdAt < b.createdAt ? 1 : a.createdAt > b.createdAt ? -1 : 0));
 }
 

@@ -196,7 +196,8 @@ const byIsoDesc = (field) => (a, b) => {
 /** Экран «Сегодня» (TZ §6.2). Подзадачи с датой попадают сюда сами по себе (с подписью родителя в UI). */
 export function todayView(data, today, time, nowMs = Date.now(), exactDay = false) {
   const tz = data.settings.timeZone;
-  const v = { focus: [], yesterdayFocus: [], overdue: [], today: [], soon: [], chores: [], doneToday: [] };
+  // doneRepeats (0.15) — экземпляры повторов, выполненные в этот день: [{ task, key, doneAt }]
+  const v = { focus: [], yesterdayFocus: [], overdue: [], today: [], soon: [], chores: [], doneToday: [], doneRepeats: [] };
   const recent = nowMs - 2 * 86400000;
   const dc = (a, b) => dayCompare(a, b, data);
   const oc = (a, b) => {
@@ -206,6 +207,11 @@ export function todayView(data, today, time, nowMs = Date.now(), exactDay = fals
   };
   for (const t of data.tasks.values()) {
     if (!isAlive(t) || t.trashedAt || inArchivedList(data, t)) continue;
+    if (t.repeat) {
+      for (const [key, o] of Object.entries(t.occurrences || {})) {
+        if (o?.state === 'done' && o.doneAt && Date.parse(o.doneAt) >= recent && localDateOf(o.doneAt, tz) === today) v.doneRepeats.push({ task: t, key, doneAt: o.doneAt });
+      }
+    }
     if (t.focusDate === today) {
       v.focus.push(t);
       continue;
@@ -248,6 +254,7 @@ export function todayView(data, today, time, nowMs = Date.now(), exactDay = fals
     return oa ? oc(a, b) : dc(a, b);
   });
   v.doneToday.sort(byIsoDesc('completedAt'));
+  v.doneRepeats.sort((a, b) => (a.doneAt < b.doneAt ? 1 : -1));
   return v;
 }
 

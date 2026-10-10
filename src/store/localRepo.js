@@ -5,11 +5,12 @@ import { openDb, req, txDone, deleteDb } from './idb.js';
 import { DB_NAME, FEAST_DB_NAME } from '../config.js';
 import { FEAST_COLLECTIONS } from '../core/feast.js';
 
-const IDB_VERSION = 3;
+const IDB_VERSION = 4;
 const V1_STORES = ['settings', 'lists', 'tasks', 'media', 'devices'];
 const V2_STORES = ['priorities', 'coinEvents', 'rewards']; // формат данных v2 (обновление 0.3)
 const V3_STORES = ['doneArchive']; // формат данных v3 (обновление 0.5)
-export const ENTITY_STORES = [...V1_STORES, ...V2_STORES, ...V3_STORES];
+const V4_STORES = ['templates']; // банк задач (0.15), формат данных — тот же v3
+export const ENTITY_STORES = [...V1_STORES, ...V2_STORES, ...V3_STORES, ...V4_STORES];
 // Счётчик калорий (0.11) — отдельная база IndexedDB с тем же устройством сторов (без медиа);
 // версия 2 (0.12) — сторы рационов и заметок к ним; версия 3 (0.14) — корзина (trash)
 const FEAST_IDB_VERSION = 3;

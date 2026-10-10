@@ -252,7 +252,7 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
   const dirty = totalDirty();
   const toggleLabel = expanded ? tr('Свернуть панель') : tr('Развернуть панель');
   const busy = ind.key === 'busy';
-  const items = (g) => g.items.filter((it) => !compact || (it.to !== '/tasks' && it.to !== '/settings'));
+  const items = (g) => g.items.filter((it) => !compact || (it.to !== '/tasks' && it.id !== 'search' && it.to !== '/settings'));
 
   return html`
     ${autoHide ? html`<div class=${'dock-hot pos-' + position} aria-hidden="true" onMouseEnter=${reveal}></div>` : null}

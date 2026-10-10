@@ -4,8 +4,9 @@ Two apps in one serverless PWA: **Chronicle** — a personal task planner (forme
 
 Live: https://so1ow4y.github.io/kingdom/
 
-## What's inside (version 0.14)
+## What's inside (version 0.15)
 
+- **Task bank and search in four tabs (0.15):** the task bank keeps templates of things you add again and again — title, lists, priority, time, reminders, repeat, subtasks and notes, everything except the date. In "New task" start typing and matching templates appear under the title (frequent ones when the field is empty): tap one to fill the form, or "+" to create the task right away for the chosen day. "To bank" in "New task" and "To task bank" in the task menu save a template (a template with the same title is updated). Search in the dock is now a branch with four tabs — All tasks, Active, Repeating (with the rule column) and Task bank (search, list filter, "+ Today", tomorrow, without a date, edit, remove). "Done this day" on Today now also lists repeating tasks checked off that day, with one-tap undo. Templates sync as their own `templates` collection; older versions keep it untouched.
 - **Several servings (0.14.4):** a food in an entry can be multiplied — "40 g × 3" (× 1 is not shown). Logging the same food with the same serving into an entry adds to it instead of a new line; old entries with identical lines are merged when saved. The total amount and rewards are stored, so older versions count calories correctly.
 - **Product button in the diary (0.14.3):** the row above the meals now starts with "Product" — it opens "Log food" with the food list, next to Scan, Medicine, Measurement, Note and Meal.
 - **Order inside an entry (0.14.2):** measurements are shown on top, food in the middle and medicines at the bottom (a setting, on by default); within each group the order is yours — drag items by ⋮⋮ up or down in the diary or in the entry sheet, or drop them at a specific place in another entry. Long item names are shown partly (as much as fits) or wrapped in full — another setting; the entry sheet now gives names their own row, so medicine names are always visible.
@@ -47,7 +48,7 @@ Google sign-in works only on origins registered for the OAuth client (`http://lo
 ## Release and deploy
 
 ```
-python tools/release.py 0.14.4
+python tools/release.py 0.15.0
 git push origin main
 ```
 
@@ -55,7 +56,7 @@ git push origin main
 
 ## Data format
 
-Tasks: data format v3 (JSON Schema: `schemas/v3/db.schema.json`). Newer versions only add optional fields, so older clients keep working and preserve unknown fields. Crimson Harvest: its own database file (`crimson-feast-db`, schema 2 since 0.12: meals, meal notes, multi-food entries) in the `Crimson Harvest` folder, merged with the same field-level rules; 0.11 clients open a schema-2 file read-only.
+Tasks: data format v3 (JSON Schema: `schemas/v3/db.schema.json`; the optional `templates` collection — the task bank — since 0.15). Newer versions only add optional fields, so older clients keep working and preserve unknown fields. Crimson Harvest: its own database file (`crimson-feast-db`, schema 2 since 0.12: meals, meal notes, multi-food entries) in the `Crimson Harvest` folder, merged with the same field-level rules; 0.11 clients open a schema-2 file read-only.
 
 ## Documentation
 

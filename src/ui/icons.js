@@ -65,6 +65,9 @@ const PATHS = {
   swap: 'M7 7h13M17 4l3 3-3 3M17 17H4M7 14l-3 3 3 3',
   star2: 'M12 4l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 16.4 7.2 18.9l.9-5.4-3.9-3.8 5.4-.8z',
   copy2: 'M9 9h10v10H9zM5 15V5h10',
+  // 0.15: банк задач (лоток с карточками) и активные задачи (пустой кружок)
+  bank: 'M4 11h16v9H4zM6 7.5h12M8 4h8M9 15h6',
+  circle: 'M12 4a8 8 0 100 16 8 8 0 000-16z',
 };
 
 export function Icon({ name, size = 22, filled = false, className = '' }) {

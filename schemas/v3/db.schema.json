@@ -96,6 +96,12 @@
           "items": {
             "$ref": "#/$defs/archive"
           }
+        },
+        "templates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/template"
+          }
         }
       }
     }
@@ -1428,6 +1434,104 @@
               "coins": {
                 "type": "integer",
                 "minimum": 0
+              }
+            }
+          }
+        }
+      ]
+    },
+    "template": {
+      "allOf": [
+        {
+          "$ref": "#/$defs/topBase"
+        },
+        {
+          "if": {
+            "$ref": "#/$defs/isLive"
+          },
+          "then": {
+            "required": [
+              "title",
+              "listIds",
+              "priorityId"
+            ],
+            "properties": {
+              "title": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 500
+              },
+              "listIds": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 20
+              },
+              "priorityId": {
+                "type": "string"
+              },
+              "time": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "reminderRules": {
+                "oneOf": [
+                  {
+                    "type": "array",
+                    "maxItems": 10
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "repeat": {
+                "oneOf": [
+                  {
+                    "type": "object"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "subtaskTitles": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 30
+              },
+              "noteTexts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                },
+                "maxItems": 30
+              },
+              "focus": {
+                "type": "boolean"
+              },
+              "uses": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "lastUsedAt": {
+                "oneOf": [
+                  {
+                    "$ref": "#/$defs/isoTime"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
               }
             }
           }

@@ -23,6 +23,7 @@ export function makeData({ timeZone = 'Europe/Moscow' } = {}) {
     coinEvents: new Map(),
     rewards: new Map(),
     doneArchive: new Map(),
+    templates: new Map(),
   };
 }
 

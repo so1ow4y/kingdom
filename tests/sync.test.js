@@ -20,7 +20,7 @@ function device(id, tz) {
   const d = {
     id,
     clock,
-    data: { settings: new Map(), lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map(), priorities: new Map(), coinEvents: new Map(), rewards: new Map(), doneArchive: new Map() },
+    data: { settings: new Map(), lists: new Map(), tasks: new Map(), media: new Map(), devices: new Map(), priorities: new Map(), coinEvents: new Map(), rewards: new Map(), doneArchive: new Map(), templates: new Map() },
     base: new Map(),
     dirty: new Set(),
     lastRev: null,
