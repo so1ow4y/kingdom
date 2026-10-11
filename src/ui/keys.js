@@ -3,13 +3,22 @@
 // переназначение в «Настройки → Интерфейс → Горячие клавиши». Как и вид дока — настройка ЭТОГО устройства
 // (ui/prefs.js), на Диск не попадает. Клавиши узнаются по физической кнопке (KeyboardEvent.code),
 // поэтому работают при любой раскладке: «N» — это та же кнопка, что «Т».
+//
+// 0.16 — второй перенос из license-store (lib/ui/preferences.ts, hooks/use-list-hotkeys.ts): на действие можно
+// повесить сколько угодно сочетаний (одно сочетание — одно действие); клавиши списков с панелью справа
+// (S/W — следующая и предыдущая строка, D — открыть справа, A — закрыть, ui/listKeys.js) и пунктов дока
+// (Q/E — выше и ниже, Enter/Пробел — открыть пункт, components/Dock.js).
 
 import { getPrefs, setPrefs } from './prefs.js';
 import { tr, LANG } from '../core/i18n.js';
 
 export const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent || '');
 
-/** Действия: id, группа, подпись, сочетание по умолчанию (null — не назначено). */
+/**
+ * Действия: id, группа, подпись, сочетание по умолчанию (null — не назначено; список — несколько сочетаний).
+ * allow — сочетания, которые обычно заняты (RESERVED), но этому действию разрешены: Enter и Пробел открывают пункт
+ * дока, только когда на нём фокус, — в остальное время нажатие остаётся браузеру.
+ */
 export const SHORTCUTS = [
   { id: 'newTask', group: tr('Задачи'), label: tr('Новая задача'), hint: tr('В Crimson Harvest — записать еду'), def: 'KeyN' },
   { id: 'search', group: tr('Задачи'), label: tr('Поиск задач'), hint: tr('На экранах с поиском — встать в строку поиска'), def: 'Slash' },
@@ -41,17 +50,35 @@ export const SHORTCUTS = [
   { id: 'goMeals', group: 'Crimson Harvest', label: tr('Рационы'), def: 'Shift+Digit5' },
   { id: 'scanBarcode', group: 'Crimson Harvest', label: tr('Сканировать штрихкод и записать'), def: 'KeyB' },
 
-  { id: 'switchApp', group: tr('Панель и окна'), label: tr('Перейти в другое приложение'), hint: 'Chronicle ⇄ Crimson Harvest', def: 'Backslash' },
-  { id: 'dockExpand', group: tr('Панель и окна'), label: tr('Свернуть или развернуть панель'), def: 'BracketLeft' },
-  { id: 'dockHide', group: tr('Панель и окна'), label: tr('Спрятать или показать панель'), def: 'BracketRight' },
-  { id: 'help', group: tr('Панель и окна'), label: tr('Список горячих клавиш'), def: 'Shift+Slash' },
+  // 0.16: списки, у которых запись открывается справа (задачи, записи и заметки дневника, продукты), — как в license-store
+  { id: 'listDown', group: tr('Списки с панелью справа'), label: tr('Следующая строка'), hint: tr('Если панель справа открыта — она переключается на эту строку'), def: 'KeyS' },
+  { id: 'listUp', group: tr('Списки с панелью справа'), label: tr('Предыдущая строка'), hint: tr('Если панель справа открыта — она переключается на эту строку'), def: 'KeyW' },
+  { id: 'listOpen', group: tr('Списки с панелью справа'), label: tr('Открыть в панели'), hint: tr('Открывает справа строку под курсором'), def: 'KeyD' },
+  { id: 'listClose', group: tr('Списки с панелью справа'), label: tr('Закрыть панель'), hint: tr('Esc тоже закрывает'), def: 'KeyA' },
+
+  { id: 'menuUp', group: tr('Панель навигации'), label: tr('Меню: пункт выше'), hint: tr('Ходит по пунктам панели, включая раскрытую ветку'), def: 'KeyQ' },
+  { id: 'menuDown', group: tr('Панель навигации'), label: tr('Меню: пункт ниже'), hint: tr('Ходит по пунктам панели, включая раскрытую ветку'), def: 'KeyE' },
+  { id: 'menuActivate', group: tr('Панель навигации'), label: tr('Меню: открыть пункт'),
+    hint: tr('Открывает экран, у ветки — раскрывает или сворачивает её. Работает, когда выбран пункт панели'),
+    def: ['Enter', 'Space'], allow: ['Enter', 'NumpadEnter', 'Space'] },
+  { id: 'dockExpand', group: tr('Панель навигации'), label: tr('Свернуть или развернуть панель'), def: 'BracketLeft' },
+  { id: 'dockHide', group: tr('Панель навигации'), label: tr('Спрятать или показать панель'), def: 'BracketRight' },
+
+  { id: 'switchApp', group: tr('Приложения и справка'), label: tr('Перейти в другое приложение'), hint: 'Chronicle ⇄ Crimson Harvest', def: 'Backslash' },
+  { id: 'help', group: tr('Приложения и справка'), label: tr('Список горячих клавиш'), def: 'Shift+Slash' },
 ];
 
 export const SHORTCUT_GROUPS = [...new Set(SHORTCUTS.map((s) => s.group))];
 const BY_ID = new Map(SHORTCUTS.map((s) => [s.id, s]));
 
+/** Сочетания действия по умолчанию — всегда списком. */
+export const defaultsOf = (id) => {
+  const def = BY_ID.get(id)?.def;
+  return def == null ? [] : (Array.isArray(def) ? def : [def]).map(normalizeCombo);
+};
+
 /** Esc — не переназначается: закрывает верхнее окно, шторку дока, карточку задачи. */
-export const FIXED = [{ combo: 'Escape', label: tr('Закрыть окно, шторку панели или карточку задачи') }];
+export const FIXED = [{ combo: 'Escape', label: tr('Закрыть окно, шторку панели, карточку или панель справа') }];
 
 /**
  * Сочетания, которые браузер или система не отдают странице (или без которых неудобно жить):
@@ -136,19 +163,28 @@ export function ruLetter(combo) {
 /** Включены ли клавиши вообще. */
 export const shortcutsOn = () => getPrefs().shortcutsOn !== false;
 
-/** Текущее сочетание действия (с учётом переназначений) или null. */
-export function bindingOf(id, prefs = getPrefs()) {
+const hasOwn = (o, k) => Object.prototype.hasOwnProperty.call(o, k);
+
+/**
+ * Все сочетания действия (с учётом переназначений) — списком, возможно пустым. В настройках хранится
+ * '' (отключено), строка (одно сочетание, как до 0.16) или список.
+ */
+export function bindingsOf(id, prefs = getPrefs()) {
   const own = prefs.shortcuts || {};
-  if (Object.prototype.hasOwnProperty.call(own, id)) return own[id] ? normalizeCombo(own[id]) : null;
-  return BY_ID.get(id)?.def ?? null;
+  if (!hasOwn(own, id)) return defaultsOf(id);
+  const v = own[id];
+  const list = Array.isArray(v) ? v : v ? [v] : [];
+  return [...new Set(list.filter((c) => typeof c === 'string' && c).map(normalizeCombo))];
 }
+
+/** Первое сочетание действия (для подсказок) или null. */
+export const bindingOf = (id, prefs = getPrefs()) => bindingsOf(id, prefs)[0] ?? null;
 
 /** Все назначения: Map сочетание → id. */
 export function bindingMap(prefs = getPrefs()) {
   const m = new Map();
   for (const s of SHORTCUTS) {
-    const c = bindingOf(s.id, prefs);
-    if (c && !m.has(c)) m.set(c, s.id);
+    for (const c of bindingsOf(s.id, prefs)) if (!m.has(c)) m.set(c, s.id);
   }
   return m;
 }
@@ -156,23 +192,57 @@ export function bindingMap(prefs = getPrefs()) {
 /** Каким действием уже занято сочетание (кроме exceptId). */
 export function conflictOf(combo, exceptId = null, prefs = getPrefs()) {
   const c = normalizeCombo(combo);
-  for (const s of SHORTCUTS) if (s.id !== exceptId && bindingOf(s.id, prefs) === c) return s;
+  for (const s of SHORTCUTS) if (s.id !== exceptId && bindingsOf(s.id, prefs).includes(c)) return s;
   return null;
 }
 
-export const isReserved = (combo) => RESERVED.has(normalizeCombo(combo));
+/** Занято браузером или системой — кроме сочетаний, разрешённых действию id (Enter и Пробел у «Меню: открыть пункт»). */
+export const isReserved = (combo, id = null) => {
+  const c = normalizeCombo(combo);
+  return RESERVED.has(c) && !(BY_ID.get(id)?.allow || []).includes(c);
+};
 
-/** Изменения настроек для назначения: combo=null — отключить; занятое другим действием — снимается там. */
+const sameList = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
+
+/** Записать сочетания действия: совпали с умолчанием — переназначение не нужно, ни одного — '' (отключено). */
+function put(own, id, list) {
+  if (sameList(list, defaultsOf(id))) delete own[id];
+  else own[id] = list.length === 0 ? '' : list.length === 1 ? list[0] : list;
+}
+
+/** Одно сочетание — одно действие: у остальных действий оно снимается. */
+function takeFrom(own, combo, id, prefs) {
+  for (const s of SHORTCUTS) {
+    if (s.id === id) continue;
+    const list = bindingsOf(s.id, { ...prefs, shortcuts: own });
+    if (list.includes(combo)) put(own, s.id, list.filter((c) => c !== combo));
+  }
+}
+
+/** Изменения настроек: все сочетания действия заменить одним; combo=null — отключить. Занятое другим — снимается там. */
 export function assignPatch(id, combo, prefs = getPrefs()) {
   const own = { ...(prefs.shortcuts || {}) };
-  const c = combo ? normalizeCombo(combo) : '';
-  if (c) {
-    const other = conflictOf(c, id, prefs);
-    if (other) own[other.id] = '';
-  }
-  own[id] = c;
-  // совпало с умолчанием — переназначение не нужно
-  for (const s of SHORTCUTS) if (Object.prototype.hasOwnProperty.call(own, s.id) && (own[s.id] || null) === s.def) delete own[s.id];
+  const c = combo ? normalizeCombo(combo) : null;
+  if (c) takeFrom(own, c, id, prefs);
+  put(own, id, c ? [c] : []);
+  return { shortcuts: own };
+}
+
+/** Изменения настроек: добавить действию ещё одно сочетание (0.16). Занятое другим — переходит к этому. */
+export function addPatch(id, combo, prefs = getPrefs()) {
+  const own = { ...(prefs.shortcuts || {}) };
+  const c = normalizeCombo(combo);
+  takeFrom(own, c, id, prefs);
+  const cur = bindingsOf(id, { ...prefs, shortcuts: own });
+  if (!cur.includes(c)) put(own, id, [...cur, c]);
+  return { shortcuts: own };
+}
+
+/** Изменения настроек: убрать у действия одно сочетание (0.16). */
+export function removePatch(id, combo, prefs = getPrefs()) {
+  const own = { ...(prefs.shortcuts || {}) };
+  const c = normalizeCombo(combo);
+  put(own, id, bindingsOf(id, prefs).filter((x) => x !== c));
   return { shortcuts: own };
 }
 
@@ -180,13 +250,15 @@ export function assign(id, combo) {
   setPrefs(assignPatch(id, combo));
 }
 
+export const addShortcut = (id, combo) => setPrefs(addPatch(id, combo));
+export const removeShortcut = (id, combo) => setPrefs(removePatch(id, combo));
+
 export const resetShortcut = (id) => {
-  const own = { ...(getPrefs().shortcuts || {}) };
+  const prefs = getPrefs();
+  const own = { ...(prefs.shortcuts || {}) };
   delete own[id];
   // если умолчание занято другим действием — то действие теряет сочетание
-  const def = BY_ID.get(id)?.def;
-  const other = def ? conflictOf(def, id) : null;
-  if (other) own[other.id] = '';
+  for (const c of defaultsOf(id)) takeFrom(own, c, id, prefs);
   setPrefs({ shortcuts: own });
 };
 

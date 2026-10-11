@@ -258,7 +258,7 @@ function MedsTab() {
         <h2 class="block-title">Журнал приёмов${sel ? ' · ' + sel.name : ''}</h2>
         ${byDay.length ? byDay.map((d) => html`<div class="med-log-day" key=${d.date}>
           <p class="med-log-date">${humanDate(d.date, today)}${d.date !== today && d.date !== addDays(today, -1) ? '' : ' · ' + longDate(d.date)}</p>
-          ${d.items.map((l, i) => html`<button type="button" class="med-log-row" key=${l.entryId + i} onClick=${() => openSheet('entry', { id: l.entryId })}>
+          ${d.items.map((l, i) => html`<button type="button" class="med-log-row" key=${l.entryId + i} data-row=${'entry:' + l.entryId} onClick=${() => openSheet('entry', { id: l.entryId })}>
             <span class="er-time">${l.time || '—'}</span>
             <span class="er-main"><span class="er-name">${medIcon(l.key)} ${l.name} · ${amountLabel(l)}</span>
               ${l.foods.length ? html`<small class="muted">вместе с: ${l.foods.join(', ')}</small>` : null}
@@ -344,7 +344,8 @@ function MeasuresTab() {
         <h2 class="block-title">Журнал · ${sel.name}${wl}</h2>
         ${log.map((r, i) => {
           const s = statusOf(r.values);
-          return html`<button type="button" class="med-log-row" key=${i} disabled=${!r.entryId} onClick=${() => r.entryId && openSheet('entry', { id: r.entryId })}>
+          return html`<button type="button" class="med-log-row" key=${i} disabled=${!r.entryId} data-row=${r.entryId ? 'entry:' + r.entryId : null}
+            onClick=${() => r.entryId && openSheet('entry', { id: r.entryId })}>
             <span class="er-time">${humanDate(r.date, today)}${r.time ? ' ' + r.time : ''}</span>
             <span class="er-main"><span class="er-name">${r.values.map(fv).join('/')} ${unit}${s === 'low' || s === 'high' ? html` <span class="tone-danger">⚠ ${M.STATUS_LABEL[s]}</span>` : null}</span>
               ${r.foods?.length || r.meds?.length ? html`<small class="muted">вместе с: ${[...(r.foods || []), ...(r.meds || []).map((x) => '💊 ' + x)].join(', ')}</small>` : null}

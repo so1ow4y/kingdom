@@ -2,6 +2,9 @@
 // С 0.10 — как AppShell license-store: на телефоне развёрнутый док — шторка поверх страницы с затемнением
 // (Esc и переход закрывают её), у разделов из нескольких экранов — вкладки сверху, горячие клавиши — ui/keys.js.
 // С 0.11 — Crimson Harvest: два приложения, Chronicle (задачи) и Feast (калории); открытое определяется экраном.
+// С 0.16 — панель справа как SidePanel license-store (components/SidePanel.js): с 900 px карточка задачи и
+// продукта, листы записи и рациона открываются панелью поверх списка или, если так выбрано, ужимают страницу
+// (от 1200 px); ширину можно тянуть мышью. По строкам списков ходят клавиши (ui/listKeys.js), по доку — тоже.
 
 import { html, useEffect, useRef, useMemo, useState } from './html.js';
 import { Icon } from './icons.js';
@@ -22,7 +25,8 @@ import { AnalyticsScreen } from './screens/Analytics.js';
 import { FeastTrashScreen } from './screens/FeastTrash.js';
 import { ShopScreen } from './screens/Shop.js';
 import { StartScreen, RedirectingScreen } from './components/Sync.js';
-import { Dock } from './components/Dock.js';
+import { Dock, dockKeys } from './components/Dock.js';
+import { SidePanel, closeTopPanel } from './components/SidePanel.js';
 import { TooltipLayer, MenuLayer, closeMenu, isMenuOpen } from './components/Popup.js';
 import { SectionTabs } from './components/SectionTabs.js';
 import { AchievementToast } from './components/Decorations.js';
@@ -39,6 +43,7 @@ import { openAddFood, currentDiaryDate } from './components/AddFood.js';
 import { APPS, appOfRoute, followRoute, switchApp, rememberRoute, SUITE_NAME } from './apps.js';
 import { dockPosition, getPrefs, setPrefs, activeApp } from './prefs.js';
 import { actionFor } from './keys.js';
+import { moveCursor, openCursor, closeOpened, syncCursor } from './listKeys.js';
 import { sectionOf } from './nav.js';
 import { clearMissed } from './notifier.js';
 import { pull, push } from '../sync/syncEngine.js';
@@ -191,16 +196,16 @@ export function App() {
   useStore();
   const route = useRoute();
   const desktop = useMedia('(min-width: 900px)');
-  const wide = useMedia('(min-width: 1200px)');
   const lastBase = useRef({ name: 'today', param: null, query: {}, path: '/today' });
   const isCard = route.name === 'task' || route.name === 'food';
   if (!isCard && route.name !== 'quick') lastBase.current = route;
   setBasePath(lastBase.current.path + (Object.keys(lastBase.current.query || {}).length
     ? '?' + new URLSearchParams(lastBase.current.query) : ''));
 
-  const panel = wide && isCard;
-  // 0.14.1: лист записи или рациона на широком экране — панелью справа (дневник остаётся рядом, как у задач)
-  const sheetSide = wide && !panel && PANEL_SHEETS.includes(store.ui.sheet?.type);
+  // 0.16: панель справа — на компьютере (было: от 1200 px); сдвигает ли она страницу — настройка panelPush
+  const panel = desktop && isCard;
+  // 0.14.1: лист записи или рациона на компьютере — панелью справа (дневник остаётся рядом, как у задач)
+  const sheetSide = desktop && !panel && PANEL_SHEETS.includes(store.ui.sheet?.type);
   const base = panel ? lastBase.current : route;
   // Открытое приложение следует за экраном (общие экраны — настройки, журнал — остаются в текущем)
   followRoute(appOfRoute(route.name === 'food' ? 'food' : base.name));
@@ -318,6 +323,14 @@ export function App() {
       dockExpand: toggleDock,
       dockHide: toggleHidden,
       help: () => openSheet('shortcuts'),
+      // 0.16: строки списков с панелью справа и пункты дока (как в license-store)
+      listDown: () => moveCursor(1),
+      listUp: () => moveCursor(-1),
+      listOpen: () => openCursor(),
+      listClose: () => closeOpened() || closeTopPanel(),
+      menuUp: () => dockKeys.move(-1),
+      menuDown: () => dockKeys.move(1),
+      menuActivate: () => dockKeys.activate(),
     };
     const fn = table[id];
     return !!fn && fn() !== false;
@@ -332,17 +345,29 @@ export function App() {
         else if (store.ui.quickAdd) closeQuickAdd();
         else if (overlayOpen) setMobileOpen(false);
         else if (currentTaskId() || currentFoodId()) closeTask(); // отложенный ввод сохранится при размонтировании карточки
-        else return;
+        else if (!closeTopPanel()) return; // предпросмотр панели в настройках
         e.preventDefault();
         return;
       }
-      const overlay = !!(store.ui.dialog || store.ui.sheet || store.ui.quickAdd || isMenuOpen());
+      // Лист записи или рациона панелью справа — не окно поверх: клавиши списков и остальные работают (0.16).
+      const overlay = !!(store.ui.dialog || (store.ui.sheet && !sheetSide) || store.ui.quickAdd || isMenuOpen());
       const id = actionFor(e, { overlay });
       if (id && runShortcut(id)) e.preventDefault();
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   });
+
+  // Курсор клавиш списков: после каждой перерисовки — подсветка, открытая мышью строка, сброс на другом экране.
+  const screen = base.name + ':' + (base.param || '');
+  useEffect(() => syncCursor(screen));
+
+  // Лист панелью справа принадлежит экрану (как панель license-store): ушли на другой экран — закрыть.
+  const prevScreen = useRef(screen);
+  useEffect(() => {
+    if (prevScreen.current !== screen && sheetSide) closeSheet();
+    prevScreen.current = screen;
+  }, [screen]);
 
   // Сохранить отложенный ввод, когда вкладку сворачивают или закрывают.
   useEffect(() => {
@@ -366,14 +391,16 @@ export function App() {
   const wideContent = ['tasks', 'archive', 'trash', 'settings', 'foods'].includes(base.name);
 
   return html`
-    <div class=${'app' + (panel || sheetSide ? ' with-panel' : '') + (desktop ? ' desktop' : ' mobile') + ' dock-' + position
+    <div class=${'app' + (panel || sheetSide ? ' with-panel' : '') + (prefs.panelPush !== false ? ' panel-push' : '')
+      + (desktop ? ' desktop' : ' mobile') + ' dock-' + position
       + (base.name === 'village' && villageOn() ? ' village-mode' : '')
       + (villageOn() && (base.name === 'village' || getPrefs().villageBackdrop !== false) ? ' village-bg-on' : '')}>
       <${VillageHost} route=${base}/><${AchievementToast}/><${SkillToast}/>
       <${Dock} route=${base} counts=${counts} onAdd=${add} phone=${phone} position=${position} expanded=${expanded}
         hidden=${!!prefs.hidden} autoHide=${autoHide} overlay=${overlayOpen}
         onToggle=${toggleDock} onToggleHidden=${toggleHidden} onNavigate=${() => phone && setMobileOpen(false)}
-        app=${app} onSwitch=${onSwitch}/>
+        app=${app} onSwitch=${onSwitch} subMode=${prefs.dockSubMode} grow=${prefs.dockGrow} sizeMode=${prefs.dockSizeMode}
+        size=${prefs.dockSize} thickness=${prefs.dockWidthMode === 'fixed' ? prefs.dockWidth : null} pagePush=${prefs.dockPush}/>
       ${overlayOpen ? html`<div class="dock-shade" aria-hidden="true" onClick=${() => setMobileOpen(false)}></div>` : null}
       <div class="main-col">
         ${base.name !== 'task' ? html`<${TopBar} route=${base}/>` : null}
@@ -385,11 +412,12 @@ export function App() {
         </main>
       </div>
       ${panel ? html`
-        <aside class="task-panel">
+        <${SidePanel} key="card" className="task-panel" label=${route.name === 'food' ? tr('Продукт') : tr('Задача')} onClose=${closeTask}>
           ${route.name === 'food' ? html`<${FoodCard} key=${route.param} id=${route.param} panel onClose=${closeTask}/>`
             : html`<${TaskScreen} key=${route.param} taskId=${route.param} panel onClose=${closeTask}/>`}
-        </aside>` : null}
-      ${sheetSide ? html`<aside class="task-panel sheet-side"><${SheetPanelCtx.Provider} value=${true}><${SheetHost} panel side/><//></aside>` : null}
+        <//>` : null}
+      ${sheetSide ? html`<${SidePanel} key="sheet" className="task-panel sheet-side" label=${tr('Запись')} onClose=${closeSheet}>
+        <${SheetPanelCtx.Provider} value=${true}><${SheetHost} panel side/><//><//>` : null}
       <${QuickAddHost}/>
       <${SheetHost} side=${sheetSide}/>
       <${StartScreen}/>

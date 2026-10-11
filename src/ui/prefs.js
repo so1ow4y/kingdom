@@ -5,6 +5,10 @@
 // положение и вид дока, ветки, цветовая схема, цвет квадрата с буквой (APP_SCOPED). Значения Chronicle лежат
 // на верхнем уровне, как раньше (старые настройки не теряются), значения Feast — в apps.feast. Остальное
 // (спрятан ли док, деревня, клавиши) — общее. getPrefs() отдаёт уже сведённый вид для открытого приложения.
+//
+// 0.16 — второй перенос из license-store (lib/ui/preferences.ts): как раскрываются подпункты веток, куда растёт
+// док, его длина и ширина, сдвигает ли он страницу (у каждого приложения свои), и панель справа — сдвигает ли
+// страницу, тянется ли мышью, ширина (общие). Значения из хранилища проверяются: там может лежать что угодно.
 
 import { notify } from '../store/appState.js';
 import { tr } from '../core/i18n.js';
@@ -12,19 +16,61 @@ import { tr } from '../core/i18n.js';
 const KEY = 'lifetasks.ui';
 export const DOCK_POSITIONS = ['left', 'bottom', 'right', 'top'];
 export const APP_IDS = ['chronicle', 'feast'];
+
+/**
+ * Как раскрываются пункты ветки в свёрнутом доке: side — отдельной колонкой квадратиков рядом с доком, вниз
+ * от значка ветки; inline — прямо внутри дока под значком, как раскрывающаяся панель (удобно на маленьком экране).
+ */
+export const DOCK_SUB_MODES = ['side', 'inline'];
+/**
+ * Куда растёт док, когда внутри раскрывается ветка: down — только вниз (у горизонтального — вправо), верх стоит
+ * на месте и пункт под мышью не уезжает; up — только вверх (влево); both — в обе стороны от центра.
+ * Не влезает — док прокручивается внутри, а не растёт дальше.
+ */
+export const DOCK_GROW = ['down', 'up', 'both'];
+/** Длина дока вдоль края и ширина поперёк: по содержимому или своя (лишнее прокручивается). */
+export const DOCK_SIZE_MODES = ['auto', 'fixed'];
+export const DOCK_SIZE_MIN = 200;
+export const DOCK_SIZE_MAX = 1400;
+export const DOCK_WIDTH_MIN = 48;
+export const DOCK_WIDTH_MAX = 400;
+/** Сдвигает ли док страницу: none — лежит поверх; dock — страница отступает на док; all — и на колонку подпунктов. */
+export const DOCK_PUSH = ['none', 'dock', 'all'];
+/** Ширина панели справа (карточка задачи, продукта, записи): не уже PANEL_MIN и не шире 85 % окна. */
+export const PANEL_MIN = 380;
+export const PANEL_MAX = 1400;
+
 /** Настройки, которые у каждого приложения свои. */
-export const APP_SCOPED = ['dock', 'expanded', 'autoHide', 'dockOpen', 'scheme', 'letter'];
+export const APP_SCOPED = ['dock', 'expanded', 'autoHide', 'scheme', 'letter',
+  'dockSubMode', 'dockGrow', 'dockSizeMode', 'dockSize', 'dockWidthMode', 'dockWidth', 'dockPush'];
+
+/** Вид и поведение дока по умолчанию (общие для обоих приложений; «Сбросить всё» возвращает их). */
+const DOCK_DEFAULTS = {
+  dock: null, // null — по устройству: телефон снизу, компьютер слева
+  expanded: true, // развёрнутый вид (с подписями)
+  autoHide: false, // уезжает за край и выезжает у края
+  dockSubMode: 'side', // 0.16: подпункты веток — колонкой сбоку или внутри дока
+  dockGrow: 'down', // 0.16: куда растёт док при раскрытой внутри ветке
+  dockSizeMode: 'auto', // 0.16: длина — по содержимому или своя (dockSize)
+  dockSize: 560,
+  dockWidthMode: 'auto', // 0.16: ширина — по содержимому или своя (dockWidth)
+  dockWidth: 64,
+  // 0.16: в license-store по умолчанию «не сдвигать»; здесь — «под панель», как было до 0.16: верхняя полоса
+  // и низ страницы не прячутся под доком
+  dockPush: 'dock',
+};
+
+/** Панель справа по умолчанию: как было до 0.16 — страница ужимается, 420 px; ширину можно тянуть. */
+const PANEL_DEFAULTS = { panelPush: true, panelResizable: true, panelWidth: 420 };
 
 const DEFAULTS = {
   activeApp: 'chronicle', // 0.11: открытое приложение (последнее, в котором был человек)
   apps: {}, // 0.11: { feast: { dock, expanded, … } } — оформление второго приложения
-  dock: null, // null — по устройству: телефон снизу, компьютер слева
-  expanded: true, // развёрнутый вид (с подписями)
-  autoHide: false, // уезжает за край и выезжает у края
+  ...DOCK_DEFAULTS,
   hidden: false, // спрятан целиком: у края только квадрат с буквой (общий для обоих приложений — им и переключаются)
-  dockOpen: {}, // 0.10: какие ветки дока раскрыты в развёрнутом боковом виде ({ lists: true, … }); нет ключа — раскрыта, если активна
+  ...PANEL_DEFAULTS,
   shortcutsOn: true, // 0.10: горячие клавиши (ui/keys.js)
-  shortcuts: {}, // 0.10: переназначения { действие: 'Ctrl+KeyS' | '' (отключено) }; нет ключа — по умолчанию
+  shortcuts: {}, // 0.10: переназначения { действие: 'Ctrl+KeyS' | ['KeyS', 'ArrowDown'] (0.16) | '' (отключено) }; нет ключа — по умолчанию
   // деревня (0.7): полоса на фоне, масштаб, смена дня и ночи, гости у экрана, выключенный свет, строгий фокус
   villageBackdrop: true,
   villageZoom: null, // 0.7.2: приближение (CSS-пикселей на пиксель деревни); null — «Авто»: чем больше деревня, тем дальше
@@ -41,12 +87,37 @@ const DEFAULTS = {
 /** Оформление Feast по умолчанию — багровое, в духе Crimson Harvest. */
 const APP_DEFAULTS = {
   chronicle: {},
-  feast: { dock: null, expanded: true, autoHide: false, dockOpen: {}, scheme: 'crimson', letter: null },
+  feast: { ...DOCK_DEFAULTS, scheme: 'crimson', letter: null },
 };
+
+const CHOICES = {
+  dock: [...DOCK_POSITIONS, null], dockSubMode: DOCK_SUB_MODES, dockGrow: DOCK_GROW, dockSizeMode: DOCK_SIZE_MODES,
+  dockWidthMode: DOCK_SIZE_MODES, dockPush: DOCK_PUSH,
+};
+const RANGES = { dockSize: [DOCK_SIZE_MIN, DOCK_SIZE_MAX], dockWidth: [DOCK_WIDTH_MIN, DOCK_WIDTH_MAX], panelWidth: [PANEL_MIN, PANEL_MAX] };
+const FLAGS = ['expanded', 'autoHide', 'hidden', 'panelPush', 'panelResizable'];
+
+/** Проверить значения: чужое — убрать (возьмётся умолчание), числа — в допустимые пределы. */
+export function cleanPrefs(p) {
+  const out = { ...p };
+  for (const [k, list] of Object.entries(CHOICES)) if (k in out && !list.includes(out[k])) delete out[k];
+  for (const [k, [lo, hi]] of Object.entries(RANGES)) {
+    if (!(k in out)) continue;
+    const v = out[k];
+    if (typeof v === 'number' && Number.isFinite(v)) out[k] = Math.round(Math.min(hi, Math.max(lo, v)));
+    else delete out[k];
+  }
+  for (const k of FLAGS) if (k in out && typeof out[k] !== 'boolean') delete out[k];
+  return out;
+}
 
 function load() {
   try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
+    const stored = cleanPrefs(JSON.parse(localStorage.getItem(KEY) || '{}'));
+    if (stored.apps && typeof stored.apps === 'object') {
+      stored.apps = Object.fromEntries(Object.entries(stored.apps).map(([k, v]) => [k, cleanPrefs(v && typeof v === 'object' ? v : {})]));
+    } else delete stored.apps;
+    return { ...DEFAULTS, ...stored };
   } catch {
     return { ...DEFAULTS };
   }
@@ -108,6 +179,14 @@ export function setActiveAppPref(app) {
 }
 
 export const dockPosition = (phone) => view.dock || (phone ? 'bottom' : 'left');
+
+/**
+ * «Сбросить всё» (resetUiPreferences license-store): вид и поведение дока приложения app, «спрятан целиком»
+ * и панель справа — как по умолчанию. Тема, цвета, деревня и клавиши не трогаются (у клавиш свой сброс).
+ */
+export function resetLook(app = raw.activeApp) {
+  setAppPrefs(app, { ...DOCK_DEFAULTS, hidden: false, ...PANEL_DEFAULTS });
+}
 
 /** Цветовые схемы: акцент для светлой и тёмной темы. indigo и crimson — бесплатно. */
 export const SCHEMES = {

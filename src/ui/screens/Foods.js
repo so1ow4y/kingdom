@@ -112,7 +112,7 @@ function MeasuresCatalog() {
         ${list.map((f) => {
           const s = statOf(f.id);
           const st2 = s?.last ? MS.readingStatus(s.last.values, f.ranges) : null;
-          return html`<tr key=${f.id} class="ex-row" onClick=${() => openFood(f.id)}>
+          return html`<tr key=${f.id} class="ex-row" onClick=${() => openFood(f.id)} data-row=${'food:' + f.id}>
             <td class="ex-title-cell"><button type="button" class="ex-title" onClick=${(e) => { e.stopPropagation(); openFood(f.id); }}>${f.icon || '📏'} ${f.name}</button>
               ${f.parts?.length ? html`<div class="ex-narrow-meta"><span>${f.parts.join(' / ')}</span></div>` : null}</td>
             <td>${f.unit ? tr(f.unit) : html`<span class="muted">—</span>`}</td>
@@ -240,7 +240,8 @@ function FoodsExplorer({ kind, query = {} }) {
                     const uses = res.ctx.usage.get(f.id)?.count || 0;
                     const med = F.isMed(f);
                     return html`
-                      <tr key=${f.id} class=${'ex-row' + (selection.has(f.id) ? ' selected' : '') + (current === f.id ? ' current' : '')} onClick=${() => toggleOpen(f.id)} aria-expanded=${isOpen}>
+                      <tr key=${f.id} class=${'ex-row' + (selection.has(f.id) ? ' selected' : '') + (current === f.id ? ' current' : '')} onClick=${() => toggleOpen(f.id)} aria-expanded=${isOpen}
+                        data-row=${'food:' + f.id}>
                         <td class="ex-w-check" onClick=${(e) => e.stopPropagation()}><input type="checkbox" class="ex-check" aria-label="Выбрать строку"
                           checked=${selection.has(f.id)} onChange=${() => selection.toggle(f.id)}/></td>
                         <td class="ex-w-chev"><${Icon} name=${isOpen ? 'chevronDown' : 'chevron'} size=${16}/></td>

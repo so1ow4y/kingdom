@@ -1,11 +1,14 @@
-// Горячие клавиши и массовые действия над задачами (обновление 0.10).
+// Горячие клавиши и массовые действия над задачами (обновление 0.10); 0.16 — несколько сочетаний на действие,
+// клавиши списков с панелью справа и дока, проверка настроек дока и панели.
 
 import { test, assert } from './runner.js';
 import { makeData } from './helpers.js';
 import {
-  SHORTCUTS, comboFromEvent, normalizeCombo, comboParts, keyLabel, ruLetter, bindingOf, bindingMap, conflictOf, assignPatch,
-  isReserved, actionFor, recorder,
+  SHORTCUTS, comboFromEvent, normalizeCombo, comboParts, keyLabel, ruLetter, bindingOf, bindingsOf, bindingMap, conflictOf, assignPatch,
+  addPatch, removePatch, defaultsOf, isReserved, actionFor, recorder,
 } from '../src/ui/keys.js';
+import { moveCursor, openCursor, syncCursor } from '../src/ui/listKeys.js';
+import { cleanPrefs, PANEL_MIN, DOCK_WIDTH_MAX } from '../src/ui/prefs.js';
 import { store } from '../src/store/appState.js';
 import * as A from '../src/store/actions.js';
 import { makeRule } from '../src/core/repeat.js';
@@ -29,9 +32,9 @@ test('клавиши: сочетание из события по физичес
 });
 
 test('клавиши: умолчания без повторов, переназначение снимает сочетание у другого действия', () => {
-  const defs = SHORTCUTS.map((s) => s.def).filter(Boolean);
-  assert.equal(new Set(defs).size, defs.length, 'у двух действий одно сочетание по умолчанию');
-  for (const d of defs) assert.ok(!isReserved(d), 'умолчание не должно быть занято браузером: ' + d);
+  const defs = SHORTCUTS.flatMap((s) => defaultsOf(s.id).map((d) => [s.id, d]));
+  assert.equal(new Set(defs.map(([, d]) => d)).size, defs.length, 'у двух действий одно сочетание по умолчанию');
+  for (const [id, d] of defs) assert.ok(!isReserved(d, id), 'умолчание не должно быть занято браузером: ' + d);
   const p0 = prefs();
   assert.equal(bindingOf('newTask', p0), 'KeyN');
   assert.equal(bindingOf('pull', p0), null);
@@ -62,6 +65,85 @@ test('клавиши: при вводе текста и в открытом ок
   recorder.active = true;
   assert.equal(actionFor(ev('KeyN'), { prefs: p }), null, 'пока записывают сочетание — молчим');
   recorder.active = false;
+});
+
+test('клавиши 0.16: списки и док по умолчанию как в license-store, несколько сочетаний на действие', () => {
+  const p0 = prefs();
+  assert.deepEqual(['listDown', 'listUp', 'listOpen', 'listClose', 'menuUp', 'menuDown'].map((id) => bindingOf(id, p0)),
+    ['KeyS', 'KeyW', 'KeyD', 'KeyA', 'KeyQ', 'KeyE']);
+  assert.deepEqual(bindingsOf('menuActivate', p0), ['Enter', 'Space']);
+  assert.equal(actionFor(ev('KeyS'), { prefs: p0 }), 'listDown');
+  assert.equal(actionFor(ev('Enter'), { prefs: p0 }), 'menuActivate');
+  assert.equal(actionFor(ev('KeyS', {}, { tagName: 'INPUT' }), { prefs: p0 }), null, 'при вводе текста S — это буква');
+  assert.ok(isReserved('Enter') && !isReserved('Enter', 'menuActivate'), 'Enter разрешён только «открыть пункт»');
+
+  // добавить второе сочетание: оба работают; занятое другим действием переходит сюда
+  const p1 = prefs(addPatch('listDown', 'ArrowDown', p0).shortcuts);
+  assert.deepEqual(bindingsOf('listDown', p1), ['KeyS', 'ArrowDown']);
+  assert.equal(actionFor(ev('ArrowDown'), { prefs: p1 }), 'listDown');
+  const p2 = prefs(addPatch('listDown', 'KeyW', p1).shortcuts);
+  assert.deepEqual(bindingsOf('listDown', p2), ['KeyS', 'ArrowDown', 'KeyW']);
+  assert.deepEqual(bindingsOf('listUp', p2), [], 'у «Предыдущей строки» W снято');
+  assert.equal(p2.shortcuts.listUp, '');
+  // убрать одно — остальные на месте; вернулись к умолчанию — переназначение исчезает
+  const p3 = prefs(removePatch('listDown', 'ArrowDown', p2).shortcuts);
+  assert.deepEqual(bindingsOf('listDown', p3), ['KeyS', 'KeyW']);
+  const p4 = prefs(removePatch('listDown', 'KeyW', p3).shortcuts);
+  assert.ok(!('listDown' in p4.shortcuts), 'остались одни умолчания');
+  // «открыть пункт»: убрать Пробел — остаётся Enter строкой; старая запись строкой читается как раньше
+  const p5 = prefs(removePatch('menuActivate', 'Space', p0).shortcuts);
+  assert.equal(p5.shortcuts.menuActivate, 'Enter');
+  assert.deepEqual(bindingsOf('newTask', prefs({ newTask: 'Ctrl+KeyM' })), ['Ctrl+KeyM']);
+  assert.deepEqual(bindingsOf('newTask', prefs({ newTask: ['KeyM', 'KeyM', 7, ''] })), ['KeyM'], 'мусор в списке отбрасывается');
+});
+
+test('настройки 0.16: чужие значения дока и панели отбрасываются, числа — в пределах', () => {
+  const c = cleanPrefs({ dock: 'middle', dockSubMode: 'inline', dockGrow: 'sideways', dockPush: 'all', dockWidth: 9999, panelWidth: 10,
+    dockSize: 'big', panelPush: 'yes', expanded: false });
+  assert.ok(!('dock' in c) && !('dockGrow' in c) && !('dockSize' in c) && !('panelPush' in c));
+  assert.equal(c.dockSubMode, 'inline');
+  assert.equal(c.dockPush, 'all');
+  assert.equal(c.dockWidth, DOCK_WIDTH_MAX);
+  assert.equal(c.panelWidth, PANEL_MIN);
+  assert.equal(c.expanded, false);
+  assert.equal(cleanPrefs({ dock: null }).dock, null, 'null — «по устройству»');
+});
+
+test('клавиши списков: курсор ходит по видимым строкам основной области, по краям стоит, другой экран — сначала', () => {
+  const main = document.createElement('main');
+  main.id = 'main';
+  main.innerHTML = '<div data-row="task:a">a</div><div data-row="task:b" style="display:none">b</div>'
+    + '<div data-row="entry:c">c</div><div data-row="food:d">d</div>';
+  document.body.append(main);
+  const at = () => main.querySelector('[data-cursor]')?.dataset.row ?? null;
+  try {
+    syncCursor('test-1');
+    assert.equal(at(), null);
+    assert.ok(moveCursor(1));
+    assert.equal(at(), 'task:a', 'первое «вниз» — на первую строку');
+    moveCursor(1);
+    assert.equal(at(), 'entry:c', 'скрытая строка пропускается');
+    moveCursor(1);
+    moveCursor(1);
+    assert.equal(at(), 'food:d', 'дальше последней не уходит');
+    moveCursor(-1);
+    assert.equal(at(), 'entry:c');
+    // строку перерисовали заново — подсветка возвращается
+    const fresh = main.querySelector('[data-row="entry:c"]').cloneNode(true);
+    fresh.removeAttribute('data-cursor');
+    main.querySelector('[data-row="entry:c"]').replaceWith(fresh);
+    syncCursor('test-1');
+    assert.equal(at(), 'entry:c');
+    syncCursor('test-2');
+    assert.equal(at(), null, 'на другом экране курсор сброшен');
+    moveCursor(-1);
+    assert.equal(at(), 'food:d', 'первое «вверх» — на последнюю строку');
+    main.innerHTML = '';
+    assert.ok(!moveCursor(1) && !openCursor(), 'строк нет — нажатие не наше');
+  } finally {
+    syncCursor('test-done');
+    main.remove();
+  }
 });
 
 // ---------- Массовые действия ----------

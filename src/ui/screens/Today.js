@@ -109,7 +109,7 @@ export function TodayScreen({ query = {} }) {
 
       ${f.roots.doneToday.length || v.doneRepeats.length ? html`
         <${Section} title="Выполнено в этот день" count=${f.roots.doneToday.length + v.doneRepeats.length} collapsible defaultOpen=${false} storageKey=${'today.done.' + today}>
-          ${v.doneRepeats.length ? html`<ul class="done-repeats">${v.doneRepeats.map(({ task, key, doneAt }) => html`<li key=${task.id + key} class="task-row done done-repeat">
+          ${v.doneRepeats.length ? html`<ul class="done-repeats">${v.doneRepeats.map(({ task, key, doneAt }) => html`<li key=${task.id + key} class="task-row done done-repeat" data-row=${'task:' + task.id}>
             <button type="button" class="check checked" disabled=${readOnly} title=${tr('Вернуть — снова не выполнено')} aria-label=${tr('Вернуть «{title}»', { title: task.title })}
               onClick=${() => A.reopenRepeatOccurrence(task.id, key)}><${Icon} name="check" size=${16}/></button>
             <button type="button" class="task-main dr-main" onClick=${() => openTask(task.id)}>

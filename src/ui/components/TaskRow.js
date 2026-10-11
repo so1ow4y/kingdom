@@ -147,7 +147,7 @@ export function TaskRow({ task, showList = true, handle = null, quickActions = f
   if (depth) cls.push('child');
 
   return html`
-    <div class=${cls.join(' ')} onClick=${open} onContextMenu=${menu} role="button" tabIndex="0"
+    <div class=${cls.join(' ')} onClick=${open} onContextMenu=${menu} role="button" tabIndex="0" data-row=${'task:' + task.id}
       style=${{ '--depth': depth }}
       onKeyDown=${(e) => onRowKey(e, open, onKeyMove)}>
       ${onToggle ? html`<button class=${'tree-toggle' + (kids ? '' : ' empty')} onClick=${stop(onToggle)} disabled=${!kids}

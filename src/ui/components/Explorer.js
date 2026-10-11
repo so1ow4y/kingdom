@@ -327,7 +327,7 @@ export function TaskExplorer({ kind, initialQ = '' }) {
                   const st = statusOf(t);
                   return html`
                     <tr key=${t.id} class=${'ex-row' + (selection.has(t.id) ? ' selected' : '') + (activeTask === t.id ? ' current' : '')}
-                      onClick=${() => toggleOpen(t.id)} aria-expanded=${isOpen}>
+                      onClick=${() => toggleOpen(t.id)} aria-expanded=${isOpen} data-row=${'task:' + t.id}>
                       <td class="ex-w-check" onClick=${(e) => e.stopPropagation()}>
                         <input type="checkbox" class="ex-check" aria-label="Выбрать строку" checked=${selection.has(t.id)} onChange=${() => selection.toggle(t.id)}/>
                       </td>
