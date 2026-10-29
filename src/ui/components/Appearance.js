@@ -5,17 +5,24 @@
 // 0.16 — второй перенос settings.appearance.tsx license-store: подпункты веток (колонкой сбоку или внутри панели),
 // куда растёт панель, её длина и ширина, сдвигает ли она страницу; панель справа (ужимать страницу, тянуть
 // мышью, ширина с живым предпросмотром); «Сбросить всё». Всё применяется сразу.
+// 1.1: «Занимать всё пространство» (по устройству, как в pdd-trainer) и «Пункты панели» — у телефона и компьютера
+// свои: порядок (перетащить за ⋮⋮ или стрелками), какие видны; у ленты телефона — размер значков, сколько пунктов
+// видно сразу (остальные листаются) и подписи.
 
 import { html, useState, useEffect } from '../html.js';
 import { Icon } from '../icons.js';
 import { store, showSnackbar } from '../../store/appState.js';
 import * as G from '../../core/game.js';
+import * as S from '../../core/selectors.js';
 import {
   getAppPrefs, setAppPrefs, activeApp, resetLook, DOCK_POSITIONS, SCHEMES, FREE_SCHEMES, DOCK_SUB_MODES, DOCK_GROW, DOCK_SIZE_MODES,
-  DOCK_SIZE_MIN, DOCK_SIZE_MAX, DOCK_WIDTH_MIN, DOCK_WIDTH_MAX, DOCK_PUSH, PANEL_MIN, PANEL_MAX,
+  DOCK_SIZE_MIN, DOCK_SIZE_MAX, DOCK_WIDTH_MIN, DOCK_WIDTH_MAX, DOCK_PUSH, PANEL_MIN, PANEL_MAX, BAR_SIZES, BAR_COUNT_MIN, BAR_COUNT_MAX,
 } from '../prefs.js';
+import { buildMenu } from '../nav.js';
+import { dockLayout, layoutKeys, moveKey } from '../dockLayout.js';
+import { SortableList, DragHandle } from './Sortable.js';
 import { getTheme, setTheme } from '../theme.js';
-import { APPS, APP_IDS_ORDER } from '../apps.js';
+import { APPS, APP_IDS_ORDER, otherApp } from '../apps.js';
 import { AppLetter } from './Dock.js';
 import { SidePanel } from './SidePanel.js';
 import { Keys } from './Shortcuts.js';
@@ -42,6 +49,12 @@ const WIDTH_HINT = {
   auto: tr('По ширине значков. Раскрытая внутри ветка её не меняет.'),
   fixed: tr('Всегда выбранной ширины (у горизонтальной — высоты), значки по центру.'),
 };
+const FILL_LABEL = {
+  auto: [tr('По устройству'), tr('На телефоне — во всю ширину, на компьютере — плавающей плашкой.')],
+  on: [tr('Всё пространство'), tr('Панель во всю длину края, без отступа и скруглений — как нижняя панель приложения.')],
+  off: [tr('Плашкой'), tr('Плавающая плашка по центру края с отступом от него.')],
+};
+const BAR_SIZE_LABEL = { s: tr('Мелкие'), m: tr('Обычные'), l: tr('Крупные'), xl: tr('Очень крупные') };
 const PUSH_LABEL = {
   none: [tr('Не сдвигать'), tr('Панель лежит поверх страницы, страница не ужимается.')],
   dock: [tr('Под панель'), tr('Страница отодвигается на ширину панели.')],
@@ -112,8 +125,8 @@ function Check({ label, hint, checked, onChange, disabled = false }) {
     </label>`;
 }
 
-function DockPreview({ position }) {
-  return html`<span class="dock-preview" aria-hidden="true"><span class=${'dp-bar ' + position}></span></span>`;
+function DockPreview({ position, fill = false }) {
+  return html`<span class="dock-preview" aria-hidden="true"><span class=${'dp-bar ' + position + (fill ? ' fill' : '')}></span></span>`;
 }
 
 /** Мини-окно приложения в цветах темы: док с буквой и карточка с кнопкой акцента. */
@@ -149,6 +162,8 @@ export function AppearanceSection({ phone }) {
     rerender((n) => n + 1);
   };
   const pos = p.dock || (phone ? 'bottom' : 'left');
+  const fillKey = p.dockFill === null || p.dockFill === undefined ? 'auto' : p.dockFill ? 'on' : 'off';
+  const fillNow = fillKey === 'auto' ? phone : fillKey === 'on';
   const dark = theme === 'dark' || (theme === 'system' && matchMedia('(prefers-color-scheme: dark)').matches);
   const mode = dark ? 'dark' : 'light';
   const schemeOk = (key) => FREE_SCHEMES.includes(key) || G.cosmeticAvailable(store.data, 'scheme:' + key);
@@ -173,9 +188,14 @@ export function AppearanceSection({ phone }) {
         ${DOCK_POSITIONS.map((k) => html`
           <${Option} key=${k} selected=${pos === k} onSelect=${() => setPrefs({ dock: k })} label=${POS_LABEL[k]}
             hint=${(phone ? 'bottom' : 'left') === k ? tr('по умолчанию') : null}>
-            <${DockPreview} position=${k}/>
+            <${DockPreview} position=${k} fill=${fillNow}/>
           <//>`)}
       </div>
+      <${Field} label="Занимать всё пространство" hint=${FILL_LABEL[fillKey][1]}>
+        <${Choice} label="Занимать всё пространство" value=${fillKey}
+          onChange=${(v) => setPrefs({ dockFill: v === 'auto' ? null : v === 'on' })}
+          options=${Object.entries(FILL_LABEL).map(([k, [t]]) => [k, t])}/>
+      <//>
       <${Check} label="Развёрнутая" checked=${!!p.expanded} onChange=${(v) => setPrefs({ expanded: v })}
         hint=${phone ? tr('На компьютере — значки с подписями и названиями групп. На телефоне панель всегда свёрнута.') : tr('Значки с подписями и названиями групп; свёрнутая — только значки с подсказками.')}/>
       <${Check} label="Автоскрытие" checked=${!!p.autoHide} onChange=${(v) => setPrefs({ autoHide: v })}
@@ -216,6 +236,8 @@ export function AppearanceSection({ phone }) {
       ${p.dockWidthMode === 'fixed' ? html`<${Range} label="Ширина" value=${p.dockWidth} min=${DOCK_WIDTH_MIN} max=${DOCK_WIDTH_MAX} step=${2}
         onChange=${(v) => setPrefs({ dockWidth: v })}/>` : null}
     </section>
+
+    <${DockItemsSettings} app=${app} phone=${phone}/>
 
     <${SidePanelSettings} phone=${phone}/>
 
@@ -261,6 +283,74 @@ export function AppearanceSection({ phone }) {
             <//>`;
         })}
       </div>
+    </section>`;
+}
+
+/**
+ * Пункты панели (1.1): у телефона и компьютера свои — порядок (⋮⋮ или стрелки) и какие видны; у ленты телефона —
+ * размер значков, сколько пунктов видно сразу и подписи. «Свернуть панель» / «Ещё» всегда в конце.
+ */
+function DockItemsSettings({ app, phone }) {
+  const [target, setTarget] = useState(phone ? 'phone' : 'desktop');
+  const p = getAppPrefs(app);
+  const set = (patch) => setAppPrefs(app, patch);
+  const onPhone = target === 'phone';
+  const keys = layoutKeys(onPhone);
+  const list = dockLayout(buildMenu(S.activeCounts(store.data), app), p, { phone: onPhone, app });
+  const order = list.map((e) => e.key);
+  const off = list.filter((e) => !e.on).map((e) => e.key);
+  const move = (key, to) => set({ [keys.order]: moveKey(order, key, to) });
+  const toggle = (key, on) => set({ [keys.off]: on ? off.filter((x) => x !== key) : [...off, key] });
+  const custom = Array.isArray(p[keys.order]) || Array.isArray(p[keys.off]);
+  const other = otherApp(app);
+  const special = {
+    letter: [tr('Буква — спрятать панель'), html`<${AppLetter} size=${20} app=${app} other=${app !== activeApp()}/>`],
+    switch: [tr('Перейти в {p0}', { p0: APPS[other].name }), html`<${AppLetter} size=${20} app=${other} other/>`],
+    add: [app === 'feast' ? tr('Записать еду') : tr('Новая задача'), html`<${Icon} name="plus" size=${18}/>`],
+    sync: [tr('Синхронизация'), html`<${Icon} name="sync" size=${18}/>`],
+    push: [tr('Пуш'), html`<${Icon} name="upload" size=${18}/>`],
+    lang: [tr('Язык · Language'), html`<span class="dock-lang-badge">RU</span>`],
+    user: [tr('Аккаунт'), html`<${Icon} name="user" size=${18}/>`],
+  };
+  const titleOf = (e) => (special[e.key] ? special[e.key][0] : e.item.title);
+  const markOf = (e) => (special[e.key] ? special[e.key][1] : e.item.color ? html`<i class="dot" style=${{ background: e.item.color }}></i>`
+    : html`<${Icon} name=${e.item.icon || 'list'} size=${18}/>`);
+  const visibleCount = list.filter((e) => e.on).length;
+
+  return html`
+    <section class="set-section" id="dock-items">
+      <h2>Пункты панели${app !== activeApp() ? ` — ${APPS[app].name}` : ''}</h2>
+      <p class="muted small">Порядок и какие пункты видны — у телефона и компьютера свои. Перетащи пункт за ⋮⋮ или стрелками; галочка — виден ли он
+        в панели. На телефоне убранное остаётся в «Ещё»; на компьютере убранный пункт открывается горячей клавишей — или верни галочку здесь.</p>
+      <${Choice} label="Для какого устройства" value=${target} onChange=${setTarget}
+        options=${[['phone', tr('Телефон')], ['desktop', tr('Компьютер')]]}/>
+      ${onPhone ? html`
+        <${Field} label="Размер значков" hint="На ленте телефона: крупные значки — меньше промахов пальцем.">
+          <${Choice} label="Размер значков" value=${p.barSize || 'm'} onChange=${(v) => set({ barSize: v })}
+            options=${BAR_SIZES.map((k) => [k, BAR_SIZE_LABEL[k]])}/>
+        <//>
+        <${Field} label="Сколько пунктов видно сразу" hint=${tr('Остальные — листать ленту пальцем влево и вправо. Сейчас пунктов: {n}.', { n: visibleCount })}>
+          <${Choice} label="Сколько пунктов видно сразу" value=${p.barCount || 5} onChange=${(v) => set({ barCount: v })}
+            options=${Array.from({ length: BAR_COUNT_MAX - BAR_COUNT_MIN + 1 }, (_, i) => [BAR_COUNT_MIN + i, String(BAR_COUNT_MIN + i)])}/>
+        <//>
+        <${Check} label="Подписи под значками" checked=${p.barLabels !== false} onChange=${(v) => set({ barLabels: v })}
+          hint="Без подписей лента ниже, значки — те же."/>` : null}
+      <${SortableList} items=${list.map((e) => ({ ...e, id: e.key }))} className="dock-items-list"
+        onMove=${(id, to) => move(id, to)}
+        render=${(e, handle) => {
+          const i = order.indexOf(e.key);
+          return html`<div class=${'dil-row' + (e.on ? '' : ' off')}>
+            <${DragHandle} handle=${handle} label=${tr('Перетащить: {name}', { name: titleOf(e) })}/>
+            <label class="dil-main"><input type="checkbox" checked=${e.on} onChange=${(ev) => toggle(e.key, ev.target.checked)}/>
+              <span class="dil-mark">${markOf(e)}</span><span class="dil-title">${titleOf(e)}</span>
+              ${e.group !== 'top' && e.group !== 'bottom' ? html`<small class="muted">${e.group}</small>` : null}</label>
+            <button type="button" class="icon-btn small" disabled=${i === 0} aria-label=${tr('Выше: {name}', { name: titleOf(e) })} onClick=${() => move(e.key, i - 1)}><${Icon} name="up" size=${16}/></button>
+            <button type="button" class="icon-btn small" disabled=${i === order.length - 1} aria-label=${tr('Ниже: {name}', { name: titleOf(e) })} onClick=${() => move(e.key, i + 1)}><${Icon} name="down" size=${16}/></button>
+          </div>`;
+        }}/>
+      <p class="muted small">${onPhone ? tr('«Ещё» (все разделы) всегда справа на ленте.') : tr('«Свернуть панель» всегда в конце.')}</p>
+      ${custom ? html`<button type="button" class="btn small" onClick=${() => set({ [keys.order]: null, [keys.off]: null })}>
+        <${Icon} name="restore" size=${16}/> Порядок по умолчанию</button>` : null}
     </section>`;
 }
 

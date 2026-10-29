@@ -49,6 +49,7 @@ function MealDay({ meal, date }) {
     <h3 class="set-sub">${tr('Записать в рацион · {day}', { day: dayLabel(date) })}</h3>
     <div class="chip-row wrap meal-day-add">
       <button type="button" class="btn small primary" disabled=${ro} onClick=${() => add({})}><${Icon} name="plus" size=${14}/> ${tr('Продукт')}</button>
+      <button type="button" class="btn small" disabled=${ro} onClick=${() => add({ quick: true })}><${Icon} name="flame" size=${14}/> ${tr('Быстрая запись')}</button>
       <button type="button" class="btn small" disabled=${ro} onClick=${() => add({ kind: 'med' })}>💊 ${tr('Лекарство')}</button>
       <button type="button" class="btn small" disabled=${ro} onClick=${() => add({ kind: 'measure' })}>📏 ${tr('Замер')}</button>
       <button type="button" class="btn small" disabled=${ro} onClick=${() => add({ note: true })}>📝 ${tr('Заметка')}</button>

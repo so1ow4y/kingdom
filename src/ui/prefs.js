@@ -9,6 +9,11 @@
 // 0.16 — второй перенос из license-store (lib/ui/preferences.ts): как раскрываются подпункты веток, куда растёт
 // док, его длина и ширина, сдвигает ли он страницу (у каждого приложения свои), и панель справа — сдвигает ли
 // страницу, тянется ли мышью, ширина (общие). Значения из хранилища проверяются: там может лежать что угодно.
+//
+// 1.1 — из pdd-trainer: dockFill — занимать ли доку всё пространство вдоль края (во всю ширину или высоту, без
+// отступа и скруглений); null — по устройству: телефон — да, компьютер — нет. Лента телефона: размер значков
+// (barSize), сколько пунктов видно сразу (barCount — остальные листаются пальцем), подписи (barLabels). Свой порядок
+// и видимость пунктов (ui/dockLayout.js) — у телефона (barOrder/barOff) и компьютера (dockOrder/dockOff) свои.
 
 import { notify } from '../store/appState.js';
 import { tr } from '../core/i18n.js';
@@ -36,13 +41,20 @@ export const DOCK_WIDTH_MIN = 48;
 export const DOCK_WIDTH_MAX = 400;
 /** Сдвигает ли док страницу: none — лежит поверх; dock — страница отступает на док; all — и на колонку подпунктов. */
 export const DOCK_PUSH = ['none', 'dock', 'all'];
+/** Лента телефона (1.1): размер значков и сколько пунктов видно сразу. */
+export const BAR_SIZES = ['s', 'm', 'l', 'xl'];
+export const BAR_COUNT_MIN = 3;
+export const BAR_COUNT_MAX = 8;
 /** Ширина панели справа (карточка задачи, продукта, записи): не уже PANEL_MIN и не шире 85 % окна. */
 export const PANEL_MIN = 380;
 export const PANEL_MAX = 1400;
 
 /** Настройки, которые у каждого приложения свои. */
 export const APP_SCOPED = ['dock', 'expanded', 'autoHide', 'scheme', 'letter',
-  'dockSubMode', 'dockGrow', 'dockSizeMode', 'dockSize', 'dockWidthMode', 'dockWidth', 'dockPush'];
+  'dockSubMode', 'dockGrow', 'dockSizeMode', 'dockSize', 'dockWidthMode', 'dockWidth', 'dockPush',
+  'dockFill', 'dockOrder', 'dockOff', 'barOrder', 'barOff', 'barSize', 'barCount', 'barLabels'];
+/** Списки ключей раскладки дока (1.1). */
+const KEY_LISTS = ['dockOrder', 'dockOff', 'barOrder', 'barOff'];
 
 /** Вид и поведение дока по умолчанию (общие для обоих приложений; «Сбросить всё» возвращает их). */
 const DOCK_DEFAULTS = {
@@ -58,6 +70,14 @@ const DOCK_DEFAULTS = {
   // 0.16: в license-store по умолчанию «не сдвигать»; здесь — «под панель», как было до 0.16: верхняя полоса
   // и низ страницы не прячутся под доком
   dockPush: 'dock',
+  dockFill: null, // 1.1: null — по устройству: телефон — во всю ширину, компьютер — плашкой
+  dockOrder: null, // 1.1: свой порядок пунктов на компьютере (null — по умолчанию)
+  dockOff: null, // 1.1: выключенные пункты на компьютере
+  barOrder: null, // 1.1: свой порядок ленты телефона
+  barOff: null, // 1.1: выключенные пункты ленты телефона (null — по умолчанию: поиск, настройки, язык…)
+  barSize: 'm', // 1.1: размер значков ленты телефона
+  barCount: 5, // 1.1: сколько пунктов видно сразу, остальные — листать
+  barLabels: true, // 1.1: подписи под значками
 };
 
 /** Панель справа по умолчанию: как было до 0.16 — страница ужимается, 420 px; ширину можно тянуть. */
@@ -80,6 +100,10 @@ const DEFAULTS = {
   focusStrict: false,
   decorMotion: true,
   achievementNotifications: true,
+  // 1.1: автопуш на Диск (sync/autoPush.js) — после N минут без изменений, при открытии и уходе со страницы
+  autoPush: true,
+  autoPushMinutes: 5,
+  autoPushOnOpen: true,
   scheme: 'indigo', // цветовая схема (косметика из магазина, п. 2.6)
   letter: null, // цвет квадрата с буквой (косметика); null — цвет акцента
 };
@@ -92,10 +116,11 @@ const APP_DEFAULTS = {
 
 const CHOICES = {
   dock: [...DOCK_POSITIONS, null], dockSubMode: DOCK_SUB_MODES, dockGrow: DOCK_GROW, dockSizeMode: DOCK_SIZE_MODES,
-  dockWidthMode: DOCK_SIZE_MODES, dockPush: DOCK_PUSH,
+  dockWidthMode: DOCK_SIZE_MODES, dockPush: DOCK_PUSH, dockFill: [true, false, null], barSize: BAR_SIZES,
 };
-const RANGES = { dockSize: [DOCK_SIZE_MIN, DOCK_SIZE_MAX], dockWidth: [DOCK_WIDTH_MIN, DOCK_WIDTH_MAX], panelWidth: [PANEL_MIN, PANEL_MAX] };
-const FLAGS = ['expanded', 'autoHide', 'hidden', 'panelPush', 'panelResizable'];
+const RANGES = { dockSize: [DOCK_SIZE_MIN, DOCK_SIZE_MAX], dockWidth: [DOCK_WIDTH_MIN, DOCK_WIDTH_MAX], panelWidth: [PANEL_MIN, PANEL_MAX],
+  autoPushMinutes: [1, 120], barCount: [BAR_COUNT_MIN, BAR_COUNT_MAX] };
+const FLAGS = ['expanded', 'autoHide', 'hidden', 'panelPush', 'panelResizable', 'autoPush', 'autoPushOnOpen', 'barLabels'];
 
 /** Проверить значения: чужое — убрать (возьмётся умолчание), числа — в допустимые пределы. */
 export function cleanPrefs(p) {
@@ -108,6 +133,11 @@ export function cleanPrefs(p) {
     else delete out[k];
   }
   for (const k of FLAGS) if (k in out && typeof out[k] !== 'boolean') delete out[k];
+  for (const k of KEY_LISTS) {
+    if (!(k in out) || out[k] === null) continue;
+    if (Array.isArray(out[k])) out[k] = [...new Set(out[k].filter((x) => typeof x === 'string' && x.length <= 200))].slice(0, 100);
+    else delete out[k];
+  }
   return out;
 }
 
@@ -179,6 +209,8 @@ export function setActiveAppPref(app) {
 }
 
 export const dockPosition = (phone) => view.dock || (phone ? 'bottom' : 'left');
+/** 1.1: док во всё пространство вдоль края — по настройке, иначе по устройству (телефон — да). */
+export const dockFill = (phone) => (view.dockFill === null || view.dockFill === undefined ? phone : view.dockFill);
 
 /**
  * «Сбросить всё» (resetUiPreferences license-store): вид и поведение дока приложения app, «спрятан целиком»

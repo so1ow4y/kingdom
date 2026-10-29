@@ -32,7 +32,8 @@ function FeastGoalsPage() {
     <${EnergyCard} st=${st} ro=${ro} limitButton=${false}/>
     <${FeastGoalsSection} st=${st}/>`;
 }
-import { activeApp } from '../prefs.js';
+import { activeApp, getPrefs, setPrefs } from '../prefs.js';
+import { autoPushState, AUTO_PUSH_MIN, AUTO_PUSH_MAX } from '../../sync/autoPush.js';
 import { APPS, otherApp, switchApp } from '../apps.js';
 import { GameSettingsSection } from './Shop.js';
 import { VillageSettings } from './Village.js';
@@ -68,6 +69,48 @@ export function MoreScreen() {
         <${Link} to="/journal" className="menu-item"><span class="mi-icon"><${Icon} name="list"/></span><span class="mi-label">Журнал конфликтов и ошибок</span><//>
       </nav>
     </div>`;
+}
+
+/**
+ * Автопуш (1.1): включён ли, через сколько минут без изменений, при открытии и уходе со страницы; рядом — что сейчас
+ * (ждёт N минут, на паузе — идёт ввод, нечего пушить, нужен вход). Настройка этого устройства.
+ */
+function AutoPushSettings() {
+  const p = getPrefs();
+  const [, setTick] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setTick((n) => n + 1), 5000);
+    return () => clearInterval(t);
+  }, []);
+  const [draft, setDraft] = useState(null);
+  const st = autoPushState();
+  const left = Math.max(0, Math.ceil((st.at - Date.now()) / 60000));
+  const status = !st.on ? tr('выключен')
+    : !st.dirty ? tr('нечего пушить — всё уже на Диске')
+    : !tokenValid() ? tr('ждёт входа в Google')
+    : store.sync.offline ? tr('ждёт сети')
+    : st.editing ? tr('на паузе: идёт ввод — отсчёт начнётся, когда закончишь')
+    : left ? tr('через {n} мин без новых изменений', { n: left }) : tr('сейчас');
+  const commit = () => {
+    if (draft === null) return;
+    const n = Math.round(parseFloat(String(draft).replace(',', '.')));
+    if (Number.isFinite(n)) setPrefs({ autoPushMinutes: Math.max(AUTO_PUSH_MIN, Math.min(AUTO_PUSH_MAX, n)) });
+    setDraft(null);
+  };
+  return html`
+    <h3 class="set-sub">Автопуш</h3>
+    <label class="toggle-row"><input type="checkbox" checked=${p.autoPush !== false} onChange=${(e) => setPrefs({ autoPush: e.target.checked })}/>
+      <span>Пушить самому<small>${tr('Изменения уходят на Диск, когда {n} ничего не меняется.', { n: countLabel(st.minutes, ['минуту', 'минуты', 'минут']) })}
+        Пока открыта запись, новая задача или курсор в поле ввода, отсчёт не идёт — недоделанное не уедет. Настройка этого устройства.</small></span></label>
+    ${p.autoPush !== false ? html`
+      <${Row} label="Через сколько минут без изменений" hint=${tr('от {min} до {max}', { min: AUTO_PUSH_MIN, max: AUTO_PUSH_MAX })}>
+        <input class="num-input" inputmode="numeric" value=${draft ?? st.minutes} aria-label="Минут без изменений до автопуша"
+          onInput=${(e) => setDraft(e.target.value)} onBlur=${commit} onKeyDown=${(e) => e.key === 'Enter' && e.target.blur()}/>
+      <//>
+      <label class="toggle-row"><input type="checkbox" checked=${p.autoPushOnOpen !== false} onChange=${(e) => setPrefs({ autoPushOnOpen: e.target.checked })}/>
+        <span>И при открытии или обновлении страницы, и когда уходишь с неё<small>При открытии уходит то, что не успело в прошлый раз; при уходе
+          (другая вкладка, телефон заблокирован) — сразу, не дожидаясь минут.</small></span></label>
+      <${Row} label="Сейчас">${status}<//>` : null}`;
 }
 
 function Row({ label, hint, children }) {
@@ -144,6 +187,7 @@ function SyncSection() {
         <button class="btn" onClick=${() => pull()} disabled=${busy}><${Icon} name="download" size=${18}/> Обновить</button>
         <button class="btn" onClick=${() => navigate('/journal')}>Журнал конфликтов и ошибок</button>
       </div>
+      <${AutoPushSettings}/>
     </section>
     <section class="set-section">
       <h2>Устройства</h2>

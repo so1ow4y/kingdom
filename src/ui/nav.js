@@ -76,17 +76,10 @@ function feastMenu() {
   return [
     {
       title: tr('Питание'),
+      // 1.1: самое частое — выше: дневник, «Обо мне», продукты и лекарства; потом рационы и аналитика
       items: [
         { title: tr('Дневник'), icon: 'diary', to: '/diary', match: ['diary'], key: 'goDiary' },
-        // рационы — как «Списки» у задач: у каждого своя страница (её можно открыть в новой вкладке)
-        {
-          id: 'meals', title: tr('Рационы'), icon: 'lists',
-          items: [
-            { title: tr('Все рационы'), icon: 'lists', to: '/meals', match: ['meals'], key: 'goMeals' },
-            ...F.globalMeals(store.feast).filter((m) => !m.archived)
-              .map((m) => ({ title: F.mealName(m), emoji: m.icon, to: '/meal/' + m.id, match: ['meal', m.id] })),
-          ],
-        },
+        { title: tr('Обо мне'), icon: 'body', to: '/body', match: ['body'], key: 'goBody' },
         // 0.13: продукты, лекарства и замеры — ветка, как «Аналитика»
         {
           id: 'catalog', title: tr('Продукты и лекарства'), icon: 'food',
@@ -94,6 +87,15 @@ function feastMenu() {
             { title: tr('Продукты'), icon: 'food', to: '/foods', match: ['foods', null], key: 'goFoods' },
             { title: tr('Лекарства'), icon: 'pill', to: '/foods/meds', match: ['foods', 'meds'] },
             { title: tr('Замеры'), icon: 'gauge', to: '/foods/measures', match: ['foods', 'measures'] },
+          ],
+        },
+        // рационы — как «Списки» у задач: у каждого своя страница (её можно открыть в новой вкладке)
+        {
+          id: 'meals', title: tr('Рационы'), icon: 'lists',
+          items: [
+            { title: tr('Все рационы'), icon: 'lists', to: '/meals', match: ['meals'], key: 'goMeals' },
+            ...F.globalMeals(store.feast).filter((m) => !m.archived)
+              .map((m) => ({ title: F.mealName(m), emoji: m.icon, to: '/meal/' + m.id, match: ['meal', m.id] })),
           ],
         },
         // аналитика (0.12.5) — ветка, как «Рационы»: питание, лекарства, тело
@@ -106,7 +108,6 @@ function feastMenu() {
             { title: tr('Тело'), icon: 'body', to: '/nutrition/body', match: ['nutrition', 'body'] },
           ],
         },
-        { title: tr('Обо мне'), icon: 'body', to: '/body', match: ['body'], key: 'goBody' },
       ],
     },
     {

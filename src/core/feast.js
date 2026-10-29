@@ -683,6 +683,25 @@ export function moveItem(from, itemId, to, ctx, { meal = null, beforeId = null }
   return { from: nextFrom, to: nextTo, item };
 }
 
+/**
+ * Вся запись — в другую (1.1): продукты, лекарства и замеры (в своём порядке, одинаковые склеиваются, как при
+ * записи) и заметки; время, рацион и день — у to. beforeId — встать перед этим продуктом to (null — в конец).
+ * → новая to или null; from (она больше не нужна) удаляет вызывающий.
+ */
+export function mergeEntry(from, to, ctx, { beforeId = null } = {}) {
+  if (!from || !to || from.deletedAt || to.deletedAt || from.id === to.id) return null;
+  const items = entryItems(from);
+  const notes = entryNoteList(from);
+  if (!items.length && !notes.length) return null;
+  let next = items.length ? addItems(to, items.map((it) => ({ snapshot: it })), ctx) : upgradeEntry(to, ctx);
+  if (beforeId && items.length) {
+    const had = new Set(entryItems(to).map((x) => x.id));
+    for (const it of entryItems(next).filter((x) => !had.has(x.id))) next = reorderItem(next, it.id, beforeId, ctx);
+  }
+  for (const n of notes) next = addEntryNote(next, n.text, ctx);
+  return next;
+}
+
 // ---------- Порядок продуктов в записи (0.14.2) ----------
 
 /** Группа продукта записи для показа: замеры — сверху, еда — посередине, лекарства — снизу. */

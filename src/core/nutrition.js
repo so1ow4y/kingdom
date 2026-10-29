@@ -128,6 +128,22 @@ export function kcalCheck(n) {
   return { state: 'ok', kcal, auto };
 }
 
+/**
+ * Новое значение пищевой ценности из поля ввода. 1.1: хранится числом — строка «12,5» в поле показывалась нулём,
+ * хотя записывалась верно. 0.14: калории не указаны (или уже посчитаны по БЖУ) — пересчитываются сами при вводе
+ * белков, жиров и углеводов; свои калории (не равные посчитанным) не трогаются.
+ */
+export function withNutrient(nutrients, key, raw) {
+  const macrosOf = (n) => Object.fromEntries(MACROS.map((k) => [k, num(n[k])]));
+  const next = { ...nutrients, [key]: num(raw) };
+  const auto = !num(nutrients.kcal) || num(nutrients.kcal) === kcalFromMacros(macrosOf(nutrients));
+  if (MACROS.includes(key) && auto) next.kcal = kcalFromMacros(macrosOf(next));
+  return next;
+}
+
+/** Проверка калорий по БЖУ для набора значений (строки и числа). */
+export const checkOf = (n) => kcalCheck(Object.fromEntries(['kcal', 'fiber', ...MACROS].map((k) => [k, num(n[k])])));
+
 /** Доли калорий от белков, жиров и углеводов (0…1; сумма 1, если есть хоть что-то). */
 export function macroSplit(n) {
   const e = { protein: nv(n, 'protein') * 4, fat: nv(n, 'fat') * 9, carbs: nv(n, 'carbs') * 4 };

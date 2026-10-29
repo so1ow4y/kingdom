@@ -762,6 +762,36 @@ export async function moveEntryItem(fromId, itemId, to = {}) {
   return true;
 }
 
+/**
+ * Перенести запись целиком (1.1): в другую запись (to.entryId — всё содержимое становится её частью, сама запись
+ * удаляется) или в другой рацион того же дня (to.meal). С «Отменить».
+ */
+export async function moveEntry(fromId, to = {}) {
+  const from = D().entries.get(fromId);
+  if (!from || from.deletedAt) return false;
+  const c0 = ctx();
+  if (to.meal) {
+    if (to.meal === from.meal) return false;
+    const changes = [{ coll: 'entries', prev: from, next: touch(from, { meal: to.meal }, c0) }];
+    if (!(await commit(changes))) return false;
+    offerUndo(tr('Запись перенесена: {meal}', { meal: F.mealName(F.mealInfo(D(), to.meal)) }), changes);
+    return true;
+  }
+  const target = to.entryId ? D().entries.get(to.entryId) : null;
+  if (!target || target.deletedAt || target.id === fromId) return false;
+  const fromBase = F.upgradeEntry(from, c0);
+  const toBase = F.upgradeEntry(target, c0);
+  const next = F.mergeEntry(fromBase, toBase, c0, { beforeId: to.beforeId || null });
+  if (!next) return false;
+  const changes = [
+    { coll: 'entries', prev: from, base: fromBase, next: tombstone(fromBase, c0) },
+    { coll: 'entries', prev: target, base: toBase, next },
+  ];
+  if (!(await commit(changes))) return false;
+  offerUndo(tr('Запись «{name}» — в записи {time}', { name: F.entryTitle(from), time: target.time || F.entryTitle(target) }), changes);
+  return true;
+}
+
 /** Переставить продукт внутри записи (0.14.2): перед beforeId, null — в конец. */
 export async function reorderEntryItem(entryId, itemId, beforeId = null) {
   const c = changeEntry(entryId, (e, c0) => F.reorderItem(e, itemId, beforeId, c0));

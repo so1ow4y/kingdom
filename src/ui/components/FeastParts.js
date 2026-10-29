@@ -7,6 +7,7 @@ import { getPrefs } from '../prefs.js';
 import * as F from '../../core/feast.js';
 import {
   NUTRIENTS, NUTRIENT, NUTRIENT_GROUPS, MACROS, nv, fmt, dayGoals, remaining, signed, rdiPct, kcalFromMacros, macroSplit, kcalCheck, num,
+  withNutrient, checkOf,
 } from '../../core/nutrition.js';
 import { tr, dec } from '../../core/i18n.js';
 
@@ -113,15 +114,8 @@ export function NumField({ label, value, unit = '', onCommit, step = 'any', disa
  */
 export function NutrientEditor({ nutrients, unit = 'g', onChange, disabled = false, open = false, per = null }) {
   const [shown, setShown] = useState(open);
-  // 0.14: калории не указаны (или уже посчитаны по БЖУ) — пересчитываются сами при вводе белков, жиров, углеводов
-  const macrosOf = (n) => Object.fromEntries(MACROS.map((k) => [k, num(n[k])]));
-  const set = (key, raw) => {
-    const next = { ...nutrients, [key]: raw };
-    const auto = !num(nutrients.kcal) || num(nutrients.kcal) === kcalFromMacros(macrosOf(nutrients));
-    if (MACROS.includes(key) && auto) next.kcal = kcalFromMacros(macrosOf(next)) || nutrients.kcal || 0;
-    onChange(next);
-  };
-  const check = kcalCheck(Object.fromEntries(['kcal', 'fiber', ...MACROS].map((k) => [k, num(nutrients[k])])));
+  const set = (key, raw) => onChange(withNutrient(nutrients, key, raw));
+  const check = checkOf(nutrients);
   const base = per || (unit === 'ml' ? tr('100 мл') : tr('100 г'));
   return html`<div class="nutrient-editor">
     <div class="ne-main">

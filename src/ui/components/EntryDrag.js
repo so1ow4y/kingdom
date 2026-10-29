@@ -3,8 +3,11 @@
 // свободное место рациона — отдельной записью. Переносится один продукт, а не вся запись; запись, в которой ничего
 // не осталось, удаляется (store/feastActions.js → moveEntryItem). Мышь и палец (pointer events), у края — прокрутка,
 // Esc — отмена. Без мыши — «Перенести в…» в листе записи.
+//
+// 1.1: запись целиком тянут за колонку времени (под временем — ⋮⋮): на другую запись — всё её содержимое (продукты,
+// лекарства, замеры, заметки) становится частью той, сама запись удаляется; на другой рацион — запись переезжает туда.
 
-import { moveEntryItem, reorderEntryItem } from '../../store/feastActions.js';
+import { moveEntryItem, reorderEntryItem, moveEntry } from '../../store/feastActions.js';
 import * as F from '../../core/feast.js';
 import { store } from '../../store/appState.js';
 import { tr } from '../../core/i18n.js';
@@ -37,6 +40,8 @@ function targetAt(x, y) {
   const row = el.closest('.entry-row[data-entry]');
   if (row) {
     const entryId = row.dataset.entry;
+    // вся запись — в другую запись целиком (место внутри не выбирается)
+    if (s.whole) return entryId !== s.entryId ? { el: row, entryId } : null;
     const itemEl = el.closest('[data-item]');
     if (itemEl && itemEl.dataset.item && itemEl.dataset.item !== s.itemId) {
       const r = itemEl.getBoundingClientRect();
@@ -53,6 +58,14 @@ function targetAt(x, y) {
 }
 
 function label(t) {
+  if (s.whole) {
+    if (!t) return tr('Перенести запись «{name}»', { name: s.name });
+    if (t.entryId) {
+      const e = store.feast.entries.get(t.entryId);
+      return tr('Объединить с записью {when}', { when: [e?.time, e ? F.entryTitle(e) : ''].filter(Boolean).join(' · ') });
+    }
+    return t.meal === s.meal ? tr('Уже в этом рационе') : tr('В рацион «{meal}»', { meal: F.mealName(F.mealInfo(store.feast, t.meal)) });
+  }
   if (!t) return tr('Перенести «{name}»', { name: s.name });
   const where = t.line ? ' · ' + (t.line === 'before' ? tr('перед «{name}»', { name: t.ref }) : tr('после «{name}»', { name: t.ref })) : '';
   if (t.entryId === s.entryId) return tr('Переставить') + where;
@@ -74,7 +87,7 @@ function frame() {
     t?.el.classList.add(t.line ? 'drop-' + t.line : 'drop-into');
   }
   s.target = t;
-  const invalid = t && !t.entryId && t.meal === s.meal && s.single;
+  const invalid = t && !t.entryId && t.meal === s.meal && (s.single || s.whole);
   s.badge.textContent = label(t);
   s.badge.classList.toggle('invalid', !!invalid);
   s.badge.style.display = 'block';
@@ -124,6 +137,11 @@ function finish(drop) {
   lastDrop = Date.now();
   if (!drop || !cur.target) return;
   const t = cur.target;
+  if (cur.whole) {
+    if (t.entryId) moveEntry(cur.entryId, { entryId: t.entryId });
+    else if (t.meal !== cur.meal) moveEntry(cur.entryId, { meal: t.meal });
+    return;
+  }
   if (!t.entryId && t.meal === cur.meal && cur.single) return;
   if (t.entryId === cur.entryId) reorderEntryItem(cur.entryId, cur.itemId, t.beforeId);
   else moveEntryItem(cur.entryId, cur.itemId, t.entryId ? { entryId: t.entryId, beforeId: t.beforeId || null } : { meal: t.meal });
@@ -145,14 +163,17 @@ const onKey = (e) => {
 /**
  * Нажатие на ⋮⋮ продукта: перетаскивание начинается после сдвига на 5 px. item — { entryId, itemId, name, meal, single }.
  */
-export function beginItemDrag(e, item) {
+export function beginItemDrag(e, item, whole = false) {
   if (s || store.ui.feastReadOnly || (e.pointerType === 'mouse' && e.button !== 0)) return;
   e.preventDefault();
   e.stopPropagation();
-  s = { ...item, pointerId: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, active: false,
-    src: e.currentTarget.closest('.er-item-wrap, .entry-row') };
+  s = { ...item, whole, pointerId: e.pointerId, x0: e.clientX, y0: e.clientY, x: e.clientX, y: e.clientY, active: false,
+    src: whole ? e.currentTarget.closest('.entry-row') : e.currentTarget.closest('.er-item-wrap, .entry-row') };
   window.addEventListener('pointermove', onMove, { passive: false });
   window.addEventListener('pointerup', onUp);
   window.addEventListener('pointercancel', onCancel);
   window.addEventListener('keydown', onKey);
 }
+
+/** Нажатие на колонку времени записи (1.1): перетаскивание всей записи. entry — { entryId, name, meal }. */
+export const beginEntryDrag = (e, entry) => beginItemDrag(e, entry, true);

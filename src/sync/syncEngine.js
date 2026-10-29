@@ -334,14 +334,21 @@ async function withFeast(fn) {
   }
 }
 
-/** «Пуш» (docs/TZ.md §9.3) — с 0.11 обеих баз: задачи Chronicle и Feast. */
-export function push() {
+/**
+ * «Пуш» (docs/TZ.md §9.3) — с 0.11 обеих баз: задачи Chronicle и Feast. 1.1: auto — автопуш (sync/autoPush.js):
+ * тихий (без входа и сообщений об ошибках), итог показывается, только если что-то ушло и не закрывает «Отменить».
+ */
+export function push({ silent = false, auto = null } = {}) {
   return run('push', async () => {
     const t = await pushTasks();
     const f = await withFeast(() => feastPush(drive, step));
     if (!t.pushed && !f?.pushed && !t.created && !f?.created) setSync({ remoteNewer: false });
-    showSnackbar(pushSummary(t, f));
-  });
+    if (auto) {
+      const any = t.pushed || f?.pushed || t.created || f?.created || t.migrated;
+      if (any && !store.ui.snackbar?.onAction) showSnackbar(tr('Автопуш · {p0}', { p0: pushSummary(t, f) }));
+      setSync({ lastAutoPushAt: new Date().toISOString() });
+    } else showSnackbar(pushSummary(t, f));
+  }, { silent: silent || !!auto });
 }
 
 /** Пуш базы задач → { created, pushed, migrated }. */

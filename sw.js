@@ -2,7 +2,7 @@
 // Блок между маркерами генерирует tools/release.py — руками не править.
 
 // <generated>
-const VERSION = '0.15.0';
+const VERSION = '1.1.0';
 const PRECACHE = [
   './',
   './icons/apple-touch-icon.png',
@@ -72,6 +72,7 @@ const PRECACHE = [
   './src/store/focus.js',
   './src/store/idb.js',
   './src/store/localRepo.js',
+  './src/sync/autoPush.js',
   './src/sync/backups.js',
   './src/sync/errors.js',
   './src/sync/feastSync.js',
@@ -112,6 +113,7 @@ const PRECACHE = [
   './src/ui/components/Sheet.js',
   './src/ui/components/Sheets.js',
   './src/ui/components/Shortcuts.js',
+  './src/ui/components/SidePanel.js',
   './src/ui/components/Skills.js',
   './src/ui/components/Sortable.js',
   './src/ui/components/Sync.js',
@@ -122,10 +124,12 @@ const PRECACHE = [
   './src/ui/components/VillageDialog.js',
   './src/ui/components/VillageView.js',
   './src/ui/dayContext.js',
+  './src/ui/dockLayout.js',
   './src/ui/hooks.js',
   './src/ui/html.js',
   './src/ui/icons.js',
   './src/ui/keys.js',
+  './src/ui/listKeys.js',
   './src/ui/nav.js',
   './src/ui/notifier.js',
   './src/ui/prefs.js',

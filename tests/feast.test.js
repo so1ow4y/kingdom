@@ -404,3 +404,44 @@ test('Продукты и лекарства (0.12.5): поле «тип:», т�
   assert.equal(facets.find((f) => f.field === 'ккал').values.reduce((s, v) => s + v.count, 0), 1);
   assert.deepEqual(facetTerm('тип', 'лекарство'), ['тип', 'лекарство', false]);
 });
+
+test('1.1: запись целиком — в другую запись (продукты по порядку, одинаковые склеиваются, заметки — тоже)', () => {
+  const c = makeCtx(NOW);
+  const tv = F.newFood({ name: 'Творог', nutrients: { kcal: 99, protein: 18 } }, c);
+  const syr = F.newFood({ name: 'Сырок', nutrients: { kcal: 407 } }, c);
+  const ins = F.newFood({ name: 'Инсулин', kind: 'med', unit: 'iu', dose: 2 }, c);
+  const from = F.newEntry({ date: TODAY, meal: 'snack', time: '17:28', notes: ['после зала', 'вторая'],
+    items: [{ food: syr, amount: 40 }, { med: ins, amount: 2 }, { food: tv, amount: 200 }] }, c);
+  const to = F.newEntry({ date: TODAY, meal: 'dinner', time: '19:00', items: [{ food: tv, amount: 200 }, { food: syr, amount: 50 }] }, c);
+  const m = F.mergeEntry(from, to, makeCtx(NOW + 1000));
+  assert.deepEqual(F.entryItems(m).map((x) => `${x.name} ${x.amount}×${F.itemCount(x)}`),
+    ['Творог 400×2', 'Сырок 50×1', 'Сырок 40×1', 'Инсулин 2×1'], 'творог той же порции склеился, остальное — в конец по порядку');
+  assert.deepEqual([m.meal, m.time, m.date], ['dinner', '19:00', TODAY], 'время, рацион и день — у той записи');
+  assert.deepEqual(F.entryNoteList(m).map((n) => n.text), ['после зала', 'вторая']);
+  assert.equal(Math.round(nv(entryNutrients(m), 'kcal')), Math.round(nv(entryNutrients(from), 'kcal') + nv(entryNutrients(to), 'kcal')), 'калории сложились');
+  // перед выбранным продуктом
+  const before = F.entryItems(to)[0].id;
+  const placed = F.mergeEntry(F.newEntry({ date: TODAY, meal: 'snack', items: [{ food: syr, amount: 30 }] }, c), to, c, { beforeId: before });
+  assert.equal(F.entryItems(placed)[0].amount, 30);
+  // запись-заметка — тоже переносится; в саму себя и пустая — нет
+  const note = F.newEntry({ date: TODAY, meal: 'snack', items: [], notes: ['голова болит'] }, c);
+  assert.deepEqual(F.entryNoteList(F.mergeEntry(note, to, c)).map((n) => n.text), ['голова болит']);
+  assert.equal(F.mergeEntry(to, to, c), null);
+  assert.equal(F.mergeEntry(tombstone(from, c), to, c), null);
+});
+
+test('1.1: ввод КБЖУ — значения числами (поле не обнуляется), калории сами по БЖУ, свои не трогаются', async () => {
+  const { withNutrient, checkOf } = await import('../src/core/nutrition.js');
+  let n = withNutrient({}, 'fat', '8,5');
+  assert.equal(n.fat, 8.5, 'строка «8,5» — число 8,5, его и показывает поле');
+  assert.equal(nv(n, 'fat'), 8.5);
+  assert.equal(n.kcal, 77, 'калорий не было — посчитаны по жирам');
+  n = withNutrient(n, 'protein', '18');
+  assert.equal(n.kcal, 149, 'посчитанные — пересчитываются');
+  n = withNutrient(n, 'kcal', '200');
+  n = withNutrient(n, 'carbs', '3,3');
+  assert.deepEqual([n.kcal, n.carbs], [200, 3.3], 'свои калории остаются');
+  assert.equal(checkOf(n).state, 'high');
+  assert.equal(withNutrient({}, 'protein', 'abc').protein, 0);
+  assert.equal(checkOf({ kcal: '160', protein: '18', fat: '8,5', carbs: '3' }).state, 'ok');
+});

@@ -25,6 +25,12 @@
 //
 // С клавиатуры (клавиши настраиваются, по умолчанию Q/E и Enter/Пробел): вверх и вниз по пунктам, включая
 // раскрытую подветку; Enter открывает пункт, у ветки — раскрывает или сворачивает её. Мышью пункт открывается сразу.
+//
+// 1.1 (из pdd-trainer): fill — «Занимать всё пространство»: док во всю длину края, без отступа и скруглений (по
+// умолчанию — на телефоне). Телефон (свёрнутый док снизу или сверху) — лента: видно barCount пунктов, остальные
+// листаются пальцем (прокрутка с прилипанием к пункту), размер значков и подписи — настройки; «Ещё» (шторка со всем)
+// стоит отдельно справа. Какие пункты в доке и в каком порядке — ui/dockLayout.js, у телефона и компьютера свои;
+// пункт «Перейти в …» переключает приложение прямо из дока.
 
 import { html, useState, useRef, useEffect, useLayoutEffect } from '../html.js';
 import { Icon } from '../icons.js';
@@ -35,6 +41,7 @@ import { push } from '../../sync/syncEngine.js';
 import { syncState } from './Sync.js';
 import { activeApp } from '../prefs.js';
 import { buildMenu, isTargetActive, isBranchActive } from '../nav.js';
+import { dockLayout, chunkByGroup } from '../dockLayout.js';
 import { openMenu } from './Popup.js';
 import { shortcutText } from '../keys.js';
 import { tokenValid, startLogin } from '../../google/auth.js';
@@ -56,6 +63,9 @@ const SIDES = ['left', 'right', 'top', 'bottom'];
 const AUTO_HIDE_DELAY_MS = 400;
 
 const ICON_SIZE = { icon: 22, row: 20, tile: 22 };
+/** Лента телефона (1.1): значок и квадрат с буквой по размеру ленты. */
+const BAR_ICON = { s: 20, m: 24, l: 30, xl: 38 };
+const BAR_LETTER = { s: 28, m: 32, l: 40, xl: 50 };
 
 /**
  * Клавиши дока для app.js («Меню: пункт выше / ниже», «Меню: открыть пункт»). Пока док виден, он подставляет
@@ -80,8 +90,8 @@ export function AppLetter({ size = 36, app = null, other = false }) {
   return html`<span class=${'app-letter' + (other ? ' other' : '') + (letter.length > 1 ? ' two' : '')} style=${style} aria-hidden="true">${letter}</span>`;
 }
 
-/** Подсказка нужна только свёрнутой панели: в развёрнутой подпись и так видна. */
-const hintOf = (ctx, label, key = null, show = ctx.mode === 'icon') => (show
+/** Подсказка нужна только свёрнутой панели: в развёрнутой подпись и так видна; на ленте телефона — не нужна. */
+const hintOf = (ctx, label, key = null, show = ctx.mode === 'icon' && !ctx.compact) => (show
   ? { 'data-hint': label, 'data-hint-side': ctx.side, 'data-hint-kbd': key ? shortcutText(key) : '' }
   : {});
 
@@ -122,7 +132,7 @@ function DockLink({ item, ctx }) {
       onClick=${(e) => { if (!plainClick(e)) return; e.preventDefault(); ctx.setOpenBranch(null); ctx.onNavigate(); navigate(item.to); }}
       ...${hintOf(ctx, (item.emoji ? item.emoji + ' ' : '') + item.title, item.key)}>
       ${active ? html`<${Indicator}/>` : null}
-      <${Mark} item=${item} size=${ICON_SIZE[ctx.mode]}/>
+      <${Mark} item=${item} size=${ctx.iconSize}/>
       <span class="dock-label">${item.emoji ? item.emoji + ' ' : ''}${item.title}</span>
       <${Count} n=${item.count}/>
     </a>`;
@@ -157,7 +167,7 @@ function DockBranch({ item, ctx }) {
   const open = ctx.openBranch === item.id;
   const content = html`
     ${active ? html`<${Indicator}/>` : null}
-    <${Icon} name=${item.icon} size=${ICON_SIZE[ctx.mode]}/>
+    <${Icon} name=${item.icon} size=${ctx.iconSize}/>
     <span class="dock-label">${item.title}</span>`;
 
   if (ctx.mode === 'row') {
@@ -184,8 +194,9 @@ function DockBranch({ item, ctx }) {
       </div>`;
   }
 
-  // В шторке на телефоне подветка тоже внутри: колонка рядом со шторкой ушла бы за экран.
-  const inline = open && ((ctx.mode === 'icon' && ctx.subMode === 'inline') || ctx.overlay);
+  // В шторке на телефоне подветка тоже внутри: колонка рядом со шторкой ушла бы за экран. На ленте телефона —
+  // всегда колонкой над лентой: внутри ленты квадратики сжались бы до ширины одного пункта.
+  const inline = open && !ctx.compact && ((ctx.mode === 'icon' && ctx.subMode === 'inline') || ctx.overlay);
   const button = html`
     <button type="button" ref=${(el) => ctx.registerBranch(item.id, el)} class="dock-item" data-dock-key=${branchKey(item)}
       data-active=${active || open ? 'true' : 'false'} aria-expanded=${open} onClick=${() => ctx.toggleBranch(item.id)}
@@ -262,8 +273,11 @@ function UserMenu({ ctx, app, onSwitch }) {
  * сколько он занимает на самом деле (от него отступают всплывающие окна и панель справа).
  */
 export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, autoHide, overlay, onToggle, onToggleHidden, onNavigate,
-  app = 'chronicle', onSwitch, subMode = 'side', grow = 'down', sizeMode = 'auto', size = 560, thickness = null, pagePush = 'dock' }) {
+  app = 'chronicle', onSwitch, subMode = 'side', grow = 'down', sizeMode = 'auto', size = 560, thickness = null, pagePush = 'dock',
+  fill = false, layoutPrefs = {}, bar = { size: 'm', count: 5, labels: true } }) {
   const panel = useRef(null);
+  const scroller = useRef(null);
+  const [page, setPage] = useState({ at: 0, of: 1 });
   const inner = useRef(null);
   const strip = useRef(null);
   const branchEls = useRef(new Map());
@@ -276,16 +290,19 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
   const mode = hidden || !expanded ? 'icon' : vertical ? 'row' : 'tile';
   // Телефон, свёрнутый док снизу/сверху: пункты делят ширину поровну, редкое — в шторке (кнопка ⠿)
   const compact = phone && !vertical && mode === 'icon';
-  // Шторка на телефоне и док во всю ширину стоят по центру — закреплять край там незачем.
-  const growMode = overlay || compact ? 'both' : grow;
+  // Шторка на телефоне, лента и док во всё пространство стоят по центру — закреплять край там незачем.
+  const growMode = overlay || compact || fill ? 'both' : grow;
   const slidOut = autoHide && !hidden && !revealed;
+  // 1.1: док во всё пространство — без отступа от края
+  const gap = fill && !overlay ? 0 : DOCK_EDGE_GAP;
 
-  const groups = buildMenu(counts, app)
-    .map((g) => ({ ...g, items: g.items.filter((it) => !compact || (it.to !== '/tasks' && it.id !== 'search' && it.to !== '/settings')) }))
-    .filter((g) => g.items.length);
-  const branches = groups.flatMap((g) => g.items.filter((it) => it.items));
-  /** Состав меню строкой: меню пересобирается на каждую отрисовку, а меняется редко. */
-  const menuKey = groups.map((g) => g.items.map((it) => it.id || it.to).join(',')).join('|');
+  const groups = buildMenu(counts, app);
+  // 1.1: пункты по своему порядку (у телефона и компьютера свой); в шторке «Ещё» — всё
+  const layout = dockLayout(groups, layoutPrefs, { phone, app });
+  const visible = overlay ? dockLayout(groups, {}, { phone: false, app }) : layout.filter((e) => e.on);
+  const branches = visible.filter((e) => e.item?.items).map((e) => e.item);
+  /** Состав дока строкой: меню пересобирается на каждую отрисовку, а меняется редко. */
+  const menuKey = visible.map((e) => e.key).join(',');
 
   // Ветка открытого экрана и пункт в ней.
   let routeTarget = null;
@@ -307,13 +324,14 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
   }, [routeBranch, routeKey]);
 
   const openItem = branches.find((b) => b.id === openBranch) || null;
-  const showStrip = !hidden && !overlay && !!openItem && (mode === 'tile' || (mode === 'icon' && subMode === 'side'));
+  const showStrip = !hidden && !overlay && !!openItem && (mode === 'tile' || (mode === 'icon' && (subMode === 'side' || compact)));
 
   /** Клик по ветке: раскрыть её подветку или свернуть уже раскрытую. Экран не меняется. */
   const toggleBranch = (id) => setOpenBranch((cur) => (cur === id ? null : id));
 
   const ctx = {
-    mode, side: INWARD[position], position, vertical, route, subMode, overlay, openBranch, onNavigate, toggleBranch, setOpenBranch,
+    mode, side: INWARD[position], position, vertical, route, subMode, overlay, compact, openBranch, onNavigate, toggleBranch, setOpenBranch,
+    iconSize: compact ? BAR_ICON[bar.size] || BAR_ICON.m : ICON_SIZE[mode],
     registerBranch: (id, el) => {
       if (el) branchEls.current.set(id, el);
       else branchEls.current.delete(id);
@@ -331,7 +349,7 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
         root.setProperty(`--dock-size-${s}`, '0px');
       }
       if (autoHide || hidden || !panel.current) return;
-      const own = (vertical ? panel.current.offsetWidth : panel.current.offsetHeight) + DOCK_EDGE_GAP;
+      const own = (vertical ? panel.current.offsetWidth : panel.current.offsetHeight) + gap;
       const st = showStrip && strip.current ? (vertical ? strip.current.offsetWidth : strip.current.offsetHeight) + STRIP_GAP : 0;
       root.setProperty(`--dock-size-${position}`, own + 'px');
       root.setProperty(`--dock-${position}`, (pagePush === 'none' ? 0 : own + (pagePush === 'all' ? st : 0)) + 'px');
@@ -342,7 +360,7 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
     ro.observe(panel.current);
     if (showStrip && strip.current) ro.observe(strip.current);
     return () => ro.disconnect();
-  }, [position, hidden, autoHide, mode, overlay, compact, pagePush, showStrip, openBranch]);
+  }, [position, hidden, autoHide, mode, overlay, compact, pagePush, showStrip, openBranch, fill, bar.size, bar.labels]);
 
   // Закреплённый край. Док «по содержимому» ставится так, будто ни одна ветка внутри не раскрыта и он стоит
   // по центру; раскрытая ветка добавляет длину только в сторону роста, а то, что не влезло, прокручивается внутри.
@@ -402,14 +420,43 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
     if (strip.current) ro?.observe(strip.current);
     if (inner.current) ro?.observe(inner.current);
     const nav = panel.current;
+    const sc = scroller.current;
     window.addEventListener('resize', place);
     nav?.addEventListener('scroll', place);
+    sc?.addEventListener('scroll', place);
     return () => {
       ro?.disconnect();
       window.removeEventListener('resize', place);
       nav?.removeEventListener('scroll', place);
+      sc?.removeEventListener('scroll', place);
     };
   }, [showStrip, openBranch, vertical, position, mode]);
+
+  // Лента телефона: точки страниц и прокрутка колесом мыши (если телефонный вид открыт на компьютере).
+  useLayoutEffect(() => {
+    const el = scroller.current;
+    if (!compact || !el) return undefined;
+    const update = () => {
+      const of = Math.max(1, Math.round(el.scrollWidth / Math.max(1, el.clientWidth)));
+      const at = Math.min(of - 1, Math.round(el.scrollLeft / Math.max(1, el.clientWidth)));
+      setPage((p) => (p.at === at && p.of === of ? p : { at, of }));
+    };
+    const wheel = (e) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || el.scrollWidth <= el.clientWidth) return;
+      e.preventDefault();
+      el.scrollLeft += e.deltaY;
+    };
+    update();
+    el.addEventListener('scroll', update, { passive: true });
+    el.addEventListener('wheel', wheel, { passive: false });
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
+    ro?.observe(el);
+    return () => {
+      el.removeEventListener('scroll', update);
+      el.removeEventListener('wheel', wheel);
+      ro?.disconnect();
+    };
+  }, [compact, menuKey, bar.count, bar.size]);
 
   useEffect(() => () => clearTimeout(hideTimer.current), []);
 
@@ -429,15 +476,14 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
 
   // Пункты в порядке показа: ветка, за ней её раскрытые подпункты.
   const entries = [];
-  for (const g of groups) {
-    for (const it of g.items) {
-      if (it.items) {
-        entries.push({ key: branchKey(it), kind: 'branch', id: it.id, active: isBranchActive(route, it) });
-        if (openBranch === it.id) {
-          for (const sub of it.items) entries.push({ key: subKey(it.id, sub), kind: 'link', to: sub.to, sub: true, active: isTargetActive(route, sub) });
-        }
-      } else entries.push({ key: linkKey(it), kind: 'link', to: it.to, active: isTargetActive(route, it) });
-    }
+  for (const { item: it } of visible) {
+    if (!it) continue;
+    if (it.items) {
+      entries.push({ key: branchKey(it), kind: 'branch', id: it.id, active: isBranchActive(route, it) });
+      if (openBranch === it.id) {
+        for (const sub of it.items) entries.push({ key: subKey(it.id, sub), kind: 'link', to: sub.to, sub: true, active: isTargetActive(route, sub) });
+      }
+    } else entries.push({ key: linkKey(it), kind: 'link', to: it.to, active: isTargetActive(route, it) });
   }
   const live = useRef({});
   live.current = { entries, autoHide, onNavigate };
@@ -515,61 +561,94 @@ export function Dock({ route, counts, onAdd, phone, position, expanded, hidden, 
   const addLabel = app === 'feast' ? tr('Записать еду') : tr('Новая задача');
   const ind = indicator(syncState());
   const dirty = totalDirty();
-  const toggleLabel = expanded ? tr('Свернуть панель') : tr('Развернуть панель');
+  const toggleLabel = compact ? tr('Ещё') : expanded ? tr('Свернуть панель') : tr('Развернуть панель');
   const busy = ind.key === 'busy';
   const hover = autoHide
     ? { onMouseEnter: reveal, onMouseLeave: scheduleHide, onFocusIn: reveal, onFocusOut: scheduleHide }
     : {};
+  const iconS = compact ? ctx.iconSize : ICON_SIZE[mode];
+  const letterS = compact ? BAR_LETTER[bar.size] || BAR_LETTER.m : 36;
+  const other = otherApp(app);
+  const switchLabel = tr('Перейти в {p0}', { p0: APPS[other].name });
 
   // Закреплённый край: отступ с нужной стороны и потолок длины на остаток экрана.
   const anchorStyle = growMode === 'both' ? {} : vertical
     ? { [growMode === 'down' ? 'marginTop' : 'marginBottom']: anchorOffset + 'px', maxHeight: `calc(100% - ${anchorOffset}px)` }
     : { [growMode === 'down' ? 'marginLeft' : 'marginRight']: anchorOffset + 'px', maxWidth: `calc(100% - ${anchorOffset}px)` };
   // Своя длина: плашка не короче и не длиннее заданного, лишнее прокручивается. Своя ширина: не меняется ни от
-  // раскрытых веток, ни от подписей. Шторке на телефоне и доку во всю ширину они не нужны.
+  // раскрытых веток, ни от подписей. Шторке на телефоне, ленте и доку во всё пространство они не нужны.
   const sizeStyle = {
-    ...(sizeMode === 'fixed' && !compact && !overlay ? (vertical ? { height: size + 'px' } : { width: size + 'px' }) : {}),
-    ...(thickness != null && !overlay ? (vertical ? { width: thickness + 'px' } : { height: thickness + 'px' }) : {}),
+    ...(sizeMode === 'fixed' && !compact && !overlay && !fill ? (vertical ? { height: size + 'px' } : { width: size + 'px' }) : {}),
+    ...(thickness != null && !overlay && !compact ? (vertical ? { width: thickness + 'px' } : { height: thickness + 'px' }) : {}),
   };
+
+  const special = {
+    letter: () => html`
+      <button type="button" class="dock-item dock-brand" key="letter" onClick=${onToggleHidden} aria-label=${letterLabel} aria-pressed=${hidden}
+        ...${hintOf(ctx, letterLabel, 'dockHide')}>
+        <${AppLetter} size=${letterS} app=${app}/><span class="dock-label brand-label">${APPS[app].name}</span>
+      </button>`,
+    // 1.1: переход в другое приложение — прямо из дока (на телефоне — первым пунктом ленты)
+    switch: () => html`
+      <button type="button" class="dock-item dock-brand dock-go" key="switch" onClick=${() => { onNavigate(); onSwitch(); }}
+        aria-label=${switchLabel} ...${hintOf(ctx, switchLabel, 'switchApp')}>
+        <${AppLetter} size=${compact ? letterS : mode === 'row' ? 28 : 32} app=${other} other/><span class="dock-label">${compact ? APPS[other].name : switchLabel}</span>
+      </button>`,
+    add: () => html`
+      <button type="button" class="dock-item dock-add" key="add" onClick=${() => { onNavigate(); onAdd(); }} disabled=${!!store.ui.readOnly}
+        aria-label=${addLabel} ...${hintOf(ctx, addLabel, 'newTask')}>
+        <${Icon} name="plus" size=${iconS}/><span class="dock-label">${compact ? (app === 'feast' ? tr('Еда') : tr('Задача')) : addLabel}</span>
+      </button>`,
+    sync: () => html`
+      <button type="button" key="sync" class=${'dock-item dock-sync tone-' + ind.tone} onClick=${() => { onNavigate(); openSheet('sync'); }}
+        aria-label=${tr('Синхронизация: ') + ind.text} ...${hintOf(ctx, ind.text)}>
+        <${Icon} name=${ind.icon} size=${iconS - 2} className=${busy ? 'spin' : ''}/>
+        <span class="dock-label">${mode === 'row' ? ind.text : ind.short}</span>
+      </button>`,
+    push: () => html`
+      <button type="button" key="push" class=${'dock-item dock-push' + (compact ? ' tone-' + ind.tone : '')} onClick=${() => push()}
+        disabled=${!!store.sync.phase || !!store.ui.readOnly} aria-label="Пуш"
+        ...${hintOf(ctx, compact ? tr('Пуш · ') + ind.text : tr('Пуш — отправить изменения на Google Диск'), 'push')}>
+        <${Icon} name=${compact && busy ? ind.icon : 'upload'} size=${iconS - 2} className=${compact && busy ? 'spin' : ''}/>
+        <span class="dock-label">Пуш</span>${dirty ? html`<span class="dock-count">${dirty}</span>` : null}
+      </button>`,
+    lang: () => html`<${LocaleItem} key="lang" ctx=${ctx}/>`,
+    user: () => html`<${UserMenu} key="user" ctx=${ctx} app=${app} onSwitch=${onSwitch}/>`,
+  };
+  const renderEntry = (e) => (special[e.key] ? special[e.key]()
+    : e.item.items ? html`<${DockBranch} key=${e.key} item=${e.item} ctx=${ctx}/>` : html`<${DockLink} key=${e.key} item=${e.item} ctx=${ctx}/>`);
+  const toggleBtn = html`
+    <button type="button" class=${'dock-item dock-toggle' + (compact ? ' bar-more' : '')} onClick=${onToggle} aria-expanded=${expanded}
+      aria-label=${compact ? tr('Ещё: все разделы') : toggleLabel} ...${hintOf(ctx, toggleLabel, 'dockExpand')}>
+      <${Icon} name="grip" size=${iconS - 2}/><span class="dock-label">${toggleLabel}</span>
+    </button>`;
+  // Группы меню — с названием (в развёрнутом боковом) или разделителем; буква, переход и «добавить» — сверху без заголовка.
+  const isMenuGroup = (g) => g !== 'top' && g !== 'bottom';
+  const body = compact
+    ? html`
+      <div ref=${scroller} class="bar-scroll" role="group" aria-label="Пункты панели">${visible.map(renderEntry)}</div>
+      ${toggleBtn}
+      ${page.of > 1 ? html`<span class="bar-dots" aria-hidden="true">${Array.from({ length: page.of }, (_, i) => html`<i key=${i} class=${i === page.at ? 'on' : ''}></i>`)}</span>` : null}`
+    : html`
+      ${chunkByGroup(visible).map((c, i) => {
+        const menu = isMenuGroup(c.group);
+        if (!menu) return html`${i ? html`<${Divider} key=${'d' + i}/>` : null}${c.entries.map(renderEntry)}`;
+        return html`
+          <div class="dock-group" key=${'g' + i + c.group} role="group" aria-label=${c.group}>
+            ${mode === 'row' ? html`<div class="dock-group-title">${c.group}</div>` : html`<${Divider}/>`}
+            ${c.entries.map(renderEntry)}
+          </div>`;
+      })}
+      ${toggleBtn}`;
 
   return html`
     ${autoHide ? html`<div class=${'dock-hot pos-' + position} aria-hidden="true" onMouseEnter=${reveal}></div>` : null}
-    <div class=${'dock-wrap pos-' + position + ' grow-' + growMode + (slidOut ? ' slid' : '') + (overlay ? ' is-overlay' : '')}>
+    <div class=${'dock-wrap pos-' + position + ' grow-' + growMode + (fill && !overlay ? ' fill' : '') + (slidOut ? ' slid' : '') + (overlay ? ' is-overlay' : '')}>
       <div ref=${inner} class=${'dock-inner' + (compact ? ' compact' : '')} style=${anchorStyle}>
-        <nav ref=${panel} aria-label="Навигация" style=${sizeStyle}
-          class=${'dock mode-' + mode + (compact ? ' compact' : '') + (overlay ? ' is-overlay' : '') + (thickness != null ? ' own-width' : '')}
+        <nav ref=${panel} aria-label="Навигация" style=${compact ? { ...sizeStyle, '--bar-n': bar.count } : sizeStyle}
+          class=${'dock mode-' + mode + (compact ? ` compact bar-${bar.size}${bar.labels ? ' bar-labels' : ''}` : '') + (overlay ? ' is-overlay' : '') + (thickness != null && !compact ? ' own-width' : '')}
           ...${hover}>
-          ${letter}
-          <button type="button" class="dock-item dock-add" onClick=${() => { onNavigate(); onAdd(); }} disabled=${!!store.ui.readOnly}
-            aria-label=${addLabel} ...${hintOf(ctx, addLabel, 'newTask')}>
-            <${Icon} name="plus" size=${ICON_SIZE[mode]}/><span class="dock-label">${compact ? (app === 'feast' ? tr('Еда') : tr('Задача')) : addLabel}</span>
-          </button>
-
-          ${groups.map((g) => html`
-            <div class="dock-group" key=${g.title} role="group" aria-label=${g.title}>
-              ${mode === 'row' ? html`<div class="dock-group-title">${g.title}</div>` : compact ? null : html`<${Divider}/>`}
-              ${g.items.map((it) => (it.items
-                ? html`<${DockBranch} key=${it.id} item=${it} ctx=${ctx}/>`
-                : html`<${DockLink} key=${it.to} item=${it} ctx=${ctx}/>`))}
-            </div>`)}
-
-          ${compact ? null : html`<${Divider}/>
-          <button type="button" class=${'dock-item dock-sync tone-' + ind.tone} onClick=${() => { onNavigate(); openSheet('sync'); }}
-            aria-label=${tr('Синхронизация: ') + ind.text} ...${hintOf(ctx, ind.text)}>
-            <${Icon} name=${ind.icon} size=${ICON_SIZE[mode] - 2} className=${busy ? 'spin' : ''}/>
-            <span class="dock-label">${mode === 'row' ? ind.text : ind.short}</span>
-          </button>`}
-          <button type="button" class=${'dock-item dock-push' + (compact ? ' tone-' + ind.tone : '')} onClick=${() => push()}
-            disabled=${!!store.sync.phase || !!store.ui.readOnly} aria-label="Пуш"
-            ...${hintOf(ctx, compact ? tr('Пуш · ') + ind.text : tr('Пуш — отправить изменения на Google Диск'), 'push')}>
-            <${Icon} name=${compact && busy ? ind.icon : 'upload'} size=${ICON_SIZE[mode] - 2} className=${compact && busy ? 'spin' : ''}/>
-            <span class="dock-label">Пуш</span>${dirty ? html`<span class="dock-count">${dirty}</span>` : null}
-          </button>
-          ${compact ? null : html`<${LocaleItem} ctx=${ctx}/><${UserMenu} ctx=${ctx} app=${app} onSwitch=${onSwitch}/>`}
-          <button type="button" class="dock-item dock-toggle" onClick=${onToggle} aria-expanded=${expanded}
-            aria-label=${toggleLabel} ...${hintOf(ctx, toggleLabel, 'dockExpand')}>
-            <${Icon} name="grip" size=${ICON_SIZE[mode] - 2}/><span class="dock-label">${toggleLabel}</span>
-          </button>
+          ${body}
         </nav>
 
         ${showStrip && openItem ? html`

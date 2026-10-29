@@ -41,7 +41,7 @@ import { NutritionScreen } from './screens/Nutrition.js';
 import { BodyScreen } from './screens/Body.js';
 import { openAddFood, currentDiaryDate } from './components/AddFood.js';
 import { APPS, appOfRoute, followRoute, switchApp, rememberRoute, SUITE_NAME } from './apps.js';
-import { dockPosition, getPrefs, setPrefs, activeApp } from './prefs.js';
+import { dockPosition, dockFill, getPrefs, setPrefs, activeApp } from './prefs.js';
 import { actionFor } from './keys.js';
 import { moveCursor, openCursor, closeOpened, syncCursor } from './listKeys.js';
 import { sectionOf } from './nav.js';
@@ -400,7 +400,8 @@ export function App() {
         hidden=${!!prefs.hidden} autoHide=${autoHide} overlay=${overlayOpen}
         onToggle=${toggleDock} onToggleHidden=${toggleHidden} onNavigate=${() => phone && setMobileOpen(false)}
         app=${app} onSwitch=${onSwitch} subMode=${prefs.dockSubMode} grow=${prefs.dockGrow} sizeMode=${prefs.dockSizeMode}
-        size=${prefs.dockSize} thickness=${prefs.dockWidthMode === 'fixed' ? prefs.dockWidth : null} pagePush=${prefs.dockPush}/>
+        size=${prefs.dockSize} thickness=${prefs.dockWidthMode === 'fixed' ? prefs.dockWidth : null} pagePush=${prefs.dockPush}
+        fill=${dockFill(phone)} layoutPrefs=${prefs} bar=${{ size: prefs.barSize, count: prefs.barCount, labels: prefs.barLabels !== false }}/>
       ${overlayOpen ? html`<div class="dock-shade" aria-hidden="true" onClick=${() => setMobileOpen(false)}></div>` : null}
       <div class="main-col">
         ${base.name !== 'task' ? html`<${TopBar} route=${base}/>` : null}

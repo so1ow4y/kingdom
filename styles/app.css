@@ -2296,3 +2296,70 @@ tr[data-cursor] > td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
 .sc-buttons { min-width: 72px; }
 .keys-list { display: inline-flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 4px 6px; }
 .keys-or { color: var(--muted); font-size: 12px; }
+/* ---------- 1.1: запись целиком — за колонку времени ---------- */
+.er-time.er-drag { align-self: stretch; display: flex; flex-direction: column; align-items: center; gap: 4px; margin: -8px 0; padding: 9px 2px 8px;
+  border-radius: 8px; cursor: grab; touch-action: none; }
+.er-drag .er-grip { display: inline-flex; color: var(--muted); opacity: .35; }
+.entry-row:hover .er-grip, .er-drag:focus-visible .er-grip { opacity: 1; }
+.er-drag:hover { background: color-mix(in srgb, var(--surface-2) 80%, transparent); color: var(--text); }
+@media (pointer: coarse) { .er-drag .er-grip { opacity: .7; } }
+.set-control .num-input { width: 84px; }
+/* ---------- 1.1: док во всё пространство (из pdd-trainer) ---------- */
+.dock-wrap.fill { padding: 0; }
+.dock-wrap.fill.pos-bottom { padding-bottom: 0; }
+.dock-wrap.fill.pos-left, .dock-wrap.fill.pos-right { align-items: stretch; }
+.dock-wrap.fill .dock-inner { flex: 1; }
+.dock-wrap.fill .dock { flex: 1; border-radius: 0; box-shadow: none; }
+.dock-wrap.fill.pos-left .dock, .dock-wrap.fill.pos-right .dock { height: 100%; max-height: 100vh; }
+.dock-wrap.fill.pos-top .dock, .dock-wrap.fill.pos-bottom .dock { width: 100%; justify-content: center; }
+.dock-wrap.fill.pos-left .dock { border-width: 0 1px 0 0; }
+.dock-wrap.fill.pos-right .dock { border-width: 0 0 0 1px; }
+.dock-wrap.fill.pos-top .dock { border-width: 0 0 1px 0; }
+.dock-wrap.fill.pos-bottom .dock { border-width: 1px 0 0 0; padding-bottom: calc(6px + var(--safe-b)); }
+.dock-wrap.fill .dock.compact { background: color-mix(in srgb, var(--surface) 93%, transparent); -webkit-backdrop-filter: blur(16px); backdrop-filter: blur(16px); }
+.dock-wrap.fill.pos-left .dock-strip, .dock-wrap.fill.pos-right .dock-strip { margin: 0 4px; }
+.dp-bar.fill.left, .dp-bar.fill.right { top: 0; height: 100%; border-radius: 0; transform: none; }
+.dp-bar.fill.left { left: 0; }
+.dp-bar.fill.right { right: 0; }
+.dp-bar.fill.top, .dp-bar.fill.bottom { left: 0; width: 100%; border-radius: 0; transform: none; }
+.dp-bar.fill.top { top: 0; }
+.dp-bar.fill.bottom { bottom: 0; }
+/* ---------- 1.1: лента телефона — листается пальцем, видно --bar-n пунктов ---------- */
+.dock.compact { position: relative; align-items: stretch; gap: 2px; padding: 4px; }
+.dock.compact.bar-s { --bar-h: 44px; --bar-font: 10px; }
+.dock.compact.bar-m { --bar-h: 50px; --bar-font: 10.5px; }
+.dock.compact.bar-l { --bar-h: 62px; --bar-font: 12px; }
+.dock.compact.bar-xl { --bar-h: 78px; --bar-font: 13px; }
+.dock.compact.bar-labels.bar-s { --bar-h: 52px; }
+.dock.compact.bar-labels.bar-m { --bar-h: 60px; }
+.dock.compact.bar-labels.bar-l { --bar-h: 74px; }
+.dock.compact.bar-labels.bar-xl { --bar-h: 94px; }
+.dock.compact .bar-scroll { flex: 1; min-width: 0; display: grid; grid-auto-flow: column; gap: 2px;
+  grid-auto-columns: calc((100% - (var(--bar-n, 5) - 1) * 2px) / var(--bar-n, 5));
+  overflow-x: auto; overflow-y: hidden; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; }
+.dock.compact .bar-scroll::-webkit-scrollbar { display: none; }
+.dock.compact .bar-scroll > * { min-width: 0; scroll-snap-align: start; }
+.dock.compact .dock-item { width: auto; height: var(--bar-h); min-width: 0; flex-direction: column; justify-content: center; gap: 3px; padding: 4px 2px; }
+.dock.compact .dock-brand { padding: 4px 2px; }
+.dock.compact .bar-more { flex: none; width: calc(var(--bar-h) * .78); border-left: 1px solid var(--border); border-radius: 0 12px 12px 0; }
+.dock.compact.bar-labels .dock-label { position: static; width: auto; height: auto; clip: auto; max-width: 100%; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; font-size: var(--bar-font); line-height: 1.15; }
+.dock.compact .dock-count { top: 3px; right: auto; left: calc(50% + 6px); }
+.pos-bottom .dock.compact .dock-indicator { bottom: 1px; }
+.pos-top .dock.compact .dock-indicator { top: 1px; }
+/* точки страниц — у внутреннего края ленты: снизу у края стоит подсветка открытого пункта */
+.bar-dots { position: absolute; left: 50%; top: 3px; display: flex; gap: 4px; transform: translateX(-50%); pointer-events: none; }
+.pos-top .bar-dots { top: auto; bottom: 3px; }
+.bar-dots i { width: 4px; height: 4px; border-radius: 50%; background: var(--muted); opacity: .45; }
+.bar-dots i.on { background: var(--accent); opacity: 1; }
+.dock-go .app-letter { box-shadow: none; }
+/* 1.1: «Пункты панели» в настройках */
+.dock-items-list { display: flex; flex-direction: column; gap: 4px; margin: 10px 0 6px; }
+.dil-row { display: flex; align-items: center; gap: 4px; padding: 2px 4px; border: 1px solid var(--border); border-radius: 10px; background: var(--surface); }
+.dil-row.off { opacity: .6; }
+.dil-main { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; min-height: 40px; cursor: pointer; }
+.dil-main input { flex: none; width: 18px; height: 18px; }
+.dil-mark { display: inline-grid; flex: none; place-items: center; width: 24px; color: var(--muted); }
+.dil-title { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dil-main small { flex: none; margin-left: auto; padding-right: 4px; }
+@media (max-width: 520px) { .dil-main small { display: none; } }

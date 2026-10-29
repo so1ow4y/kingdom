@@ -9,7 +9,7 @@ import { Banner } from '../components/Overlays.js';
 import { DaySummary, NutrientTable, macroLine, feastGoals, rewardLine, itemDisplay } from '../components/FeastParts.js';
 import { openAddFood } from '../components/AddFood.js';
 import { openMealMenu } from '../components/Meals.js';
-import { beginItemDrag, justDropped } from '../components/EntryDrag.js';
+import { beginItemDrag, beginEntryDrag, justDropped } from '../components/EntryDrag.js';
 import { navigate, Link } from '../router.js';
 import { store, openSheet } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
@@ -81,7 +81,11 @@ function EntryRow({ e, where = 'diary', drag = false }) {
     onClick=${(ev) => { ev.stopPropagation(); ev.preventDefault(); }}><${Icon} name="grip" size=${14}/></span>` : null);
   return html`<button type="button" data-entry=${e.id} data-row=${'entry:' + e.id} class=${'entry-row' + (multi ? ' multi' : '') + (onlyMeds ? ' meds-only' : '') + (!items.length ? ' note-only' : '') + (drag ? ' can-drag' : '') + (store.ui.sheet?.type === 'entry' && store.ui.sheet.id === e.id ? ' selected' : '') + (disp.wrap ? ' names-wrap' : '')}
     onClick=${() => !justDropped() && openSheet('entry', { id: e.id })}>
-    ${e.time ? html`<span class="er-time">${e.time}</span>` : null}
+    ${drag ? html`<span class="er-time er-drag" role="button" aria-label=${tr('Перетащить запись целиком: в другую запись или рацион')}
+      title=${tr('Перетащить запись целиком — в другую запись или в другой рацион')}
+      onPointerDown=${(ev) => beginEntryDrag(ev, { entryId: e.id, name: F.entryTitle(e), meal: e.meal })}>
+      ${e.time ? html`<span class="er-clock">${e.time}</span>` : null}<span class="er-grip" aria-hidden="true"><${Icon} name="grip" size=${14}/></span></span>`
+      : e.time ? html`<span class="er-time">${e.time}</span>` : null}
     <span class="er-main" data-item=${!multi && items.length ? items[0].id : null} data-name=${!multi && items.length ? items[0].name : null}>
       ${!items.length ? null : multi ? html`
         <span class="er-items">${items.map((it) => html`<span class="er-item-wrap" key=${it.id} data-item=${it.id} data-name=${it.name}><span class="er-item">
@@ -153,6 +157,7 @@ export function DiaryScreen({ query = {} }) {
         ${!day.count && prevCount ? html`<button type="button" class="btn" disabled=${readOnly}
           onClick=${() => FA.copyEntries(yesterday, date)}><${Icon} name="copy2" size=${16}/> Как ${humanDate(yesterday, store.now.today).toLowerCase()}: ${countLabel(prevCount, ['запись', 'записи', 'записей'])}</button>` : null}
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'food' })}><${Icon} name="food" size=${16}/> Продукт</button>
+        <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, quick: true })}><${Icon} name="flame" size=${16}/> Быстрая запись</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, scan: true })}><${Icon} name="barcode" size=${16}/> Сканировать</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'med' })}>💊 Лекарство</button>
         <button type="button" class="btn" disabled=${readOnly} onClick=${() => openAddFood({ date, kind: 'measure' })}>📏 Замер</button>

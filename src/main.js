@@ -4,13 +4,14 @@
 import { html, render } from './ui/html.js';
 import { App } from './ui/app.js';
 import { applyTheme } from './ui/theme.js';
-import { applyScheme } from './ui/prefs.js';
+import { applyScheme, getPrefs } from './ui/prefs.js';
 import { navigate } from './ui/router.js';
 import { bootstrap } from './store/bootstrap.js';
 import { startNowTicker } from './store/appState.js';
 import { registerSW } from './pwa/swClient.js';
 import { takeOAuthFragment } from './google/auth.js';
 import { startSync } from './sync/syncEngine.js';
+import { startAutoPush } from './sync/autoPush.js';
 import { startNotifier } from './ui/notifier.js';
 import { runRetention } from './ui/components/DataSettings.js';
 import { purgeOldEntries, purgeFeastTrash, purgeHistory } from './store/feastActions.js';
@@ -54,7 +55,9 @@ try {
   // 0.14: корзина старше срока и история дневника старше срока хранения (если задан)
   setTimeout(() => purgeFeastTrash().then(() => purgeHistory()).catch((e) => console.warn('feast trash/history', e)), 7000);
   navigator.storage?.persist?.().catch(() => {});
-  startSync(oauth, { navigate: (route) => navigate(route, { replace: true }) }).catch((e) => console.error('startSync', e));
+  // 1.1: автопуш — после первой синхронизации (при открытии страницы уходит то, что не ушло в прошлый раз)
+  startSync(oauth, { navigate: (route) => navigate(route, { replace: true }) }).catch((e) => console.error('startSync', e))
+    .finally(() => setTimeout(() => startAutoPush(getPrefs), 1500));
 } catch (e) {
   showFatal(e);
 }

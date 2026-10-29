@@ -11,14 +11,14 @@ import { html, useState, useMemo } from '../html.js';
 import { Icon } from '../icons.js';
 import { Sheet } from './Sheet.js';
 import { BarcodeScanner } from './Scanner.js';
-import { MealChips, macroLine, NutrientEditor, NumField, rewardLine, IconPicker, itemDisplay, CountStepper } from './FeastParts.js';
+import { MealChips, macroLine, NutrientEditor, NumField, rewardLine, IconPicker, itemDisplay, CountStepper, KcalCheck } from './FeastParts.js';
 import { SortableList, DragHandle } from './Sortable.js';
 import { TimeInput } from './TimeInput.js';
 import { store, closeSheet, openSheet, showSnackbar } from '../../store/appState.js';
 import * as FA from '../../store/feastActions.js';
 import * as F from '../../core/feast.js';
 import {
-  num, nv, fmt, scaleNutrients, sumNutrients, entryNutrients, itemNutrients, amountLabel, MACROS, NUTRIENT, MED_UNITS, MED_UNIT,
+  num, nv, fmt, scaleNutrients, sumNutrients, entryNutrients, itemNutrients, amountLabel, MACROS, NUTRIENT, MED_UNITS, MED_UNIT, withNutrient, checkOf,
 } from '../../core/nutrition.js';
 import { countLabel } from '../../core/plural.js';
 import { normalizeBarcode, barcodeWarning } from '../../core/barcode.js';
@@ -423,10 +423,11 @@ function CreateStep({ barcode, name: initialName = '', kind: initialKind = 'food
   </form>`;
 }
 
-/** Быстрая запись: только калории (и, если хочется, БЖУ) — без продукта. */
+/** Быстрая запись: только калории (и, если хочется, БЖУ) — без продукта. 1.1: калории считаются по БЖУ, как у продуктов. */
 function QuickStep({ meta, entryMode, onBack, onAdd, onSave }) {
   const [name, setName] = useState('');
   const [n, setN] = useState({});
+  const check = checkOf(n);
   const ok = num(n.kcal) || num(n.protein) || num(n.fat) || num(n.carbs);
   const [itemNote, setItemNote] = useState('');
   const items = () => [{ key: ++basketKey, quick: { name, nutrients: n }, amount: 1, note: itemNote }];
@@ -435,8 +436,9 @@ function QuickStep({ meta, entryMode, onBack, onAdd, onSave }) {
     <label class="field"><span>Что съел(а)</span><input value=${name} ref=${focusOnce} placeholder="Быстрая запись" onInput=${(e) => setName(e.target.value)}/></label>
     <div class="ne-main">
       ${['kcal', ...MACROS].map((k) => html`<${NumField} key=${k} big label=${NUTRIENT[k].label} unit=${NUTRIENT[k].unit}
-        value=${nv(n, k)} onCommit=${(v) => setN({ ...n, [k]: v })}/>`)}
+        value=${nv(n, k)} onCommit=${(v) => setN((cur) => withNutrient(cur, k, v))}/>`)}
     </div>
+    <${KcalCheck} check=${check} onFix=${() => setN((cur) => ({ ...cur, kcal: check.auto }))}/>
     <input class="item-note-input" value=${itemNote} maxlength=${F.NOTE_MAX} placeholder="Заметка к продукту (необязательно)"
       aria-label="Заметка к продукту" onInput=${(e) => setItemNote(e.target.value)}/>
     ${entryMode ? null : html`<${EntryMeta} ...${meta}/>`}
@@ -483,14 +485,16 @@ function ReviewStep({ basket, setBasket, meta, entryMode, onMore, onSave }) {
  * scan — сразу открыть сканер, entryId — добавить в уже существующую запись, kind — 'med', чтобы сразу показать лекарства.
  * Запись может состоять из нескольких продуктов и лекарств: «+ Ещё» собирает их, «Записать» сохраняет одной записью.
  */
-export function AddFoodSheet({ date = store.now.today, meal: initialMeal = null, foodId = null, scan = false, entryId = null, kind: initialKind = 'all', note: noteMode = false }) {
+export function AddFoodSheet({ date = store.now.today, meal: initialMeal = null, foodId = null, scan = false, entryId = null, kind: initialKind = 'all', note: noteMode = false,
+  quick = false }) {
   const entry = entryId ? store.feast.entries.get(entryId) : null;
   const entryMode = !!entry && !entry.deletedAt;
   const [meal, setMeal] = useState(initialMeal || F.mealByTime(store.feast, date, store.now.time));
   const [time, setTime] = useState(store.now.time);
   const [notes, setNotes] = useState(() => (noteMode ? [newNote()] : []));
   const [basket, setBasket] = useState([]);
-  const [step, setStep] = useState(foodId ? (F.isMeasure(store.feast.foods.get(foodId)) ? 'measure' : 'amount') : scan ? 'scan' : noteMode ? 'note' : 'pick');
+  // 1.1: «Быстрая запись» из ряда над рационами — сразу к калориям и БЖУ
+  const [step, setStep] = useState(foodId ? (F.isMeasure(store.feast.foods.get(foodId)) ? 'measure' : 'amount') : scan ? 'scan' : noteMode ? 'note' : quick ? 'quick' : 'pick');
   const [food, setFood] = useState(foodId ? store.feast.foods.get(foodId) : null);
   const [q, setQ] = useState('');
   const [kind, setKind] = useState(initialKind);
@@ -651,6 +655,13 @@ export function EntrySheet({ id }) {
     closeSheet();
     await FA.moveEntryItem(id, itemId, value === 'new' ? { meal } : { entryId: value });
   };
+  // 1.1: вся запись — в другую (то же, что перетащить за колонку времени)
+  const mergeInto = async (value) => {
+    if (!value) return;
+    await FA.saveEntry(id, changes());
+    closeSheet();
+    await FA.moveEntry(id, { entryId: value });
+  };
   return html`
     <${Sheet} title=${F.entryTitle(e)} onClose=${closeSheet} className="entry-sheet">
       <${SortableList} items=${live} className=${'item-edit-list' + (disp.wrap ? ' names-wrap' : '')} disabled=${readOnly() || live.length < 2}
@@ -681,6 +692,11 @@ export function EntrySheet({ id }) {
       ${!live.length && !entryNotes.some((n) => n.text.trim()) ? html`<p class="hint warn">В записи не осталось ни продуктов, ни заметок — при сохранении она удалится.</p>` : null}
       <button type="button" class="btn small" disabled=${readOnly()} onClick=${addMore}><${Icon} name="plus" size=${16}/> Добавить продукт, лекарство или замер</button>
       <${EntryMeta} date=${e.date} meal=${meal} setMeal=${setMeal} time=${time} setTime=${setTime} notes=${entryNotes} setNotes=${setEntryNotes} allowEmptyTime=${!e.time}/>
+      ${others.length ? html`<label class="field entry-merge"><span>${tr('Перенести всю запись в другую')}</span>
+        <select disabled=${readOnly()} onChange=${(ev) => mergeInto(ev.target.value)}>
+          <option value="">${tr('Выбери запись…')}</option>
+          ${others.map((x) => html`<option value=${x.id} key=${x.id}>${[x.time, F.mealName(F.mealInfo(store.feast, x.meal)), F.entryTitle(x)].filter(Boolean).join(' · ')}</option>`)}
+        </select></label>` : null}
       <div class="aa-total"><b>${fmt(nv(preview, 'kcal'), 'kcal')} ккал</b><span class="muted">${macroLine(preview)}</span>
         <span class="muted">${humanDate(e.date, store.now.today)} · было ${fmt(nv(entryNutrients(e), 'kcal'), 'kcal')} ккал</span></div>
       <div class="sheet-actions">
@@ -726,7 +742,7 @@ export function openAddFood(opts = {}) {
     return;
   }
   openSheet('addFood', { date: opts.date || currentDiaryDate(), meal: opts.meal || null, foodId: opts.foodId || null, scan: !!opts.scan,
-    entryId: opts.entryId || null, kind: opts.kind || 'all', note: !!opts.note });
+    entryId: opts.entryId || null, kind: opts.kind || 'all', note: !!opts.note, quick: !!opts.quick });
 }
 
 /** День, открытый в дневнике (из адреса #/diary?date=…), иначе сегодня. */

@@ -4,8 +4,10 @@ Two apps in one serverless PWA: **Chronicle** — a personal task planner (forme
 
 Live: https://so1ow4y.github.io/kingdom/
 
-## What's inside (version 0.15)
+## What's inside (version 1.1)
 
+- **Whole entries, auto push, phone dock (1.1):** a diary entry can be dragged as a whole by its time column (⋮⋮ under the time) — onto another entry (all its foods, medicines, measurements and notes become part of it, identical foods merge) or onto another meal; single items still move by their own ⋮⋮, and the entry sheet has "Move the whole entry into another one". **Auto push**: changes go to Drive by themselves after N minutes without changes (5 by default, 1–120), when the page is opened or reloaded and when you leave it; while an entry, a new task or a text field is being edited the countdown waits, so unfinished work is not pushed (Settings → Sync, per device). The dock can **fill the whole edge** (as in pdd-trainer; by default on a phone, floating on a computer); on a phone it is a bar you swipe left and right — icon size (small to extra large), how many items are visible at once (3–8) and labels are settings, "More" stays on the right. The order and visibility of dock items are your own, separately for the phone and the computer (Settings → Appearance → Panel items); the most used come first by default — switch app, add, diary, About me, foods and medicines. Quick entries count calories from protein, fat and carbs like products, and "Quick entry" is in the diary's add row and in the meal sheet. Fixed: typed protein, fat or carbs showed as empty after leaving the field although they were saved.
+- **Dock, side panel and keys (1.0):** branches of the collapsed dock open as a column of squares next to it or inside it, the dock grows in a chosen direction, its length and width can be fixed, and it can push the page aside; cards open in a side panel (resizable) and list rows can be walked with keys.
 - **Task bank and search in four tabs (0.15):** the task bank keeps templates of things you add again and again — title, lists, priority, time, reminders, repeat, subtasks and notes, everything except the date. In "New task" start typing and matching templates appear under the title (frequent ones when the field is empty): tap one to fill the form, or "+" to create the task right away for the chosen day. "To bank" in "New task" and "To task bank" in the task menu save a template (a template with the same title is updated). Search in the dock is now a branch with four tabs — All tasks, Active, Repeating (with the rule column) and Task bank (search, list filter, "+ Today", tomorrow, without a date, edit, remove). "Done this day" on Today now also lists repeating tasks checked off that day, with one-tap undo. Templates sync as their own `templates` collection; older versions keep it untouched.
 - **Several servings (0.14.4):** a food in an entry can be multiplied — "40 g × 3" (× 1 is not shown). Logging the same food with the same serving into an entry adds to it instead of a new line; old entries with identical lines are merged when saved. The total amount and rewards are stored, so older versions count calories correctly.
 - **Product button in the diary (0.14.3):** the row above the meals now starts with "Product" — it opens "Log food" with the food list, next to Scan, Medicine, Measurement, Note and Meal.
@@ -48,7 +50,7 @@ Google sign-in works only on origins registered for the OAuth client (`http://lo
 ## Release and deploy
 
 ```
-python tools/release.py 0.15.0
+python tools/release.py 1.1.0
 git push origin main
 ```
 
