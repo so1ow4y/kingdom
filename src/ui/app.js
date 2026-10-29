@@ -24,7 +24,7 @@ import { JournalScreen } from './screens/Journal.js';
 import { AnalyticsScreen } from './screens/Analytics.js';
 import { FeastTrashScreen } from './screens/FeastTrash.js';
 import { ShopScreen } from './screens/Shop.js';
-import { StartScreen, RedirectingScreen } from './components/Sync.js';
+import { StartScreen, RedirectingScreen, ClosePushNotice } from './components/Sync.js';
 import { Dock, dockKeys } from './components/Dock.js';
 import { SidePanel, closeTopPanel } from './components/SidePanel.js';
 import { TooltipLayer, MenuLayer, closeMenu, isMenuOpen } from './components/Popup.js';
@@ -420,6 +420,7 @@ export function App() {
       ${sheetSide ? html`<${SidePanel} key="sheet" className="task-panel sheet-side" label=${tr('Запись')} onClose=${closeSheet}>
         <${SheetPanelCtx.Provider} value=${true}><${SheetHost} panel side/><//><//>` : null}
       <${QuickAddHost}/>
+      <${ClosePushNotice}/>
       <${SheetHost} side=${sheetSide}/>
       <${StartScreen}/>
       <${RedirectingScreen}/>

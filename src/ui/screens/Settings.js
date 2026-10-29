@@ -100,8 +100,7 @@ function AutoPushSettings() {
   return html`
     <h3 class="set-sub">Автопуш</h3>
     <label class="toggle-row"><input type="checkbox" checked=${p.autoPush !== false} onChange=${(e) => setPrefs({ autoPush: e.target.checked })}/>
-      <span>Пушить самому<small>${tr('Изменения уходят на Диск, когда {n} ничего не меняется.', { n: countLabel(st.minutes, ['минуту', 'минуты', 'минут']) })}
-        Пока открыта запись, новая задача или курсор в поле ввода, отсчёт не идёт — недоделанное не уедет. Настройка этого устройства.</small></span></label>
+      <span>Пушить самому<small>${tr('Изменения уходят на Диск, когда {n} ничего не меняется.', { n: countLabel(st.minutes, ['минуту', 'минуты', 'минут']) }) + ' '}Пока открыта запись, новая задача или курсор в поле ввода, отсчёт не идёт — недоделанное не уедет. Настройка этого устройства.</small></span></label>
     ${p.autoPush !== false ? html`
       <${Row} label="Через сколько минут без изменений" hint=${tr('от {min} до {max}', { min: AUTO_PUSH_MIN, max: AUTO_PUSH_MAX })}>
         <input class="num-input" inputmode="numeric" value=${draft ?? st.minutes} aria-label="Минут без изменений до автопуша"
@@ -110,7 +109,11 @@ function AutoPushSettings() {
       <label class="toggle-row"><input type="checkbox" checked=${p.autoPushOnOpen !== false} onChange=${(e) => setPrefs({ autoPushOnOpen: e.target.checked })}/>
         <span>И при открытии или обновлении страницы, и когда уходишь с неё<small>При открытии уходит то, что не успело в прошлый раз; при уходе
           (другая вкладка, телефон заблокирован) — сразу, не дожидаясь минут.</small></span></label>
-      <${Row} label="Сейчас">${status}<//>` : null}`;
+      <${Row} label="Сейчас">${status}<//>` : null}
+    <label class="toggle-row"><input type="checkbox" checked=${p.autoPushGuard !== false} onChange=${(e) => setPrefs({ autoPushGuard: e.target.checked })}/>
+      <span>Не закрывать вкладку, пока изменения не на Диске<small>Закрываешь вкладку или браузер, а не всё отправлено — браузер спросит
+        «Покинуть сайт?». Нажми «Отмена»: приложение допушит и скажет, когда можно закрывать. Свой текст в это окно браузер вписать
+        не даёт. На телефоне браузеры его обычно не показывают — там пуш уходит, когда сворачиваешь вкладку.</small></span></label>`;
 }
 
 function Row({ label, hint, children }) {

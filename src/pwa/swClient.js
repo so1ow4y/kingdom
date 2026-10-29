@@ -30,6 +30,7 @@ export async function registerSW() {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
     if (!hadController || reloading) return;
     reloading = true;
+    globalThis.kingdomReloading = true; // 1.1.1: без «Покинуть сайт?»
     location.reload();
   });
   document.addEventListener('visibilitychange', () => {
@@ -72,6 +73,7 @@ export async function checkForUpdate() {
 export async function applyUpdate() {
   await flushAll();
   const w = reg?.waiting;
+  globalThis.kingdomReloading = true; // 1.1.1: без «Покинуть сайт?»
   if (!w) {
     location.reload();
     return;

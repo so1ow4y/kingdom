@@ -38,6 +38,7 @@ export function setLang(lang) {
   } catch {
     return;
   }
+  globalThis.kingdomReloading = true; // 1.1.1: своя перезагрузка — без «Покинуть сайт?» (sync/autoPush.js)
   location.reload();
 }
 

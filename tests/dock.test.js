@@ -3,7 +3,7 @@
 import { test, assert } from './runner.js';
 import { dockLayout, defaultOrder, mergeOrder, chunkByGroup, moveKey, menuKey } from '../src/ui/dockLayout.js';
 import { cleanPrefs } from '../src/ui/prefs.js';
-import { autoPushDue, isEditing } from '../src/sync/autoPush.js';
+import { autoPushDue, isEditing, shouldGuardClose } from '../src/sync/autoPush.js';
 
 const FEAST = [
   { title: 'Питание', items: [
@@ -72,4 +72,13 @@ test('автопуш 1.1: через N минут без изменений, е�
   assert.ok(isEditing({}, doc('TEXTAREA')), 'курсор в поле');
   assert.ok(isEditing({}, doc('BODY', 'entry-dragging')), 'тянут запись');
   assert.ok(!isEditing({}, doc('BUTTON')));
+});
+
+test('1.1.1: при закрытии спросить «Покинуть сайт?», если пуш идёт или есть что отправить', () => {
+  assert.ok(shouldGuardClose({ dirty: 2, canPush: true }), 'непушнутое и есть вход — спросить и допушить');
+  assert.ok(shouldGuardClose({ pushing: true, dirty: 0 }), 'пуш ещё идёт — дождаться');
+  assert.ok(!shouldGuardClose({ dirty: 0 }), 'всё на Диске — закрывается молча');
+  assert.ok(!shouldGuardClose({ dirty: 2, canPush: false }), 'без входа или сети отправить нельзя — не держим');
+  assert.ok(!shouldGuardClose({ dirty: 2, reloading: true }), 'своя перезагрузка (язык, обновление)');
+  assert.ok(!shouldGuardClose({ dirty: 2, guard: false }), 'выключено в настройках');
 });

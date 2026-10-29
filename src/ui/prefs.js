@@ -104,6 +104,7 @@ const DEFAULTS = {
   autoPush: true,
   autoPushMinutes: 5,
   autoPushOnOpen: true,
+  autoPushGuard: true, // 1.1.1: при закрытии, если не всё на Диске, — «Покинуть сайт?», потом допушить
   scheme: 'indigo', // цветовая схема (косметика из магазина, п. 2.6)
   letter: null, // цвет квадрата с буквой (косметика); null — цвет акцента
 };
@@ -120,7 +121,7 @@ const CHOICES = {
 };
 const RANGES = { dockSize: [DOCK_SIZE_MIN, DOCK_SIZE_MAX], dockWidth: [DOCK_WIDTH_MIN, DOCK_WIDTH_MAX], panelWidth: [PANEL_MIN, PANEL_MAX],
   autoPushMinutes: [1, 120], barCount: [BAR_COUNT_MIN, BAR_COUNT_MAX] };
-const FLAGS = ['expanded', 'autoHide', 'hidden', 'panelPush', 'panelResizable', 'autoPush', 'autoPushOnOpen', 'barLabels'];
+const FLAGS = ['expanded', 'autoHide', 'hidden', 'panelPush', 'panelResizable', 'autoPush', 'autoPushOnOpen', 'autoPushGuard', 'barLabels'];
 
 /** Проверить значения: чужое — убрать (возьмётся умолчание), числа — в допустимые пределы. */
 export function cleanPrefs(p) {

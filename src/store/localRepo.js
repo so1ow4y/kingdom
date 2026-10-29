@@ -61,6 +61,7 @@ async function createRepo(name, version, stores) {
   // Другая вкладка удаляет базу («Очистить локальный кэш») — закрываемся и перезагружаемся.
   db.onversionchange = () => {
     db.close();
+    globalThis.kingdomReloading = true; // 1.1.1: без «Покинуть сайт?»
     location.reload();
   };
 

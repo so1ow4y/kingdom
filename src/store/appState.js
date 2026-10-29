@@ -44,6 +44,7 @@ export const store = {
     dialog: null, // { title, text, buttons: [{ label, value, kind }], resolve }
     sheet: null, // { type, ...props }
     quickAdd: null, // { listId, scheduledDate } | null
+    closePush: null, // 1.1.1: пуш перед закрытием вкладки — 'pushing' | 'done' | 'failed' | null
     dirtyCount: 0,
     feastDirty: 0, // 0.11: непушнутые правки Feast (в индикаторе — сумма)
     feastReadOnly: null, // 0.11: база Feast на Диске новее приложения — текст причины

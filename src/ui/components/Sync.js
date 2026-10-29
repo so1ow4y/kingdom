@@ -157,3 +157,37 @@ export function RedirectingScreen() {
   if (!store.ui.redirecting) return null;
   return html`<div class="start-screen"><div class="start-card"><${Icon} name="sync" size=${36} className="spin"/><p>Вход в Google…</p></div></div>`;
 }
+
+/**
+ * Пуш перед закрытием (1.1.1, sync/autoPush.js): на «Покинуть сайт?» нажали «Отмена» — приложение допушивает и
+ * говорит, когда вкладку можно закрыть. Не вышло — правки остались на устройстве и уйдут при следующем открытии.
+ */
+export function ClosePushNotice() {
+  const st = store.ui.closePush;
+  if (!st) return null;
+  const close = () => setUi({ closePush: null });
+  const err = store.sync.lastError?.text;
+  return html`
+    <div class="close-push-layer">
+      <div class=${'close-push tone-' + st} role="alertdialog" aria-live="assertive" aria-labelledby="close-push-title">
+        ${st === 'pushing' ? html`
+          <${Icon} name="sync" size=${28} className="spin"/>
+          <h2 id="close-push-title">Подожди — отправляю изменения на Google Диск</h2>
+          <p class="muted">Вкладку можно будет закрыть через пару секунд.</p>
+          ${store.sync.step ? html`<small class="muted">${store.sync.step}</small>` : null}`
+        : st === 'done' ? html`
+          <${Icon} name="ok" size=${28}/>
+          <h2 id="close-push-title">Всё на Диске — вкладку можно закрывать</h2>
+          <p class="muted">Изменения отправлены. Закрой вкладку или браузер — больше ничего не спросим.</p>
+          <div class="form-actions"><button type="button" class="btn primary" onClick=${close}>Остаться</button></div>`
+        : html`
+          <${Icon} name="warn" size=${28}/>
+          <h2 id="close-push-title">Не получилось отправить на Диск</h2>
+          <p class="muted">${err ? err + ' ' : ''}Изменения сохранены на этом устройстве и уйдут при следующем открытии приложения.</p>
+          <div class="form-actions">
+            <button type="button" class="btn" onClick=${close}>Закрыть окно</button>
+            <button type="button" class="btn primary" onClick=${async () => { const { pushBeforeClose } = await import('../../sync/autoPush.js'); setUi({ closePush: null }); pushBeforeClose(); }}>Повторить</button>
+          </div>`}
+      </div>
+    </div>`;
+}

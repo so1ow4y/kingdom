@@ -1391,6 +1391,7 @@ export async function clearLocalData() {
     for (const k of await caches.keys()) if (k.startsWith('lifetasks-')) await caches.delete(k);
   }
   for (const k of Object.keys(localStorage)) if (k.startsWith('lifetasks.')) localStorage.removeItem(k);
+  globalThis.kingdomReloading = true; // 1.1.1: данные удалены — пушить нечего, без «Покинуть сайт?»
   location.reload();
 }
 
